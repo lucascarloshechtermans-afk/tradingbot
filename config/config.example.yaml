@@ -1,0 +1,66 @@
+# Kopieer dit bestand naar config.yaml in de projectroot en pas aan waar nodig.
+# Alles hieronder heeft een sensible default — je hoeft config.yaml niet compleet
+# te hebben, alleen wat je wil afwijken van de standaardwaarden.
+
+universe:
+  preset: BALANCED        # CONSERVATIVE | BALANCED | AGGRESSIVE | CUSTOM
+  # onderstaande waarden overschrijven de preset-defaults als je ze zet
+  # min_price: 10.0
+  # min_avg_dollar_volume: 5000000
+  # min_market_cap: 2000000000
+  # exclude_penny_stocks: true
+  # sectors: []          # leeg = alle sectoren
+
+data:
+  period: "1y"             # hoeveel historie opgehaald wordt per ticker
+  cache_dir: ".cache"
+  cache_ttl_hours: 20
+  max_retries: 3
+  retry_backoff_seconds: 2
+
+risk:
+  account_size: 10000
+  risk_per_trade_pct: 1.0
+  max_portfolio_risk_pct: 6.0
+  max_position_pct: 20.0
+
+scoring:
+  weights:                 # moet optellen tot ~100
+    trend: 15
+    momentum: 10
+    volume: 10
+    price_action: 15
+    volatility: 10
+    relative_strength: 10
+    market_regime: 10
+    sector: 5
+    risk_reward: 10
+    multi_timeframe: 5
+  thresholds:
+    exceptional: 90
+    strong: 80
+    interesting: 70
+    watchlist: 60
+
+earnings:
+  avoid_earnings: true
+  buffer_days: 5
+
+backtesting:
+  commission_per_trade: 1.0
+  slippage_pct: 0.05
+  initial_capital: 10000
+
+alerts:
+  enabled: true
+  log_path: "alerts_log.json"
+  score_threshold: 75
+  triggers:
+    breakout: true
+    volume_spike: true
+    rsi_condition: true
+    ma_cross: true
+    entry_triggered: true
+    stop_hit: true
+    target_hit: true
+    earnings_approaching: true
