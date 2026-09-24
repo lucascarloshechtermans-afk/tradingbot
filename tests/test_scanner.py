@@ -52,6 +52,28 @@ def test_build_trade_plan_produces_valid_plan():
     assert len(plan.recent_closes) > 0
 
 
+def test_build_trade_plan_respects_max_holding_days():
+    history = breakout_history()
+    ctx = context_from(history, ticker="TEST")
+    weekly_ctx = context_from(resample_weekly(history), ticker="TEST_weekly")
+
+    tight_config = AppConfig()
+    tight_config.risk.max_holding_days = 5
+    loose_config = AppConfig()
+    loose_config.risk.max_holding_days = 60
+
+    regime = MarketRegime(label="BULLISH", score=50, factors={})
+
+    tight_plan = build_trade_plan("TEST", ctx, weekly_ctx, tight_config, regime, earnings_warning=None)
+    loose_plan = build_trade_plan("TEST", ctx, weekly_ctx, loose_config, regime, earnings_warning=None)
+
+    assert tight_plan.max_holding_days == 5
+    assert loose_plan.max_holding_days == 60
+    # a 5-day target must be at least as close to entry as a 60-day target
+    assert (tight_plan.target2 - tight_plan.entry) <= (loose_plan.target2 - loose_plan.entry) + 1e-6
+    assert any("handelsdagen" in r for r in tight_plan.reasons)
+
+
 def test_build_trade_plan_none_when_atr_unavailable():
     # too little history for ATR(14) to ever produce a value
     idx = pd.date_range("2024-01-01", periods=5, freq="D")

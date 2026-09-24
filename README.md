@@ -49,6 +49,23 @@ Universe presets (`universe.preset` in config):
 | AGGRESSIVE | $3 | $1M | $300M |
 | CUSTOM | uses only what you set in config.yaml | | |
 
+## Holding period: this scanner targets ~1 trading week
+
+Every trade plan is built for a **5-trading-day hold** by default
+(`risk.max_holding_days` in config, default `5`):
+
+- **Targets are capped** to what's realistically reachable within that many
+  trading days, estimated from ATR scaled by `sqrt(holding_days)` — a target that
+  would historically take weeks to hit is pulled in, not just computed from a fixed
+  R:R multiple that ignores time entirely (`risk/stops_targets.py:cap_target_to_horizon`).
+- **The backtester force-closes any open trade** once it's been held for
+  `max_holding_days` bars, even if neither the stop nor the target has been hit yet
+  (`backtesting/engine.py`, exit reason `"time_exit"`). This is what actually lets
+  you verify whether a strategy works within a week, instead of a backtest quietly
+  letting winning trades run for months.
+- Change the horizon with `risk.max_holding_days` in `config.yaml`, or per-run with
+  `python backtest.py --max-holding-days 10 ...`.
+
 ## Running the scanner
 
 ```bash

@@ -72,6 +72,7 @@ class RiskConfig:
     risk_per_trade_pct: float = 1.0
     max_portfolio_risk_pct: float = 6.0
     max_position_pct: float = 20.0
+    max_holding_days: int = 5
 
     @classmethod
     def from_dict(cls, raw: dict) -> "RiskConfig":
@@ -80,11 +81,14 @@ class RiskConfig:
             risk_per_trade_pct=float(raw.get("risk_per_trade_pct", 1.0)),
             max_portfolio_risk_pct=float(raw.get("max_portfolio_risk_pct", 6.0)),
             max_position_pct=float(raw.get("max_position_pct", 20.0)),
+            max_holding_days=int(raw.get("max_holding_days", 5)),
         )
         if cfg.account_size <= 0:
             raise ConfigError("risk.account_size must be positive")
         if not (0 < cfg.risk_per_trade_pct <= 100):
             raise ConfigError("risk.risk_per_trade_pct must be between 0 and 100")
+        if cfg.max_holding_days <= 0:
+            raise ConfigError("risk.max_holding_days must be positive")
         return cfg
 
 

@@ -2,10 +2,12 @@ import pytest
 
 from price_action.levels import Level
 from risk.stops_targets import (
+    cap_target_to_horizon,
     compute_atr_stop,
     compute_rr_targets,
     compute_stop,
     compute_structure_stop,
+    expected_move_for_horizon,
     nearest_structure_target,
     risk_reward_ratio,
 )
@@ -85,3 +87,35 @@ def test_risk_reward_ratio_basic():
 def test_risk_reward_ratio_rejects_zero_risk():
     with pytest.raises(ValueError):
         risk_reward_ratio(entry=100.0, stop=100.0, target=110.0)
+
+
+def test_expected_move_grows_with_holding_days():
+    move_3d = expected_move_for_horizon(atr=2.0, holding_days=3)
+    move_10d = expected_move_for_horizon(atr=2.0, holding_days=10)
+    assert move_10d > move_3d
+
+
+def test_expected_move_scales_with_atr():
+    low_vol = expected_move_for_horizon(atr=1.0, holding_days=5)
+    high_vol = expected_move_for_horizon(atr=4.0, holding_days=5)
+    assert high_vol == pytest.approx(low_vol * 4)
+
+
+def test_cap_target_to_horizon_pulls_in_unrealistic_target():
+    # a target 100 points away is not reachable in 5 days at ATR=1
+    capped = cap_target_to_horizon(entry=100.0, target=200.0, atr=1.0, holding_days=5, direction="long")
+    assert capped < 200.0
+    assert capped > 100.0
+
+
+def test_cap_target_to_horizon_leaves_realistic_target_untouched():
+    # a small, realistic target should not be pulled in further
+    small_target = 100.0 + expected_move_for_horizon(atr=2.0, holding_days=5) * 0.5
+    capped = cap_target_to_horizon(entry=100.0, target=small_target, atr=2.0, holding_days=5, direction="long")
+    assert capped == pytest.approx(small_target)
+
+
+def test_cap_target_to_horizon_short_direction():
+    capped = cap_target_to_horizon(entry=100.0, target=0.0, atr=1.0, holding_days=5, direction="short")
+    assert capped > 0.0
+    assert capped < 100.0

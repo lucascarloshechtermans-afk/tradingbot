@@ -190,6 +190,82 @@ def test_commission_and_slippage_reduce_pnl():
     assert with_cost.trades[0].pnl < no_cost.trades[0].pnl
 
 
+def test_max_holding_days_forces_exit_after_n_bars():
+    idx = pd.date_range("2024-01-01", periods=10, freq="D")
+    # price never touches stop or target -> only the time limit can close this trade
+    df = pd.DataFrame(
+        {
+            "open": [100] * 10,
+            "high": [101] * 10,
+            "low": [99] * 10,
+            "close": [100] * 10,
+            "volume": [1_000_000] * 10,
+        },
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    def stop_fn(h, entry):
+        return entry - 50
+
+    def target_fn(h, entry, stop):
+        return entry + 50
+
+    result = run_backtest(
+        df, signal_once, stop_fn, target_fn, slippage_pct=0.0, commission_per_trade=0.0, max_holding_days=5,
+    )
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.exit_reason == "time_exit"
+    assert trade.holding_bars == 5
+
+
+def test_max_holding_days_none_disables_time_exit():
+    idx = pd.date_range("2024-01-01", periods=10, freq="D")
+    df = pd.DataFrame(
+        {"open": [100] * 10, "high": [101] * 10, "low": [99] * 10, "close": [100] * 10, "volume": [1_000_000] * 10},
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    result = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, max_holding_days=None,
+    )
+    assert result.trades[0].exit_reason == "end_of_data"
+
+
+def test_stop_hit_takes_priority_over_time_exit_on_same_bar():
+    # entry executes at bar index 1; the time limit (max_holding_days=5) would fire
+    # at bar index 6 (bars_held = 6 - 1 = 5) -- put the stop breach on that same bar
+    idx = pd.date_range("2024-01-01", periods=8, freq="D")
+    lows = [99, 99, 99, 99, 99, 99, 80, 99]
+    df = pd.DataFrame(
+        {
+            "open": [100] * 8,
+            "high": [101] * 8,
+            "low": lows,
+            "close": [100] * 8,
+            "volume": [1_000_000] * 8,
+        },
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    result = run_backtest(
+        df, signal_once, lambda h, e: e - 10, lambda h, e, s: e + 1000,
+        slippage_pct=0.0, commission_per_trade=0.0, max_holding_days=5,
+    )
+    assert result.trades[0].exit_reason == "stop"
+    assert result.trades[0].holding_bars == 5
+
+
 def test_position_never_exceeds_max_position_pct():
     history = _flat_ohlcv(n=10)
 

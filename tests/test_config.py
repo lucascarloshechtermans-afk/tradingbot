@@ -53,3 +53,18 @@ def test_default_config_is_valid():
 def test_risk_rejects_nonpositive_account_size():
     with pytest.raises(ConfigError):
         AppConfig.from_dict({"risk": {"account_size": 0}})
+
+
+def test_risk_max_holding_days_defaults_to_five():
+    cfg = AppConfig.from_dict({})
+    assert cfg.risk.max_holding_days == 5
+
+
+def test_risk_rejects_nonpositive_max_holding_days():
+    with pytest.raises(ConfigError):
+        AppConfig.from_dict({"risk": {"max_holding_days": 0}})
+
+
+def test_risk_max_holding_days_overridable():
+    cfg = AppConfig.from_dict({"risk": {"max_holding_days": 10}})
+    assert cfg.risk.max_holding_days == 10

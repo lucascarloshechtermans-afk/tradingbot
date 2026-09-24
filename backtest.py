@@ -30,7 +30,7 @@ from config.schema import load_config
 from data.cache import DiskCache
 from data.provider import DataProvider
 from data.yfinance_provider import YFinanceProvider
-from risk.stops_targets import compute_rr_targets, compute_stop
+from risk.stops_targets import cap_target_to_horizon, compute_rr_targets, compute_stop
 from strategies import ALL_STRATEGIES
 from strategies.context import build_context
 
@@ -80,9 +80,16 @@ def make_stop_fn(fallback_stop_pct: float = 5.0):
     return stop_fn
 
 
-def make_target_fn(rr_multiple: float = 2.0):
+def make_target_fn(rr_multiple: float = 2.0, max_holding_days: int | None = None):
     def target_fn(history_before_entry: pd.DataFrame, entry: float, stop: float) -> float:
-        return compute_rr_targets(entry, stop, direction="long", rr_multiples=(rr_multiple,))[0].price
+        target = compute_rr_targets(entry, stop, direction="long", rr_multiples=(rr_multiple,))[0].price
+        if max_holding_days is None or len(history_before_entry) < 20:
+            return target
+        ctx = build_context("BT", history_before_entry)
+        atr = ctx.atr14.iloc[-1]
+        if pd.isna(atr) or atr <= 0:
+            return target
+        return cap_target_to_horizon(entry, target, atr, max_holding_days, direction="long")
 
     return target_fn
 
@@ -131,6 +138,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-days", type=int, default=252)
     parser.add_argument("--test-days", type=int, default=63)
     parser.add_argument("--rr-multiple", type=float, default=2.0, help="Risk:reward multiple used for the target")
+    parser.add_argument("--max-holding-days", type=int, default=None, help="Force-close any trade after this many trading days (default: config.risk.max_holding_days)")
     parser.add_argument("--dry-run", action="store_true", help="Use built-in synthetic data instead of live network data")
     return parser
 
@@ -154,10 +162,12 @@ def main(argv: list[str] | None = None) -> int:
         provider = YFinanceProvider(cache=cache, max_retries=config.data.max_retries, retry_backoff_seconds=config.data.retry_backoff_seconds)
         ticker = args.ticker
 
+    max_holding_days = args.max_holding_days if args.max_holding_days is not None else config.risk.max_holding_days
+
     history = provider.get_history(ticker, period=args.period)
     signal_fn = make_strategy_signal_fn(strategy)
     stop_fn = make_stop_fn()
-    target_fn = make_target_fn(args.rr_multiple)
+    target_fn = make_target_fn(args.rr_multiple, max_holding_days=max_holding_days)
 
     backtest_kwargs = dict(
         initial_capital=config.backtesting.initial_capital,
@@ -165,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         commission_per_trade=config.backtesting.commission_per_trade,
         slippage_pct=config.backtesting.slippage_pct,
         max_position_pct=config.risk.max_position_pct,
+        max_holding_days=max_holding_days,
     )
 
     if args.walk_forward:

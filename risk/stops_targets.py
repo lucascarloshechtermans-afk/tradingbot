@@ -98,6 +98,34 @@ def compute_rr_targets(
     return targets
 
 
+def expected_move_for_horizon(atr: float, holding_days: int, volatility_multiplier: float = 1.5) -> float:
+    """Estimate a realistic price move over `holding_days` trading days from ATR.
+
+    ATR is a per-bar (daily) volatility measure; scaling it by sqrt(time) is the
+    standard heuristic for projecting volatility over a longer horizon (the same
+    idea behind annualizing daily volatility by sqrt(252)). `volatility_multiplier`
+    (default 1.5x) gives some room above the "average" expected move, since a
+    genuine trending swing typically moves more than a purely random walk would —
+    but this is an estimate, not a guarantee, and should be read as such.
+    """
+    return atr * (holding_days ** 0.5) * volatility_multiplier
+
+
+def cap_target_to_horizon(
+    entry: float, target: float, atr: float, holding_days: int, direction: str = "long",
+    volatility_multiplier: float = 1.5,
+) -> float:
+    """Cap a target so it's realistically reachable within `holding_days` trading
+    days — a target computed purely from a fixed R:R multiple can imply a move that
+    historically takes far longer than the intended holding period to play out.
+    Never moves the target further away, only pulls it in when it's unrealistic.
+    """
+    max_move = expected_move_for_horizon(atr, holding_days, volatility_multiplier)
+    if direction == "long":
+        return min(target, entry + max_move)
+    return max(target, entry - max_move)
+
+
 def nearest_structure_target(entry: float, levels: list[Level], direction: str = "long") -> Level | None:
     if direction == "long":
         candidates = [lv for lv in levels if lv.kind == "resistance" and lv.price > entry]

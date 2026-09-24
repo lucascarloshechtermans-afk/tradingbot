@@ -16,10 +16,11 @@ class Trade:
     target: float
     exit_date: pd.Timestamp | None = None
     exit_price: float | None = None
-    exit_reason: str | None = None  # "stop" | "target" | "end_of_data"
+    exit_reason: str | None = None  # "stop" | "target" | "time_exit" | "end_of_data"
     pnl: float | None = None
     pnl_pct: float | None = None
     holding_days: int | None = None
+    holding_bars: int | None = None
 
 
 @dataclass
@@ -45,6 +46,7 @@ def run_backtest(
     commission_per_trade: float = 1.0,
     slippage_pct: float = 0.05,
     max_position_pct: float = 20.0,
+    max_holding_days: int | None = None,
 ) -> BacktestResult:
     """Event-driven, single-position backtester with no look-ahead bias.
 
@@ -63,6 +65,11 @@ def run_backtest(
     5. If both stop and target are breached within the same bar, the STOP is
        assumed to have been hit first (the conservative assumption — we cannot
        know intrabar order from daily OHLC data).
+    6. `max_holding_days`, when set, force-closes a position at that bar's CLOSE
+       once it has been held for that many BARS (trading days, not calendar days —
+       a weekend never counts) without hitting its stop or target — this is what
+       actually enforces a "~1 trading week" swing-trade horizon end to end,
+       rather than just hoping the target happens to be reached in time.
     """
     n = len(history)
     equity = initial_capital
@@ -72,6 +79,7 @@ def run_backtest(
     in_position = False
     pending_entry = False
     trade: Trade | None = None
+    entry_bar_index: int | None = None
 
     for i in range(n):
         date = history.index[i]
@@ -103,6 +111,7 @@ def run_backtest(
             equity -= commission_per_trade
             trade = Trade(entry_date=date, entry_price=entry_price, shares=shares, stop=stop, target=target)
             in_position = True
+            entry_bar_index = i
             equity_curve_values.append(equity)
             continue
 
@@ -110,14 +119,19 @@ def run_backtest(
             hit_stop = bar["low"] <= trade.stop
             hit_target = bar["high"] >= trade.target
             is_last_bar = i == n - 1
+            bars_held = i - entry_bar_index
+            hit_time_limit = max_holding_days is not None and bars_held >= max_holding_days
 
-            if hit_stop or hit_target or is_last_bar:
+            if hit_stop or hit_target or hit_time_limit or is_last_bar:
                 if hit_stop:
                     exit_price = trade.stop * (1 - slippage_pct / 100)
                     reason = "stop"
                 elif hit_target:
                     exit_price = trade.target * (1 - slippage_pct / 100)
                     reason = "target"
+                elif hit_time_limit:
+                    exit_price = float(bar["close"])
+                    reason = "time_exit"
                 else:
                     exit_price = float(bar["close"])
                     reason = "end_of_data"
@@ -133,10 +147,12 @@ def run_backtest(
                 trade.pnl = pnl
                 trade.pnl_pct = (pnl / cost_basis * 100) if cost_basis else 0.0
                 trade.holding_days = (date - trade.entry_date).days
+                trade.holding_bars = bars_held
                 trades.append(trade)
 
                 in_position = False
                 trade = None
+                entry_bar_index = None
 
             equity_curve_values.append(equity)
             continue

@@ -31,7 +31,13 @@ from data.yfinance_provider import YFinanceProvider
 from events.earnings import EarningsWarning, check_earnings_proximity
 from indicators.trend import sma
 from market_regime.regime import MarketRegime, classify_market_regime
-from risk.stops_targets import compute_rr_targets, compute_stop, nearest_structure_target, risk_reward_ratio
+from risk.stops_targets import (
+    cap_target_to_horizon,
+    compute_rr_targets,
+    compute_stop,
+    nearest_structure_target,
+    risk_reward_ratio,
+)
 from scoring.multi_timeframe import multi_timeframe_confluence, resample_weekly
 from scoring.scorer import ScoreResult, score_ticker
 from sector.rotation import SECTOR_ETFS, SectorStrength, rank_sectors, sector_strength_for
@@ -67,6 +73,7 @@ class TradePlan:
     risks: list[str] = field(default_factory=list)
     rsi: float = 0.0
     recent_closes: list[float] = field(default_factory=list)
+    max_holding_days: int = 5
 
 
 def compute_breadth_pct_above_50ma(universe_histories: dict[str, pd.DataFrame]) -> float | None:
@@ -105,11 +112,21 @@ def build_trade_plan(
     matched = [s for s in matched_strategies if s.matched]
     best = max(matched, key=lambda s: s.confidence) if matched else None
 
+    max_holding_days = config.risk.max_holding_days
+
     stop_levels = compute_stop(entry, atr, ctx.levels, direction="long")
     structure_target = nearest_structure_target(entry, ctx.levels, direction="long")
     rr_targets = compute_rr_targets(entry, stop_levels.final_stop, direction="long", rr_multiples=(1.5, 3.0))
     target1 = rr_targets[0].price
     target2 = structure_target.price if structure_target and structure_target.price > target1 else rr_targets[1].price
+
+    # A target computed purely from a fixed R:R multiple (or a far-off resistance
+    # level) can imply a move that historically takes far longer than the intended
+    # holding period — cap both targets to what's realistically reachable within
+    # max_holding_days, estimated from ATR (see risk/stops_targets.py).
+    target1 = cap_target_to_horizon(entry, target1, atr, max_holding_days, direction="long")
+    target2 = cap_target_to_horizon(entry, target2, atr, max_holding_days, direction="long")
+    target2 = max(target2, target1)  # keep target2 as the further of the two after capping
 
     try:
         rr = risk_reward_ratio(entry, stop_levels.final_stop, target2)
@@ -129,6 +146,7 @@ def build_trade_plan(
     )
 
     reasons = list(best.reasons) if best else []
+    reasons.append(f"Doel is berekend om binnen ~{max_holding_days} handelsdagen haalbaar te zijn (op basis van ATR)")
     risks = list(best.risks) if best else []
     if earnings_warning and earnings_warning.message:
         risks.append(earnings_warning.message)
@@ -153,6 +171,7 @@ def build_trade_plan(
         risks=risks,
         rsi=round(float(ctx.rsi14.iloc[-1]), 1) if pd.notna(ctx.rsi14.iloc[-1]) else 50.0,
         recent_closes=[round(float(c), 2) for c in ctx.close.tail(SPARKLINE_BARS).tolist()],
+        max_holding_days=max_holding_days,
     )
 
 

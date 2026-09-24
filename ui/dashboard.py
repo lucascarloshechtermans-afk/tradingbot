@@ -167,6 +167,7 @@ SCAN_DATA.forEach((row, idx) => {{
       <div><strong>Confidence</strong><div>${{row.confidence.toFixed(0)}}/100</div>
         <strong>ATR%</strong><div>${{row.atr_pct.toFixed(1)}}%</div>
         <strong>Sector</strong><div>${{row.sector || 'n/a'}}</div>
+        <strong>Max holding period</strong><div>${{row.max_holding_days}} trading days</div>
       </div>
     </div>
   </td>`;
@@ -262,4 +263,5 @@ def trade_plan_to_row(plan) -> dict[str, Any]:
         "reasons": plan.reasons,
         "risks": plan.risks,
         "recent_closes": plan.recent_closes,
+        "max_holding_days": plan.max_holding_days,
     }
