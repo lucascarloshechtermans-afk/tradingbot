@@ -419,8 +419,18 @@ above 30 overrides everything else to HIGH_VOLATILITY. Every factor is listed wi
 its own reasoning — see the Dashboard tab.
 
 `sector/rotation.py` ranks the 11 SPDR sector ETFs by 1-month relative strength vs
-SPY; each ticker inherits its sector's rank and trend (improving/deteriorating) via
+SPY (5D/1M/3M performance, relative strength, an annualized volatility figure,
+and improving/deteriorating trend); each ticker inherits its sector's rank via
 `data.sector` from yfinance mapped to the corresponding ETF.
+
+**Correlation to SPY/QQQ/sector** (`relative_strength/correlation.py`): a rolling
+60-day Pearson correlation of daily returns, used to tell genuine idiosyncratic
+strength apart from a stock that's simply riding the broader market/sector up.
+Context only — a highly-correlated stock isn't automatically a worse setup — but
+`score_relative_strength` gives a modest additional bonus when a stock is BOTH
+outperforming its benchmark over 1M AND doing so with low correlation (below 0.3)
+to SPY/QQQ/sector, since that combination is a stronger "genuine strength" signal
+than outperformance during a rally everything is having.
 
 ## Risk management
 

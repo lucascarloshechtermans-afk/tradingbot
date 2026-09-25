@@ -36,7 +36,7 @@ from risk.gap_risk import earnings_gap_fraction
 from risk.stops_targets import plan_trade_levels
 from scoring.multi_timeframe import multi_timeframe_confluence, resample_weekly
 from scoring.scorer import ScoreResult, score_ticker
-from sector.rotation import SECTOR_ETFS, SectorStrength, rank_sectors, sector_strength_for
+from sector.rotation import SECTOR_ETF_MAP, SECTOR_ETFS, SectorStrength, rank_sectors, sector_strength_for
 from strategies import ALL_STRATEGIES, COUNTER_TREND_STRATEGY_NAMES, best_tradeable_signal
 from strategies.base import StrategySignal
 from strategies.context import TickerContext, build_context
@@ -230,6 +230,8 @@ def scan_ticker(
     sector_ranked: list[SectorStrength],
     market_regime: MarketRegime | None,
     rs_rank: float | None,
+    qqq_close: pd.Series | None = None,
+    sector_histories: dict[str, pd.DataFrame] | None = None,
 ) -> TradePlan | None:
     try:
         history = provider.get_history(ticker, period=config.data.period)
@@ -248,11 +250,18 @@ def scan_ticker(
     # matched, which isn't known yet at this point.
 
     sector_strength = sector_strength_for(info.sector, sector_ranked)
+    sector_etf = SECTOR_ETF_MAP.get(info.sector) if info.sector else None
+    sector_close = (
+        sector_histories[sector_etf]["close"]
+        if sector_histories and sector_etf and sector_etf in sector_histories
+        else None
+    )
     ctx = build_context(
         ticker, history, benchmark_close=spy_close, sector_strength=sector_strength,
         market_cap=info.market_cap, sector_name=info.sector,
         shares_outstanding=info.shares_outstanding, float_shares=info.float_shares,
         short_percent_of_float=info.short_percent_of_float,
+        qqq_close=qqq_close, sector_close=sector_close,
     )
 
     weekly_history = resample_weekly(history)
@@ -331,6 +340,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         logger.info("market regime: %s (score %.0f)", market_regime.label, market_regime.score)
 
     spy_close = benchmarks["spy"]["close"] if "spy" in benchmarks else None
+    qqq_close = benchmarks["qqq"]["close"] if "qqq" in benchmarks else None
 
     # RS rank vs. the rest of the SCANNED universe (not vs. SPY) — a hard
     # pre-filter (see GatesConfig) modeled on the IBD/Minervini RS Rating: only
@@ -344,7 +354,10 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     trade_plans: list[TradePlan] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(scan_ticker, ticker, provider, config, spy_close, sector_ranked, market_regime, rs_ranks.get(ticker)): ticker
+            pool.submit(
+                scan_ticker, ticker, provider, config, spy_close, sector_ranked, market_regime, rs_ranks.get(ticker),
+                qqq_close, sector_histories,
+            ): ticker
             for ticker in filter_result.included
         }
         for future in as_completed(futures):
@@ -516,7 +529,11 @@ def main(argv: list[str] | None = None) -> int:
         scan_rows=[trade_plan_to_row(p) for p in scan_run.trade_plans],
         market_regime={"label": scan_run.market_regime.label, "score": scan_run.market_regime.score, "factors": scan_run.market_regime.factors} if scan_run.market_regime else {},
         sector_ranked=[
-            {"rank": s.rank, "etf": s.etf, "performance_1m": s.performance_1m, "performance_3m": s.performance_3m, "relative_strength_vs_spy": s.relative_strength_vs_spy, "trend": s.trend}
+            {
+                "rank": s.rank, "etf": s.etf, "performance_5d": s.performance_5d, "performance_1m": s.performance_1m,
+                "performance_3m": s.performance_3m, "relative_strength_vs_spy": s.relative_strength_vs_spy,
+                "volatility_pct": s.volatility_pct, "trend": s.trend,
+            }
             for s in scan_run.sector_ranked
         ],
         watchlist_entries=watchlist_entries,

@@ -41,6 +41,7 @@ from price_action.historical_context import HistoricalContext, compute_historica
 from price_action.levels import Level, confluence_score, find_levels, nearest_level
 from price_action.patterns import classify_gap
 from price_action.structure import classify_structure_break, detect_liquidity_sweep
+from relative_strength.correlation import CorrelationProfile, compute_correlation_profile
 from relative_strength.relative_strength import RelativeStrength, compute_relative_strength
 from risk.gap_risk import analyze_gap_risk
 from risk.overextension import OverextensionProfile, compute_overextension
@@ -138,6 +139,7 @@ class TickerContext:
 
     historical_context: HistoricalContext | None = None
     overextension: OverextensionProfile | None = None
+    correlation: CorrelationProfile | None = None
 
     @property
     def free_float_pct(self) -> float | None:
@@ -180,6 +182,8 @@ def build_context(
     shares_outstanding: float | None = None,
     float_shares: float | None = None,
     short_percent_of_float: float | None = None,
+    qqq_close: pd.Series | None = None,
+    sector_close: pd.Series | None = None,
     swing_order: int = 3,
 ) -> TickerContext:
     close, open_, high, low, volume = (
@@ -235,6 +239,7 @@ def build_context(
     relative_strength = compute_relative_strength(close, benchmark_close) if benchmark_close is not None else None
     gap_risk = analyze_gap_risk(history)
     historical_context = compute_historical_context(close, last_close, levels)
+    correlation = compute_correlation_profile(close, spy_close=benchmark_close, qqq_close=qqq_close, sector_close=sector_close)
 
     swing_low_mask = confirmed_swing_lows(low, order=swing_order)
     recent_swing_low = float(low[swing_low_mask].iloc[-1]) if swing_low_mask.any() else None
@@ -320,4 +325,5 @@ def build_context(
         up_gap_bias=gap_risk.up_gap_bias,
         historical_context=historical_context,
         overextension=overextension,
+        correlation=correlation,
     )

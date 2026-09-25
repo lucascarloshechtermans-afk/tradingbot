@@ -89,7 +89,7 @@ PAGE_TEMPLATE = """<!doctype html>
     </div>
     <div class="card">
       <h3 style="margin-top:0">Sector strength</h3>
-      <table><thead><tr><th>Rank</th><th>ETF</th><th>1M Perf</th><th>3M Perf</th><th>RS vs SPY</th><th>Trend</th></tr></thead>
+      <table><thead><tr><th>Rank</th><th>ETF</th><th>5D Perf</th><th>1M Perf</th><th>3M Perf</th><th>RS vs SPY</th><th>Volatility</th><th>Trend</th></tr></thead>
       <tbody>{sector_rows_html}</tbody></table>
     </div>
     <div class="card">
@@ -247,8 +247,10 @@ def build_dashboard_html(
         f"<li><code>{k}</code>: {v}</li>" for k, v in market_regime.get("factors", {}).items()
     )
     sector_rows_html = "".join(
-        f"<tr><td>{s['rank']}</td><td>{s['etf']}</td><td>{s['performance_1m']:.1f}%</td>"
-        f"<td>{s['performance_3m']:.1f}%</td><td>{s['relative_strength_vs_spy']:+.1f}%</td><td>{s['trend']}</td></tr>"
+        f"<tr><td>{s['rank']}</td><td>{s['etf']}</td><td>{s.get('performance_5d', float('nan')):.1f}%</td>"
+        f"<td>{s['performance_1m']:.1f}%</td>"
+        f"<td>{s['performance_3m']:.1f}%</td><td>{s['relative_strength_vs_spy']:+.1f}%</td>"
+        f"<td>{s.get('volatility_pct', float('nan')):.0f}%</td><td>{s['trend']}</td></tr>"
         for s in sector_ranked
     )
     top_setups_html = "".join(
@@ -265,7 +267,7 @@ def build_dashboard_html(
         regime_label=market_regime.get("label", "UNKNOWN"),
         regime_score=f"{market_regime.get('score', 0):+.0f}",
         regime_factors_html=regime_factors_html or "<li>No regime data</li>",
-        sector_rows_html=sector_rows_html or "<tr><td colspan=6>No sector data</td></tr>",
+        sector_rows_html=sector_rows_html or "<tr><td colspan=8>No sector data</td></tr>",
         top_setups_html=top_setups_html or "<tr><td colspan=4>No setups found</td></tr>",
         scan_data_json=json.dumps(scan_rows),
         watchlist_data_json=json.dumps(watchlist_entries),

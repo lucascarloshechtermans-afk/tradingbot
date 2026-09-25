@@ -27,9 +27,11 @@ SECTOR_ETF_MAP = {
 @dataclass
 class SectorStrength:
     etf: str
+    performance_5d: float
     performance_1m: float
     performance_3m: float
     relative_strength_vs_spy: float
+    volatility_pct: float  # annualized stdev of daily returns over the trailing month, as a %
     rank: int
     trend: str  # "improving" | "deteriorating" | "stable"
 
@@ -47,11 +49,15 @@ def rank_sectors(sector_histories: dict[str, pd.DataFrame], spy_history: pd.Data
     results: list[SectorStrength] = []
     for etf, df in sector_histories.items():
         close = df["close"]
+        perf_5d = roc(close, 5).iloc[-1]
         perf_1m_series = roc(close, 20)
         perf_1m = perf_1m_series.iloc[-1]
         perf_3m = roc(close, 60).iloc[-1]
         rs_series = perf_1m_series - spy_1m
         rs_now = rs_series.iloc[-1]
+
+        daily_returns = close.pct_change().tail(20)
+        volatility_pct = float(daily_returns.std() * (252**0.5) * 100) if len(daily_returns.dropna()) > 1 else float("nan")
 
         trend = "stable"
         if len(rs_series.dropna()) > 5:
@@ -65,9 +71,11 @@ def rank_sectors(sector_histories: dict[str, pd.DataFrame], spy_history: pd.Data
         results.append(
             SectorStrength(
                 etf=etf,
+                performance_5d=float(perf_5d) if pd.notna(perf_5d) else float("nan"),
                 performance_1m=float(perf_1m) if pd.notna(perf_1m) else float("nan"),
                 performance_3m=float(perf_3m) if pd.notna(perf_3m) else float("nan"),
                 relative_strength_vs_spy=float(rs_now) if pd.notna(rs_now) else float("nan"),
+                volatility_pct=volatility_pct,
                 rank=0,
                 trend=trend,
             )

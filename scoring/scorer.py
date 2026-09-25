@@ -366,6 +366,17 @@ def score_relative_strength(ctx: TickerContext) -> CategoryScore:
         score += 20
         reasons.append(f"Outperforming benchmark over 3M ({rel_3m:+.1f}%)")
 
+    # Outperformance that's ALSO low-correlation to the broad market is a
+    # stronger "genuine strength" signal than outperformance during a rally
+    # everything is having — the latter could just be beta, not the stock
+    # standing out on its own. Only rewarded alongside real outperformance
+    # above, never as a bonus for low correlation by itself (being
+    # uncorrelated says nothing about direction).
+    corr = ctx.correlation
+    if corr is not None and corr.is_idiosyncratic and pd.notna(rel_1m) and rel_1m > 0:
+        score += 10
+        reasons.append("Outperformance looks idiosyncratic (low correlation to SPY/QQQ/sector), not just riding the market")
+
     return CategoryScore("relative_strength", _clamp(score), 0, 0, reasons)
 
 

@@ -38,3 +38,11 @@ def test_sector_strength_for_returns_none_for_unmapped_sector():
 
 def test_sector_strength_for_returns_none_for_none_sector():
     assert sector_strength_for(None, []) is None
+
+
+def test_rank_sectors_includes_5d_performance_and_volatility():
+    spy = _df(100, daily_change=0.1)
+    sector_histories = {"XLK": _df(100, daily_change=0.5)}
+    ranked = rank_sectors(sector_histories, spy)
+    assert ranked[0].performance_5d > 0  # steadily rising fixture
+    assert ranked[0].volatility_pct >= 0
