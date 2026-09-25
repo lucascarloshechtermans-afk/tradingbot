@@ -17,7 +17,7 @@ DEFAULT_UNIVERSE = [
     # Technology
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "ORCL", "CRM", "ADBE",
     "AMD", "QCOM", "INTC", "CSCO", "TXN", "INTU", "NOW", "IBM", "UBER", "SHOP",
-    "PLTR", "SNOW", "PANW", "CRWD", "NET", "DDOG", "ABNB", "SQ", "PYPL", "MU",
+    "PLTR", "SNOW", "PANW", "CRWD", "NET", "DDOG", "ABNB", "XYZ", "PYPL", "MU",
     # Financials
     "JPM", "BAC", "WFC", "GS", "MS", "C", "SCHW", "AXP", "BLK", "SPGI",
     "V", "MA", "COF", "USB", "PNC",
