@@ -105,6 +105,22 @@ def make_screener_functions(
         if best.strategy not in COUNTER_TREND_STRATEGY_NAMES and _blocked_by_gates(history_so_far):
             return False
 
+        # Mirrors two of scanner.py's NO-TRADE hard gates that only need the
+        # daily ctx already built here (bearish-higher-timeframe isn't included
+        # — it needs a resampled weekly context, which this backtest doesn't
+        # build per-bar, so that gate is live-scan-only for now).
+        if (
+            gates.block_extreme_overextension
+            and ctx.overextension is not None
+            and ctx.overextension.stretched_reference_count >= 5
+        ):
+            return False
+        if (
+            ctx.distance_to_resistance_atr is not None
+            and ctx.distance_to_resistance_atr < gates.min_distance_to_resistance_atr
+        ):
+            return False
+
         # Approximate R:R pre-check using today's close as an entry proxy (the
         # real entry is tomorrow's open, unknown right now) — mirrors what
         # scanner.py's build_trade_plan does when it plans a setup for display.

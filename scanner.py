@@ -101,10 +101,23 @@ def build_trade_plan(
     earnings_warning: EarningsWarning | None,
     rs_rank: float | None = None,
     earnings_gap_frac: float | None = None,
+    no_trade_log: dict[str, str] | None = None,
 ) -> TradePlan | None:
+    """Returns None when the setup is rejected outright by a hard gate — the
+    NO-TRADE engine. A high composite score must never override one of these:
+    they run BEFORE scoring even happens. When `no_trade_log` is supplied, the
+    specific reason is recorded there (keyed by ticker) instead of being a
+    silent None, so a scan run can report exactly why each rejected ticker was
+    rejected — not just that it was."""
+
+    def _reject(reason: str) -> None:
+        if no_trade_log is not None:
+            no_trade_log[ticker] = reason
+        return None
+
     atr = ctx.atr14.iloc[-1]
     if pd.isna(atr) or atr <= 0:
-        return None
+        return _reject("insufficient_data: ATR unavailable")
 
     entry = ctx.last_close
     matched_strategies = evaluate_strategies(ctx)
@@ -118,15 +131,29 @@ def build_trade_plan(
     is_counter_trend = best is not None and best.strategy in COUNTER_TREND_STRATEGY_NAMES
     if not is_counter_trend:
         if gates.regime_gate_enabled and market_regime is not None and market_regime.label in gates.blocked_regime_labels:
-            return None
+            return _reject(f"weak_market_regime: {market_regime.label}")
         if rs_rank is not None and rs_rank < gates.min_rs_percentile:
-            return None
+            return _reject(f"weak_relative_strength: RS rank {rs_rank:.0f} < {gates.min_rs_percentile:.0f}")
+        if gates.block_bearish_higher_timeframe and weekly_ctx.trend.iloc[-1] == "bearish":
+            return _reject("bearish_higher_timeframe: weekly trend is bearish")
+
+    if earnings_warning is not None and earnings_warning.should_avoid:
+        return _reject(f"earnings_too_close: {earnings_warning.message}")
+
+    if gates.block_extreme_overextension and ctx.overextension is not None and ctx.overextension.stretched_reference_count >= 5:
+        return _reject("extreme_overextension: stretched from every reference at once")
+
+    if (
+        ctx.distance_to_resistance_atr is not None
+        and ctx.distance_to_resistance_atr < gates.min_distance_to_resistance_atr
+    ):
+        return _reject(f"resistance_too_close: only {ctx.distance_to_resistance_atr:.2f} ATRs of room")
 
     max_holding_days = config.risk.max_holding_days
 
     trade_levels = plan_trade_levels(entry, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0))
     if trade_levels is None:
-        return None
+        return _reject("insufficient_data: could not compute a valid stop/target")
     stop_levels = trade_levels.stop_levels
     target1, target2, rr = trade_levels.target1, trade_levels.target2, trade_levels.risk_reward
 
@@ -135,7 +162,7 @@ def build_trade_plan(
     # rejected outright, rather than merely scoring lower in one category among
     # ten — this is what actually makes a win rate below 50% still profitable.
     if rr < config.gates.min_risk_reward:
-        return None
+        return _reject(f"poor_risk_reward: {rr:.2f} < {config.gates.min_risk_reward:.2f}")
 
     mtf_score, mtf_reasons = multi_timeframe_confluence(ctx, weekly_ctx)
 
@@ -232,16 +259,21 @@ def scan_ticker(
     rs_rank: float | None,
     qqq_close: pd.Series | None = None,
     sector_histories: dict[str, pd.DataFrame] | None = None,
+    no_trade_log: dict[str, str] | None = None,
 ) -> TradePlan | None:
     try:
         history = provider.get_history(ticker, period=config.data.period)
         info = provider.get_info(ticker)
     except DataUnavailable as exc:
         logger.warning("skipping %s: %s", ticker, exc)
+        if no_trade_log is not None:
+            no_trade_log[ticker] = f"insufficient_data: {exc}"
         return None
 
     if len(history) < 60:
         logger.info("skipping %s: insufficient history (%d bars)", ticker, len(history))
+        if no_trade_log is not None:
+            no_trade_log[ticker] = f"insufficient_data: only {len(history)} bars of history"
         return None
 
     # RS/regime gates are applied inside build_trade_plan, AFTER strategies are
@@ -281,7 +313,9 @@ def scan_ticker(
     # look-ahead bug around when an earnings date was actually first known).
     earnings_gap_frac = earnings_gap_fraction(history, earnings_dates)
 
-    return build_trade_plan(ticker, ctx, weekly_ctx, config, market_regime, earnings_warning, rs_rank, earnings_gap_frac)
+    return build_trade_plan(
+        ticker, ctx, weekly_ctx, config, market_regime, earnings_warning, rs_rank, earnings_gap_frac, no_trade_log,
+    )
 
 
 @dataclass
@@ -291,6 +325,7 @@ class ScanRun:
     sector_ranked: list[SectorStrength]
     universe_size: int
     scan_duration_s: float
+    no_trade: dict[str, str] = field(default_factory=dict)
 
 
 def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | None = None, max_workers: int = 8) -> ScanRun:
@@ -351,12 +386,21 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     )
     logger.info("computed RS rank for %d/%d tickers (min_rs_percentile=%.0f)", len(rs_ranks), len(filter_result.included), config.gates.min_rs_percentile)
 
+    # The NO-TRADE engine: every ticker that build_trade_plan/scan_ticker rejects
+    # gets a specific, named reason recorded here instead of silently vanishing —
+    # see ScanRun.no_trade and print_no_trade_summary. A single dict written by
+    # multiple worker threads is safe here because each thread only ever writes
+    # its own ticker's key (CPython dict.__setitem__ is atomic per-call).
+    no_trade_log: dict[str, str] = {}
+    for ticker, reason in filter_result.excluded.items():
+        no_trade_log[ticker] = f"universe_filter: {reason}"
+
     trade_plans: list[TradePlan] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
             pool.submit(
                 scan_ticker, ticker, provider, config, spy_close, sector_ranked, market_regime, rs_ranks.get(ticker),
-                qqq_close, sector_histories,
+                qqq_close, sector_histories, no_trade_log,
             ): ticker
             for ticker in filter_result.included
         }
@@ -366,9 +410,11 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
                 plan = future.result()
             except Exception as exc:  # noqa: BLE001 - a single ticker failure must not kill the scan
                 logger.warning("error scanning %s: %s", ticker, exc)
+                no_trade_log[ticker] = f"error: {exc}"
                 plan = None
             if plan is not None:
                 trade_plans.append(plan)
+                no_trade_log.pop(ticker, None)
 
     trade_plans.sort(key=lambda p: p.score, reverse=True)
     duration = time.time() - started
@@ -376,7 +422,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
 
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
-        universe_size=len(filter_result.included), scan_duration_s=duration,
+        universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
     )
 
 
@@ -400,6 +446,23 @@ def print_scan_results(trade_plans: list[TradePlan], min_score: float = 70.0) ->
             f"{plan.stop:<9.2f}{plan.target2:<9.2f}{plan.risk_reward:<6.1f}{plan.trend:<10}"
             f"{plan.relative_volume:<7.1f}{plan.rsi:<6.0f}{plan.market_regime:<10}"
         )
+    print()
+
+
+def print_no_trade_summary(no_trade: dict[str, str]) -> None:
+    """The NO-TRADE engine's report: every rejected ticker had a specific,
+    named reason — this shows the breakdown by reason category, so it's
+    obvious whether the scanner is (for example) mostly filtering on weak
+    liquidity vs. a bad market regime vs. poor R:R, not just how many tickers
+    got rejected."""
+    if not no_trade:
+        return
+    from collections import Counter
+
+    categories = Counter(reason.split(":", 1)[0] for reason in no_trade.values())
+    print(f"--- No-trade summary ({len(no_trade)} tickers rejected) ---")
+    for category, count in categories.most_common():
+        print(f"  {category:<28}{count}")
     print()
 
 
@@ -517,6 +580,7 @@ def main(argv: list[str] | None = None) -> int:
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
     print_scan_results(scan_run.trade_plans, min_score=args.min_score)
+    print_no_trade_summary(scan_run.no_trade)
 
     from ui.dashboard import build_dashboard_html, trade_plan_to_row
     from watchlist.store import WatchlistStore

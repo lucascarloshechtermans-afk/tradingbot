@@ -9,7 +9,7 @@ from relative_strength.relative_strength import compute_universe_rs_ranks, unive
 from risk.stops_targets import plan_trade_levels
 from scanner import build_trade_plan
 from strategies import COUNTER_TREND_STRATEGY_NAMES
-from tests.helpers import breakout_history, context_from, mean_reversion_history
+from tests.helpers import breakout_history, context_from, downtrend_oversold_history, mean_reversion_history
 
 
 def _idx(n):
@@ -218,3 +218,86 @@ def test_build_trade_plan_blocks_trend_following_setup_on_bearish_regime():
     bearish = MarketRegime(label="BEARISH", score=-50, factors={})
     plan = build_trade_plan("BRK", ctx, ctx, config, bearish, None, rs_rank=100.0)
     assert plan is None
+
+
+# --------------------------------------------------------------------------- #
+# NO-TRADE engine: named rejection reasons
+# --------------------------------------------------------------------------- #
+
+
+def test_no_trade_log_records_specific_reason_for_weak_regime():
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    bearish = MarketRegime(label="BEARISH", score=-50, factors={})
+    log: dict[str, str] = {}
+    plan = build_trade_plan("BRK", ctx, ctx, config, bearish, None, rs_rank=100.0, no_trade_log=log)
+    assert plan is None
+    assert "BRK" in log
+    assert log["BRK"].startswith("weak_market_regime")
+
+
+def test_no_trade_log_records_earnings_too_close():
+    from datetime import datetime
+
+    from events.earnings import check_earnings_proximity
+
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    earnings_warning = check_earnings_proximity(
+        [datetime.now()], as_of=datetime.now(), buffer_days=5, avoid_earnings=True,
+    )
+    log: dict[str, str] = {}
+    plan = build_trade_plan("BRK", ctx, ctx, config, None, earnings_warning, rs_rank=100.0, no_trade_log=log)
+    assert plan is None
+    assert log["BRK"].startswith("earnings_too_close")
+
+
+def test_no_trade_log_records_resistance_too_close():
+    from dataclasses import replace
+
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    tight_ctx = replace(ctx, distance_to_resistance_atr=0.1)
+    log: dict[str, str] = {}
+    plan = build_trade_plan("BRK", tight_ctx, tight_ctx, config, None, None, rs_rank=100.0, no_trade_log=log)
+    assert plan is None
+    assert log["BRK"].startswith("resistance_too_close")
+
+
+def test_no_trade_log_records_extreme_overextension():
+    from dataclasses import replace
+
+    from risk.overextension import OverextensionProfile
+
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    stretched = OverextensionProfile(
+        distance_from_ema8_atr=10.0, distance_from_ema21_atr=10.0, distance_from_ema50_atr=10.0,
+        distance_from_vwap_atr=10.0, distance_from_swing_low_atr=10.0,
+        gain_1d_pct=1.0, gain_3d_pct=2.0, gain_5d_pct=3.0, gain_20d_pct=5.0,
+        stretched_reference_count=5, is_severely_overextended=True,
+    )
+    extreme_ctx = replace(ctx, overextension=stretched)
+    log: dict[str, str] = {}
+    plan = build_trade_plan("BRK", extreme_ctx, extreme_ctx, config, None, None, rs_rank=100.0, no_trade_log=log)
+    assert plan is None
+    assert log["BRK"].startswith("extreme_overextension")
+
+
+def test_no_trade_log_records_bearish_higher_timeframe():
+    daily_ctx = context_from(breakout_history())
+    weekly_bearish_ctx = context_from(downtrend_oversold_history())
+    config = AppConfig()
+    log: dict[str, str] = {}
+    plan = build_trade_plan("BRK", daily_ctx, weekly_bearish_ctx, config, None, None, rs_rank=100.0, no_trade_log=log)
+    assert plan is None
+    assert log["BRK"].startswith("bearish_higher_timeframe")
+
+
+def test_successful_plan_is_not_added_to_no_trade_log():
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    log: dict[str, str] = {}
+    plan = build_trade_plan("BRK", ctx, ctx, config, None, None, rs_rank=100.0, no_trade_log=log)
+    assert plan is not None
+    assert "BRK" not in log

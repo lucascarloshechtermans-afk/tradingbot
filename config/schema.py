@@ -111,6 +111,9 @@ class GatesConfig:
     regime_gate_enabled: bool = True
     blocked_regime_labels: list[str] = field(default_factory=lambda: ["BEARISH", "HIGH_VOLATILITY"])
     min_risk_reward: float = 1.2  # reject a setup outright if its computed (horizon-capped) R:R falls below this
+    min_distance_to_resistance_atr: float = 0.5  # reject when there's virtually no room before resistance
+    block_bearish_higher_timeframe: bool = True  # reject a long setup when the WEEKLY trend is bearish
+    block_extreme_overextension: bool = True  # reject when ALL distance references agree price is stretched
 
     @classmethod
     def from_dict(cls, raw: dict) -> "GatesConfig":
@@ -120,6 +123,9 @@ class GatesConfig:
             regime_gate_enabled=bool(raw.get("regime_gate_enabled", True)),
             blocked_regime_labels=list(raw.get("blocked_regime_labels", ["BEARISH", "HIGH_VOLATILITY"])),
             min_risk_reward=float(raw.get("min_risk_reward", 1.2)),
+            min_distance_to_resistance_atr=float(raw.get("min_distance_to_resistance_atr", 0.5)),
+            block_bearish_higher_timeframe=bool(raw.get("block_bearish_higher_timeframe", True)),
+            block_extreme_overextension=bool(raw.get("block_extreme_overextension", True)),
         )
 
 

@@ -39,6 +39,9 @@ gates:                     # hard pass/fail pre-filters, applied BEFORE scoring 
   regime_gate_enabled: true
   blocked_regime_labels: ["BEARISH", "HIGH_VOLATILITY"]
   min_risk_reward: 1.2     # reject a setup outright below this R:R
+  min_distance_to_resistance_atr: 0.5  # reject when there's virtually no room before resistance
+  block_bearish_higher_timeframe: true # reject a long setup when the WEEKLY trend is bearish
+  block_extreme_overextension: true    # reject when ALL distance references agree price is stretched
 
 scoring:
   weights:                 # moet optellen tot ~100

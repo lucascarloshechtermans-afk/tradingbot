@@ -211,7 +211,14 @@ def build_context(
     structure = market_structure(high, low, order=swing_order)
     last_close = float(close.iloc[-1])
 
-    resistance = nearest_level(levels, last_close, kind="resistance")
+    # A "resistance" level whose price has already fallen BELOW the current
+    # price isn't overhead resistance any more (price broke through it) — only
+    # candidates still genuinely above price count as "room before resistance".
+    # nearest_level() alone is direction-agnostic (fine for confluence_score,
+    # which just wants the nearest level regardless of direction), so this
+    # needs its own directional search rather than reusing it blindly.
+    resistance_candidates = [lv for lv in levels if lv.kind == "resistance" and lv.price > last_close]
+    resistance = min(resistance_candidates, key=lambda lv: lv.price) if resistance_candidates else None
     support = nearest_level(levels, last_close, kind="support")
     distance_to_resistance = (
         distance_in_atr(resistance.price, last_close, last_atr) if resistance is not None else None

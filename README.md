@@ -213,6 +213,34 @@ negative. `Strategy.counter_trend` (`strategies/base.py`) marks them, and both
 gates — a setup from either strategy is exempt from both, but still has to clear
 the (strategy-agnostic) minimum R:R gate.
 
+## The NO-TRADE engine
+
+`build_trade_plan` (`scanner.py`) is explicitly a rejection engine, not just a
+plan builder: a high composite score can never override one of its hard gates,
+because every gate runs and can reject the setup BEFORE scoring happens at all.
+Each rejection is a specific, named reason — never a silent `None` — collected
+into `ScanRun.no_trade` (ticker → reason) and printed as a breakdown by category
+(`print_no_trade_summary`), the same way universe-filter exclusions already were.
+The gates, in the order they run:
+
+1. Insufficient data (ATR/stop unavailable)
+2. Weak market regime / weak relative strength / bearish higher-timeframe weekly
+   trend (skipped for counter-trend setups — see above)
+3. Earnings too close (`config.earnings.avoid_earnings` + `buffer_days` — this
+   was previously COMPUTED via `EarningsWarning.should_avoid` but never actually
+   enforced, just shown as a risk note; now it actually blocks)
+4. Extreme overextension (all 5 distance references from
+   `risk/overextension.py` agree at once — `config.gates.block_extreme_overextension`)
+5. Resistance too close (`config.gates.min_distance_to_resistance_atr`, default
+   0.5 ATR — virtually no room for the trade to work)
+6. Poor risk/reward (`config.gates.min_risk_reward`)
+
+`backtest_screener.py`'s `signal_fn` mirrors gates 2 (except the weekly-trend
+check, which would need a resampled weekly context built per-bar — not done
+here, so that one gate is live-scan-only for now), 4, 5 and 6, so the backtest
+and the live scanner reject setups on the same grounds wherever the backtest has
+the data to check.
+
 ## How scoring works
 
 Every ticker gets a 0-100 composite score from 11 weighted categories (weights
