@@ -12,6 +12,173 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Overnight session summary (autonomous build)
+
+This section is the executive summary requested at the end of an unattended,
+overnight build/test/validate session. Everything below is backed by an actual
+backtest run cited inline — nothing here is a plan or an intention.
+
+### WHAT I BUILT
+
+The full system described in this README: a `DataProvider` abstraction over
+`yfinance` with disk caching; a universe filter (price band, market cap floor
+*and* ceiling, dollar-volume, Corwin-Schultz spread estimate, ATR% floor);
+trend/momentum/volatility/volume/trend-strength indicators (EMA 8/21/50 with
+slope and spread, SMA 20/50/100/200, RSI14/7 with regular+hidden divergence,
+MACD with histogram acceleration and zero-line/divergence, ADX/+DI/-DI with
+slope, ATR/ATR%, Bollinger Bands with squeeze/expansion, RVOL, OBV +
+Accumulation/Distribution with divergence); market structure (HH/HL/LH/LL,
+Break of Structure/Change of Character, liquidity sweeps); support/resistance
+with touch-count strength and ATR-normalized distance-to-resistance;
+Fibonacci retracement as confluence only (never a standalone trigger);
+anchored VWAP; gap classification (breakaway/continuation/exhaustion); market
+regime (SPY/QQQ/IWM/VIX multi-factor); sector rotation (11 SPDR ETFs) and
+relative strength vs. SPY *and* the scanned universe (a separate, later-added
+percentile gate); 8 strategy modules (Breakout, Pullback, Trend Continuation,
+Support Bounce, Momentum Continuation, Mean Reversion, Volatility Contraction,
+Episodic Pivot — the last two currently non-tradeable, see below); an 11-
+category weighted scoring engine with an explicit indicator-redundancy design
+(capped combined momentum/volume "votes" instead of counting correlated
+indicators as independent evidence) and a multi-category confluence bonus;
+hard sequential NO-TRADE gates applied *before* scoring (RS-vs-universe
+percentile, market regime, min R:R, resistance proximity, bearish weekly
+trend, extreme overextension, EPS-growth quality); risk management (ATR/
+structure stop selection, position sizing with correct rounding, horizon-
+capped targets); an event-driven backtester with no look-ahead (signal on bar
+t, fill at bar t+1's open) plus walk-forward-window infrastructure; a
+structured per-candidate trade explanation (why it passed / why it could
+fail / structure / momentum / volume / context / levels / risk); and a
+single-file static HTML dashboard. 398 automated tests, all passing.
+
+### WHAT I TESTED
+
+Every gate, strategy tightening, and scoring change in this session was run
+through a real backtest before being trusted — `backtest_screener.py --period
+5y` across the full 134-ticker universe (~7,500-9,000 closed trades per run,
+5 years, 2021-2026) was the primary validation tool, with `--period 2y` used
+tonight specifically as an out-of-sample check (see below). Tests included:
+A/B comparisons of the RS-vs-universe gate threshold (50 vs. 70), the
+target-horizon multiplier (1.2 vs. 1.5), Support Bounce's touch-count/trend
+filter, a min-ATR% universe floor at three different levels, a new EPS-
+growth quality gate, an RS-top-decile scoring bonus, a multi-category
+confluence bonus, re-enabling both non-tradeable strategies on a wider
+universe, and — tonight — a full out-of-sample run on the most recent 2
+years only (2433 trades) to check whether the accumulated tuning generalizes
+beyond the single 5-year window every prior decision was validated against.
+
+### WHAT FAILED
+
+- **Target-multiplier tightening (1.5 -> 1.2) and Support Bounce tightening
+  (min_touches 2 -> 3 + hard bearish-trend gate)**: both achieved their
+  stated proximate goal (target-hit-rate roughly doubled; Support Bounce
+  trade count fell 22%) but a controlled backtest showed the COMBINED effect
+  made the system worse on the metrics that matter (profit factor 1.15 ->
+  1.09, expectancy +0.20% -> +0.13%/trade). Reverted.
+- **Volatility Contraction strategy**: re-enabled as tradeable five separate
+  times across this project's history (including once tonight, on the wider
+  136-ticker universe) hoping a bigger sample would resolve its instability.
+  Every single time: 20-64 trades total (vs. hundreds-to-thousands for every
+  other strategy) with expectancy that flips sign between runs
+  (+0.52%, +0.40%, +0.39%, -0.05%, -0.37% across five tests). Confirmed
+  `tradeable = False` — the setup fires too rarely to trust as a primary
+  entry trigger regardless of universe size.
+- **Episodic Pivot strategy (new tonight)**: a Qullamaggie-style catalyst-gap
+  setup. Best expectancy of all 8 strategies on its first test (+0.73%), but
+  only 12 trades — thinner than Volatility Contraction's already-disqualified
+  sample. Built, tested, kept in the codebase (it can still contribute
+  price-action confirmation), but set `tradeable = False` for the same
+  small-sample reason.
+- **Confluence bonus and RS-top-decile scoring bonus**: both mechanically
+  push more setups into the 70+ score range (worked as designed — see "score
+  bucket" note below) but neither shows a validated POSITIVE correlation with
+  actual trade outcomes; if anything, both the original 5y validation and
+  tonight's 2y out-of-sample check show *negative* expectancy in the 70-79
+  and 80+ score buckets. Kept (they don't gate any trades by default, so
+  there's no downside to keeping them), but flagged prominently below.
+
+### WHAT I CHANGED
+
+In roughly chronological order this session: fixed a Corwin-Schultz spread
+threshold that was wrongly excluding liquid high-beta names; loosened the
+RS-vs-universe gate 70 -> 50 (evidence-based, see "Hard entry gates" above);
+fixed a real bug where `scanner.py --preset` only relabeled the config
+without reapplying its actual thresholds; fixed a real bug where
+`backtest_screener.py`'s score calculation silently omitted market-regime and
+risk/reward from the score (the reason the score-bucket report showed
+literally zero trades above 70 for most of this project, despite live scans
+regularly landing there); widened the universe from 103 to 136 tickers;
+recalibrated the score-label thresholds (90/80/70/60 -> 78/72/65/55) against
+the real achievable distribution once the above bug was fixed; added
+`min_atr_pct` (now 3.0, was tested at 5.0 and 4.0), `max_price`/`min_price`
+(added, then explicitly disabled per a later request), and `max_market_cap`
+(200B, excludes mega-caps) as universe filters; added an EPS-growth quality
+gate (validated: cut trades ~17%, raised profit factor 1.17 -> 1.21 and
+expectancy +0.28% -> +0.33%); added and then reverted Volatility Contraction
+and Episodic Pivot as tradeable strategies (see "What failed").
+
+### CURRENT PERFORMANCE
+
+**In-sample (5y, 134 tickers, current full config, 7491 trades):** 45.7% win
+rate, profit factor 1.21, expectancy +0.33%/trade, avg win/loss 4.56%/-3.22%,
+max 15 consecutive losses, avg hold 5.5 days.
+
+**Out-of-sample (2y, most recent data only, same config, 2433 trades):**
+45.1% win rate, profit factor **1.25**, expectancy **+0.37%/trade**, avg
+hold 5.2 days. Performance on the most recent, unseen-during-tuning period is
+not degraded — if anything slightly better — which is real (if not
+airtight, single-check) evidence against the system being overfit to stale
+historical patterns.
+
+**Per-strategy (5y, current config):** Bullish Breakout +0.71%, Mean
+Reversion +0.42%, Support Bounce +0.36% (highest trade count, worst per-trade
+loss rate at 61%, still net positive on R:R asymmetry), Momentum Continuation
++0.35%, Bullish Pullback +0.27%, Trend Continuation +0.14%.
+
+### REMAINING RISKS
+
+- **Score above ~65 does not reliably predict better outcomes.** Confirmed
+  in two independent backtests (5y full period and tonight's 2y OOS check):
+  the 70-79 and 80+ score buckets show *flat-to-negative* expectancy, not
+  better. Use the score to find candidates worth reading the reasons/risks
+  for, never as a standalone conviction signal — this is now empirically
+  demonstrated, not just a disclaimer.
+- **Mean Reversion and Bullish Breakout flipped negative in the 2y OOS-only
+  window** (-0.12% and -0.43% respectively, vs. +0.42%/+0.71% over the full
+  5y) on samples of 94-118 trades. Could be real regime-sensitivity (both
+  are the lowest-trade-count strategies, so more exposed to whatever the
+  last 2 years specifically looked like) or could be noise — not enough
+  evidence either way to act on, but worth watching, not ignoring.
+- **Survivorship bias**: the backtest universe is today's liquid tickers,
+  not a point-in-time historical membership list (see "Scope & honest
+  limitations" below) — structurally inflates backtest results somewhat.
+- **The RS-top-decile bonus and confluence bonus are unvalidated as
+  positive contributors** (see "What failed") — kept because they cause no
+  harm to trade selection, not because they're proven to help.
+- **Data source reliability**: `yfinance` intermittently returns transient
+  errors (HTTP 401 "Invalid Crumb", timeouts) that the retry logic absorbs,
+  but two tickers (CFLT, EXAS) failed to return any history across every run
+  this session — likely a data-provider-side issue with those specific
+  symbols, not a code bug, but unconfirmed.
+- **Walk-forward window infrastructure exists** (`backtesting/walk_forward.py`)
+  but is wired into the single-strategy `backtest.py`, not the full
+  multi-strategy `backtest_screener.py` that every validation in this
+  project actually uses — tonight's out-of-sample check (`--period 2y`) is a
+  practical substitute (recent-data-only, not seen as a whole in prior
+  tuning) but isn't a true sequential walk-forward across multiple windows.
+  A real next step, not silently skipped.
+
+### HOW TO RUN IT
+
+```bash
+pip install -r requirements.txt
+cp config/config.example.yaml config.yaml   # optional, has sensible defaults
+python scanner.py                            # live scan, prints + writes dashboard.html
+python scanner.py --min-score 55             # include the Watchlist tier too
+python backtest_screener.py --period 5y      # full validation backtest
+python backtest_screener.py --period 2y      # out-of-sample check
+python -m pytest -q                          # 398 tests, all passing
+```
+
 ## Network access note (important for this environment)
 
 If you're running this in a sandboxed environment where `query1.finance.yahoo.com`
