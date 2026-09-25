@@ -602,3 +602,37 @@ Documented up front so nothing here pretends to be more complete than it is:
   source (e.g. historical S&P 500/1000 membership with exact add/drop dates) that
   isn't available here — rather than approximate it with a guess, this limitation
   is left as-is and disclosed rather than silently ignored.
+- **Options / implied volatility are not implemented.** yfinance exposes a
+  current options chain (`Ticker.option_chain()`), but only a live snapshot —
+  there is no free historical options/IV time series to backtest against, and
+  a "live only" signal that silently can't be validated would contradict this
+  project's own backtest-everything standard. Rather than wire up a
+  live-only, never-backtested IV/options-flow signal, it's left out entirely.
+  A future paid data source (e.g. a historical IV surface provider) is the
+  natural way to add this properly.
+- **Short interest has no historical time series either.** yfinance's
+  `shortPercentOfFloat` (used for the free-float risk note — see "Liquidity,
+  float, and overnight gap risk" above) is a point-in-time snapshot with no
+  free history, so "change in short interest" (a specifically requested
+  metric) can't be computed — only the current level is shown, as context,
+  never as an automatic "high short interest = squeeze = buy" signal.
+- **Time-of-day / intraday execution analysis is out of scope by design, not
+  a missing feature.** This scanner produces one signal per ticker per DAY,
+  entered at the next bar's open, for a multi-day hold — there is no
+  same-day intraday execution decision here to analyze opening-range,
+  first-30-minute volatility, or closing-strength timing for. That kind of
+  analysis belongs to a same-day execution system, which this isn't; it
+  wouldn't change which ticker the scanner picks or when it exits, only
+  how an order is worked on the entry day, which isn't this tool's job.
+- **Correlation-based idiosyncratic-strength detection, sector
+  volatility/5D performance, and the 52-week/historical-resistance check on
+  breakouts are all genuinely new signals added late in this project's
+  development** (see "Correlation to SPY/QQQ/sector" and "52-week /
+  historical context" above) and have NOT yet been validated with a
+  dedicated before/after backtest the way the gates and strategy tightenings
+  earlier in this README were — they're included because they're
+  well-grounded, tested, and computed correctly (no look-ahead), not because
+  their effect on live trade selection has been empirically proven the way
+  the rest of this document's numbers have. Treat their scoring bonuses as
+  reasoned but not yet independently backtest-validated, and re-validate with
+  `backtest_screener.py` before trusting them more than that.
