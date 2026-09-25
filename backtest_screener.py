@@ -66,6 +66,7 @@ def make_screener_functions(
     score_by_bar: dict[int, float],
     regime_by_bar: dict[int, str],
     rr_by_bar: dict[int, float],
+    overext_by_bar: dict[int, int],
     min_score: float | None = None,
     regime_series: pd.Series | None = None,
     rs_rank_series: pd.Series | None = None,
@@ -181,6 +182,8 @@ def make_screener_functions(
             rs_percentile=rs_percentile,
         )
         score_by_bar[len(history_so_far)] = score_result.total_score
+        if ctx.overextension is not None:
+            overext_by_bar[len(history_so_far)] = ctx.overextension.stretched_reference_count
         if min_score is not None and score_result.total_score < min_score:
             return False
         return True
@@ -230,8 +233,10 @@ def backtest_ticker(
     score_by_bar: dict[int, float] = {}
     regime_by_bar: dict[int, str] = {}
     rr_by_bar: dict[int, float] = {}
+    overext_by_bar: dict[int, int] = {}
     signal_fn, stop_fn, target_fn = make_screener_functions(
         cache, config, attempted_strategy_by_bar, score_by_bar, regime_by_bar, rr_by_bar,
+        overext_by_bar,
         min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
         earnings_growth=earnings_growth,
     )
@@ -250,6 +255,7 @@ def backtest_ticker(
     trade_scores = []
     trade_regimes = []
     trade_rrs = []
+    trade_overexts = []
     for trade in result.trades:
         try:
             bar_index = history.index.get_loc(trade.entry_date)
@@ -259,8 +265,9 @@ def backtest_ticker(
         trade_scores.append(score_by_bar.get(bar_index))
         trade_regimes.append(regime_by_bar.get(bar_index))
         trade_rrs.append(rr_by_bar.get(bar_index))
+        trade_overexts.append(overext_by_bar.get(bar_index))
 
-    return result, trade_strategies, trade_scores, trade_regimes, trade_rrs
+    return result, trade_strategies, trade_scores, trade_regimes, trade_rrs, trade_overexts
 
 
 def build_gate_tables(provider: DataProvider, config: AppConfig, histories: dict[str, pd.DataFrame]):
@@ -301,6 +308,7 @@ def run_universe_backtest(
     all_trade_scores = []
     all_trade_regimes = []
     all_trade_rrs = []
+    all_trade_overexts = []
     per_ticker_summaries = []
     errors = []
 
@@ -333,7 +341,7 @@ def run_universe_backtest(
 
     for i, (ticker, history) in enumerate(histories.items(), start=1):
         rs_rank_series = rs_rank_table[ticker] if ticker in rs_rank_table.columns else None
-        result, trade_strategies, trade_scores, trade_regimes, trade_rrs = backtest_ticker(
+        result, trade_strategies, trade_scores, trade_regimes, trade_rrs, trade_overexts = backtest_ticker(
             ticker, history, config, min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
             earnings_growth=earnings_growth_by_ticker.get(ticker),
         )
@@ -342,6 +350,7 @@ def run_universe_backtest(
         all_trade_scores.extend(trade_scores)
         all_trade_regimes.extend(trade_regimes)
         all_trade_rrs.extend(trade_rrs)
+        all_trade_overexts.extend(trade_overexts)
 
         closed = [t for t in result.trades if t.pnl is not None]
         wins = sum(1 for t in closed if t.pnl > 0)
@@ -351,7 +360,7 @@ def run_universe_backtest(
         )
         logger.info("[%d/%d] %s: %d trades, %d wins", i, len(histories), ticker, len(closed), wins)
 
-    return all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, per_ticker_summaries, errors
+    return all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, all_trade_overexts, per_ticker_summaries, errors
 
 
 def print_score_bucket_report(all_trades, all_trade_scores):
@@ -378,6 +387,39 @@ def print_score_bucket_report(all_trades, all_trade_scores):
         expectancy = (len(wins) / len(bucket_trades) * avg_w) + (len(losses) / len(bucket_trades) * avg_l)
         print(
             f"{label:<10}{len(bucket_trades):<9}{f'{wr:.1f}%':<11}{f'{avg_w:.2f}%':<10}"
+            f"{f'{avg_l:.2f}%':<10}{expectancy:+.2f}%"
+        )
+    print()
+
+
+def print_overextension_report(all_trades, all_trade_overexts):
+    """Diagnostic for a recurring finding: score buckets above ~65-70 have
+    shown flat-to-negative expectancy in two separate backtests (see README's
+    "Overnight session summary"). One plausible mechanism -- a setup that
+    checks many confirming boxes simultaneously may also be the most
+    already-extended/chased one. This buckets by
+    Overextension.stretched_reference_count (how many independent distance
+    references -- EMA8/21/50, VWAP, swing-low -- agree price is stretched >=3
+    ATRs) at entry, to check that hypothesis directly rather than guess."""
+    buckets = [(0, 1, "0 (none)"), (1, 2, "1"), (2, 3, "2"), (3, 4, "3"), (4, 5, "4"), (5, 6, "5 (all)")]
+    print(f"\n{'--- Win rate / expectancy by overextension count at entry ---':<40}")
+    print(f"{'Stretched refs':<16}{'Trades':<9}{'Win rate':<11}{'Avg win':<10}{'Avg loss':<10}{'Expectancy'}")
+    for lo, hi, label in buckets:
+        bucket_trades = [
+            t for t, o in zip(all_trades, all_trade_overexts)
+            if t.pnl is not None and o is not None and lo <= o < hi
+        ]
+        if not bucket_trades:
+            print(f"{label:<16}{'0':<9}{'-':<11}{'-':<10}{'-':<10}-")
+            continue
+        wins = [t for t in bucket_trades if t.pnl > 0]
+        losses = [t for t in bucket_trades if t.pnl < 0]
+        wr = len(wins) / len(bucket_trades) * 100
+        avg_w = sum(t.pnl_pct for t in wins) / len(wins) if wins else 0
+        avg_l = sum(t.pnl_pct for t in losses) / len(losses) if losses else 0
+        expectancy = (len(wins) / len(bucket_trades) * avg_w) + (len(losses) / len(bucket_trades) * avg_l)
+        print(
+            f"{label:<16}{len(bucket_trades):<9}{f'{wr:.1f}%':<11}{f'{avg_w:.2f}%':<10}"
             f"{f'{avg_l:.2f}%':<10}{expectancy:+.2f}%"
         )
     print()
@@ -454,7 +496,7 @@ def print_losing_trade_analysis(all_trades, all_trade_strategies, all_trade_scor
     print()
 
 
-def print_report(all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, per_ticker_summaries, errors, config: AppConfig, period: str):
+def print_report(all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, per_ticker_summaries, errors, config: AppConfig, period: str, all_trade_overexts=None):
     closed = [t for t in all_trades if t.pnl is not None]
     # build a pseudo equity curve from cumulative pnl for drawdown/sharpe purposes
     cum_pnl = pd.Series([t.pnl for t in closed]).cumsum() + config.backtesting.initial_capital
@@ -522,6 +564,8 @@ def print_report(all_trades, all_trade_strategies, all_trade_scores, all_trade_r
     print()
 
     print_score_bucket_report(all_trades, all_trade_scores)
+    if all_trade_overexts is not None:
+        print_overextension_report(all_trades, all_trade_overexts)
     print_regime_performance_report(all_trades, all_trade_regimes)
     print_losing_trade_analysis(all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs)
 
@@ -563,14 +607,14 @@ def main(argv: list[str] | None = None) -> int:
         tickers = args.tickers.split(",") if args.tickers else DEFAULT_UNIVERSE
 
     started = time.time()
-    all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, per_ticker_summaries, errors = run_universe_backtest(
+    all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, all_trade_overexts, per_ticker_summaries, errors = run_universe_backtest(
         provider, config, tickers, args.period, min_score=args.min_score
     )
     logger.info("done in %.1fs", time.time() - started)
 
     print_report(
         all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs,
-        per_ticker_summaries, errors, config, args.period,
+        per_ticker_summaries, errors, config, args.period, all_trade_overexts,
     )
     return 0
 
