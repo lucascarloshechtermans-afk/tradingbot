@@ -16,12 +16,20 @@ class EpisodicPivotStrategy(Strategy):
     size-of-move "this was a real catalyst" threshold -- a routine 2% breakout
     gap and an 8%+ catalyst gap are treated identically there.
 
-    New, unvalidated: added to test the hypothesis directly (see the "n_trades"
-    and expectancy for this strategy in the next backtest run) rather than
-    assumed to help just because well-known traders use something like it.
+    First backtest (5y, 134 tickers) showed +0.73% expectancy, best of all 8
+    strategies -- but only 12 trades total, since a real catalyst-sized gap is
+    rare by design. That's an even thinner sample than VolatilityContraction's
+    26-31 trades, which was ALREADY deemed too small to trust as a primary
+    entry trigger (its expectancy sign flipped between backtest runs on that
+    larger sample). tradeable=False for the same reason: the direction is
+    promising, but 12 trades isn't enough to rule out the same kind of
+    small-sample noise. It can still fire, appear in reasons, and contribute
+    to price-action score confirmation -- revisit once more historical/live
+    data accumulates.
     """
 
     name = "Episodic Pivot"
+    tradeable = False
 
     MIN_GAP_PCT = 8.0
     MIN_RVOL = 2.0

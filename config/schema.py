@@ -176,8 +176,9 @@ class GatesConfig:
     # free-data earnings-growth coverage is patchy (ETFs, some foreign filers,
     # recent IPOs) and blanket-rejecting missing data here would silently wipe
     # out an unpredictable chunk of the universe rather than apply a real
-    # quality bar. Unvalidated as of writing -- needs a dedicated backtest
-    # before being trusted, same discipline as every other gate here.
+    # quality bar. Validated: a 5y/134-ticker backtest at 0.15 cut trades ~17%
+    # (8958 -> 7491) while profit factor rose 1.17 -> 1.21 and expectancy
+    # +0.28% -> +0.33% -- see config.example.yaml's comment for the full A/B.
     min_earnings_growth: float | None = None
 
     @classmethod

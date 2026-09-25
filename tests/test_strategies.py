@@ -199,15 +199,11 @@ def test_all_strategies_are_registered():
     assert len(names) == 8  # all distinct
 
 
-def test_volatility_contraction_tradeable_flag_matches_current_state():
-    # Provisionally True again for a re-test against the widened 136-ticker
-    # universe (see volatility_contraction.py) -- three prior 5-year backtests
-    # on the smaller 102-ticker universe each showed only 26-31 trades with
-    # the expectancy SIGN flipping between runs, too small a sample to trust.
-    # This assertion tracks the current experiment; flip back to False (with
-    # this test updated to match) if the next backtest still shows a
-    # thin/sign-flipping sample.
-    assert VolatilityContractionStrategy().tradeable is True
+def test_volatility_contraction_is_not_tradeable():
+    # Re-tested on the widened 136-ticker universe: still only 44 trades with
+    # expectancy flipping negative again (-0.37%) -- the sample-size problem
+    # persists regardless of universe size. See volatility_contraction.py.
+    assert VolatilityContractionStrategy().tradeable is False
 
 
 def test_best_tradeable_signal_ignores_untradeable_strategies():
@@ -259,3 +255,10 @@ def test_episodic_pivot_rejects_gap_already_filled():
     ctx = context_from(history)
     signal = EpisodicPivotStrategy().evaluate(ctx)
     assert signal.matched is False
+
+
+def test_episodic_pivot_is_not_tradeable():
+    # First backtest (5y, 134 tickers): +0.73% expectancy but only 12 trades --
+    # even thinner than VolatilityContraction's already-too-small 26-31-trade
+    # sample. Promising direction, not enough data to trust yet.
+    assert EpisodicPivotStrategy().tradeable is False

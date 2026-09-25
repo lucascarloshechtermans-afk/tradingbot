@@ -55,10 +55,14 @@ gates:                     # hard pass/fail pre-filters, applied BEFORE scoring 
   min_distance_to_resistance_atr: 0.5  # reject when there's virtually no room before resistance
   block_bearish_higher_timeframe: true # reject a long setup when the WEEKLY trend is bearish
   block_extreme_overextension: true    # reject when ALL distance references agree price is stretched
-  min_earnings_growth: 0.15  # TESTING: Minervini/CANSLIM-style quality gate,
-                               # reject below 15% YoY quarterly EPS growth when
-                               # known (missing data does NOT reject). Unvalidated --
-                               # see GatesConfig's comment in config/schema.py
+  min_earnings_growth: 0.15  # Minervini/CANSLIM-style quality gate, reject
+                               # below 15% YoY quarterly EPS growth when known
+                               # (missing data does NOT reject). Validated: a 5y/
+                               # 134-ticker A/B (isolating this + 3 other new
+                               # options together) cut trades ~17% (8958->7491)
+                               # while profit factor rose 1.17->1.21 and
+                               # expectancy +0.28%->+0.33% -- see GatesConfig's
+                               # comment in config/schema.py
 
 scoring:
   weights:                 # moet optellen tot ~100
