@@ -40,12 +40,18 @@ DEFAULT_UNIVERSE = [
     # many high-conviction setups can appear on any given day, independent of
     # setup quality).
     "MRVL", "ON", "LRCX", "KLAC", "AMAT",           # semis
-    "MDB", "TEAM", "ZS", "OKTA", "TTD", "CFLT", "GTLB", "PATH", "U",  # software/growth
+    "MDB", "TEAM", "ZS", "OKTA", "TTD", "GTLB", "PATH", "U",  # software/growth
     "SOFI", "AFRM", "HOOD", "DASH", "APP",           # fintech/consumer tech
-    "CRSP", "NTLA", "BEAM", "EXAS",                  # biotech
+    "CRSP", "NTLA", "BEAM",                          # biotech
     "FCX", "AA", "ALB", "CCJ", "VST", "CEG",         # materials/energy, higher-beta
     "CCL", "RCL", "EXPE", "W",                       # travel/consumer discretionary
 ]
+# CFLT and EXAS were both in this list and removed: every yfinance fetch for
+# them failed across every backtest/scan this session ("No history returned").
+# Confirmed via IBKR (a real brokerage data feed, cross-checked interactively,
+# not wired into this pipeline) that both now trade on IBKR's "VALUE" exchange
+# -- IBKR's designation for a security no longer actively trading (acquired/
+# delisted) -- so the failures were a real corporate action, not a yfinance bug.
 
 # Sector -> SPDR sector ETF mapping lives in sector/rotation.py (SECTOR_ETF_MAP),
 # which is the module that actually consumes it — avoid duplicating it here.
