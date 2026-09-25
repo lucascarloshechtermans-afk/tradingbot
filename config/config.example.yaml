@@ -5,7 +5,8 @@
 universe:
   preset: BALANCED        # CONSERVATIVE | BALANCED | AGGRESSIVE | CUSTOM
   # onderstaande waarden overschrijven de preset-defaults als je ze zet
-  # min_price: 10.0
+  min_price: 100.0         # samen met max_price: voorkeur voor de $100-200 band
+  max_price: 200.0          # (minder shares per trade, ander per-tick gevoel)
   # min_avg_dollar_volume: 5000000
   # min_market_cap: 2000000000
   # exclude_penny_stocks: true

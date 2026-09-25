@@ -135,6 +135,32 @@ def test_min_atr_pct_zero_disables_the_filter():
     assert result.included == ["SLOWMOVER"]
 
 
+def test_filters_reject_price_above_max_price():
+    cfg = UniverseConfig.from_dict({"preset": "BALANCED", "max_price": 200.0})
+    candidates = {
+        "EXPENSIVE": (
+            TickerInfo(ticker="EXPENSIVE", market_cap=500_000_000_000),
+            _history(price=629.0, volume=1_000_000),
+        )
+    }
+    result = apply_universe_filters(candidates, cfg)
+    assert "EXPENSIVE" in result.excluded
+    assert "max_price" in result.excluded["EXPENSIVE"]
+
+
+def test_max_price_none_disables_the_ceiling():
+    cfg = UniverseConfig.from_dict({"preset": "BALANCED"})
+    assert cfg.max_price is None
+    candidates = {
+        "EXPENSIVE": (
+            TickerInfo(ticker="EXPENSIVE", market_cap=500_000_000_000),
+            _history(price=629.0, volume=1_000_000),
+        )
+    }
+    result = apply_universe_filters(candidates, cfg)
+    assert result.included == ["EXPENSIVE"]
+
+
 def test_aggressive_preset_allows_lower_price_and_cap():
     cfg = UniverseConfig.from_dict({"preset": "AGGRESSIVE"})
     candidates = {

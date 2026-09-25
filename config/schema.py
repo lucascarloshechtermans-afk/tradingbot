@@ -33,6 +33,13 @@ class UniverseConfig:
     # every liquidity/cap filter but rarely move enough in a 5-day swing to hit a
     # meaningful target.
     min_atr_pct: float = 0.0
+    # Optional ceiling on share price (None = no ceiling). Added on explicit
+    # request to avoid pricier names (e.g. $600+ AMD/NET-style tickers) in
+    # favor of a $100-200 band, independent of min_atr_pct/ATR% -- ATR% already
+    # normalizes volatility for price level, so this is a stated preference
+    # (fewer shares per trade, different per-tick feel), not a claim that
+    # cheaper-per-share names are objectively more volatile.
+    max_price: float | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "UniverseConfig":
@@ -61,6 +68,11 @@ class UniverseConfig:
                 merged.get("max_spread_pct_estimate", defaults.get("max_spread_pct_estimate", 1.5))
             ),
             min_atr_pct=float(merged.get("min_atr_pct", defaults.get("min_atr_pct", 0.0))),
+            max_price=(
+                float(merged.get("max_price", defaults.get("max_price")))
+                if merged.get("max_price", defaults.get("max_price")) is not None
+                else None
+            ),
         )
 
 

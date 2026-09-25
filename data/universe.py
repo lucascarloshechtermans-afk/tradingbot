@@ -73,6 +73,9 @@ def apply_universe_filters(
         if last_price < config.min_price:
             result.excluded[ticker] = f"price {last_price:.2f} < min_price {config.min_price}"
             continue
+        if config.max_price is not None and last_price > config.max_price:
+            result.excluded[ticker] = f"price {last_price:.2f} > max_price {config.max_price}"
+            continue
         if config.exclude_penny_stocks and last_price < penny_floor:
             result.excluded[ticker] = f"price {last_price:.2f} below penny-stock floor {penny_floor}"
             continue
