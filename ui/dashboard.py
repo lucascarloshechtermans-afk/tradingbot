@@ -146,6 +146,20 @@ const CATEGORY_LABELS = {{
   sector: 'Sector', risk_reward: 'Risk/Reward', multi_timeframe: 'Multi-Timeframe',
 }};
 
+const EXPLANATION_LABELS = {{
+  why_it_passed: 'Why it passed', why_it_could_fail: 'Why it could fail', structure: 'Structure',
+  momentum: 'Momentum', volume: 'Volume', context: 'Context', levels: 'Levels', risk: 'Risk',
+}};
+const EXPLANATION_ORDER = ['why_it_passed', 'why_it_could_fail', 'structure', 'momentum', 'volume', 'context', 'levels', 'risk'];
+
+function renderExplanation(explanation) {{
+  if (!explanation) return '';
+  return EXPLANATION_ORDER.filter(k => explanation[k] && explanation[k].length).map(k => {{
+    const items = explanation[k].map(r => `<li>${{r}}</li>`).join('');
+    return `<div style="margin-bottom:8px"><strong>${{EXPLANATION_LABELS[k]}}</strong><ul class="plain">${{items}}</ul></div>`;
+  }}).join('');
+}}
+
 function renderCategoryBreakdown(categories) {{
   if (!categories || categories.length === 0) return '<div style="color:var(--ink-soft)">no breakdown</div>';
   return categories.map(cat => {{
@@ -186,13 +200,10 @@ SCAN_DATA.forEach((row, idx) => {{
 
   const detailTr = document.createElement('tr');
   detailTr.className = 'detail';
-  const reasonsHtml = row.reasons.map(r => `<li>+ ${{r}}</li>`).join('');
-  const risksHtml = row.risks.map(r => `<li>- ${{r}}</li>`).join('');
   detailTr.innerHTML = `<td colspan="12">
     <div style="display:flex; gap:24px; flex-wrap:wrap;">
       <div>${{renderSparkline(row.recent_closes)}}</div>
-      <div><strong>Reasons</strong><ul class="plain reasons">${{reasonsHtml || '<li style="color:var(--ink-soft)">none</li>'}}</ul></div>
-      <div><strong>Risks</strong><ul class="plain risks">${{risksHtml || '<li style="color:var(--ink-soft)">none</li>'}}</ul></div>
+      <div style="min-width:280px; max-width:360px;">${{renderExplanation(row.explanation)}}</div>
       <div><strong>Confidence</strong><div>${{row.confidence.toFixed(0)}}/100</div>
         <strong>ATR%</strong><div>${{row.atr_pct.toFixed(1)}}%</div>
         <strong>Sector</strong><div>${{row.sector || 'n/a'}}</div>
@@ -297,4 +308,5 @@ def trade_plan_to_row(plan) -> dict[str, Any]:
         "recent_closes": plan.recent_closes,
         "max_holding_days": plan.max_holding_days,
         "category_breakdown": getattr(plan, "category_breakdown", []),
+        "explanation": getattr(plan, "explanation", {}),
     }

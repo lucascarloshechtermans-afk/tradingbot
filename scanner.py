@@ -71,6 +71,7 @@ class TradePlan:
     recent_closes: list[float] = field(default_factory=list)
     max_holding_days: int = 5
     category_breakdown: list[dict] = field(default_factory=list)
+    explanation: dict = field(default_factory=dict)
 
 
 def compute_breadth_pct_above_50ma(universe_histories: dict[str, pd.DataFrame]) -> float | None:
@@ -224,6 +225,39 @@ def build_trade_plan(
         for cat in score_result.categories
     ]
 
+    # Every selected setup must be explainable: this restructures the same
+    # underlying reasons/risks/category data into a fixed, always-present
+    # shape, so a setup's WHY and its RISK are never a wall of undifferentiated
+    # bullet points.
+    category_lookup = {cat.category: cat.reasons for cat in score_result.categories}
+    resistance_note = None
+    if ctx.distance_to_resistance_atr is not None:
+        resistance_note = f"Room to resistance: {ctx.distance_to_resistance_atr:.1f} ATRs"
+    explanation = {
+        "why_it_passed": reasons,
+        "why_it_could_fail": risks,
+        "structure": category_lookup.get("market_structure", []),
+        "momentum": category_lookup.get("momentum", []),
+        "volume": category_lookup.get("volume", []),
+        "context": (
+            category_lookup.get("market_regime", [])
+            + category_lookup.get("sector", [])
+            + category_lookup.get("relative_strength", [])
+        ),
+        "levels": [
+            f"Entry: {entry:.2f}",
+            f"Stop: {stop_levels.final_stop:.2f} ({stop_levels.final_stop_method}-based)",
+            f"Target: {target2:.2f}",
+            f"Risk/reward: {rr:.1f}:1",
+            *([resistance_note] if resistance_note else []),
+        ],
+        "risk": [
+            f"ATR: {float(ctx.atr_pct.iloc[-1]):.1f}% of price" if pd.notna(ctx.atr_pct.iloc[-1]) else "ATR: unavailable",
+            f"Max holding period: {max_holding_days} trading days",
+            *risks,
+        ],
+    }
+
     return TradePlan(
         ticker=ticker,
         setup=best.strategy if best else "No confirmed setup",
@@ -246,6 +280,7 @@ def build_trade_plan(
         recent_closes=[round(float(c), 2) for c in ctx.close.tail(SPARKLINE_BARS).tolist()],
         max_holding_days=max_holding_days,
         category_breakdown=category_breakdown,
+        explanation=explanation,
     )
 
 

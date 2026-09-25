@@ -46,6 +46,28 @@ def test_trade_plan_to_row_includes_category_breakdown():
     assert row["category_breakdown"][1]["category"] == "market_structure"
 
 
+def test_trade_plan_to_row_includes_explanation():
+    plan = _sample_plan()
+    plan.explanation = {
+        "why_it_passed": ["Breakout above 20-day high"], "why_it_could_fail": ["Resistance nearby"],
+        "structure": [], "momentum": [], "volume": [], "context": [], "levels": ["Entry: 190.00"], "risk": ["ATR: 2.1%"],
+    }
+    row = trade_plan_to_row(plan)
+    assert row["explanation"]["why_it_passed"] == ["Breakout above 20-day high"]
+    assert row["explanation"]["levels"] == ["Entry: 190.00"]
+
+
+def test_build_dashboard_html_embeds_explanation():
+    plan = _sample_plan()
+    plan.explanation = {"why_it_passed": ["Strong setup"], "why_it_could_fail": [], "structure": [], "momentum": [], "volume": [], "context": [], "levels": [], "risk": []}
+    row = trade_plan_to_row(plan)
+    html = build_dashboard_html(
+        scan_rows=[row], market_regime={}, sector_ranked=[], watchlist_entries=[], universe_size=1, scan_duration_s=0.1,
+    )
+    assert "renderExplanation" in html
+    assert "Strong setup" in html
+
+
 def test_build_dashboard_html_embeds_category_breakdown():
     row = trade_plan_to_row(_sample_plan())
     html = build_dashboard_html(

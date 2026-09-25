@@ -201,6 +201,18 @@ def test_build_trade_plan_flags_low_float_as_risk_not_score():
     assert plan_high_float.score == plan.score
 
 
+def test_build_trade_plan_populates_structured_explanation():
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    plan = build_trade_plan("BRK", ctx, ctx, config, None, None, rs_rank=100.0)
+    assert plan is not None
+    expected_keys = {"why_it_passed", "why_it_could_fail", "structure", "momentum", "volume", "context", "levels", "risk"}
+    assert expected_keys <= plan.explanation.keys()
+    assert len(plan.explanation["why_it_passed"]) > 0
+    assert any("Entry:" in line for line in plan.explanation["levels"])
+    assert any("ATR:" in line for line in plan.explanation["risk"])
+
+
 def test_build_trade_plan_populates_category_breakdown():
     ctx = context_from(breakout_history())
     config = AppConfig()

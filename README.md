@@ -274,6 +274,16 @@ printed; pass `--min-score 60` or lower to also see the Watchlist tier.
 Every category's contribution and the specific reasons behind it are visible in
 the dashboard's expanded row for each ticker — nothing is a black box.
 
+**Structured trade explanation** (`TradePlan.explanation`): every setup that
+passes the NO-TRADE engine is restructured into a fixed set of sections rather
+than one undifferentiated bullet list — `why_it_passed`, `why_it_could_fail`,
+`structure`, `momentum`, `volume`, `context` (market regime/sector/relative
+strength), `levels` (entry/stop/target/R:R/room-to-resistance), and `risk`
+(ATR, holding period, earnings/liquidity/float/gap risk notes). Same underlying
+data as the category breakdown and reasons/risks lists above, just organized
+for readability — shown in place of the old flat Reasons/Risks panel in the
+dashboard's expanded row.
+
 **Indicator redundancy:** RSI, MACD histogram and 20-day ROC are all derived from
 the same underlying fact (recent price change), so they usually agree — summing a
 full bonus for each would let one real "price is rising" observation get counted
