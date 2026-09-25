@@ -148,6 +148,23 @@ all three are now fixed (see `strategies/volatility_contraction.py`'s docstring,
 `strategies/mean_reversion.py`'s comment, and `risk.risk_per_trade_pct` in
 `config.example.yaml`).
 
+**Latest full validation** (5y, 103 tickers, all current gates/fixes applied):
+6118 trades, 44.8% win rate, profit factor 1.15, expectancy +0.21%/trade, max 13
+consecutive losses — and for the first time, all 6 tradeable strategies are
+individually net positive (Mean Reversion +0.33%, Support Bounce +0.27%,
+Bullish Pullback +0.20%, Trend Continuation +0.12%, Momentum Continuation
++0.10%, Bullish Breakout +0.09%). This followed several rounds of empirical
+back-and-forth, each one only kept after a fresh backtest confirmed it helped:
+the hard gates (RS/regime/min-R:R) initially made things worse for Mean
+Reversion/Support Bounce specifically because those strategies deliberately buy
+weakness, which the counter-trend exemption then fixed; Momentum Continuation
+and Support Bounce needed tighter volume/magnitude conditions after showing up
+as high-trade-count, low-edge outliers; and Volatility Contraction went back to
+`tradeable=False` after three runs showed its win/loss sign flipping on a
+26-31-trade sample. A lower overall win rate (44.8% vs. an earlier 46.5%
+pre-gate baseline) paired with a HIGHER profit factor and expectancy is the
+point, not a regression — see "Hard entry gates" below.
+
 ## Hard entry gates (before scoring)
 
 A weighted 0-100 composite score alone lets a setup make up for a real weakness
