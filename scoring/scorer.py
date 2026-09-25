@@ -36,6 +36,13 @@ def _clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
 
 
 def score_trend(ctx: TickerContext) -> CategoryScore:
+    """Pure trend DIRECTION and STRENGTH: MA alignment, ADX/DI, EMA stack/cross,
+    VWAP. Deliberately excludes market structure (HH/HL, BOS/CHOCH) — see
+    `score_market_structure` — these are kept as separate categories rather than
+    folded together, since a stock can be in a clean uptrend (MAs stacked, ADX
+    strong) while its short-term structure is breaking down, or vice versa, and
+    collapsing them into one number hides that distinction from the scanner
+    output."""
     reasons: list[str] = []
     score = 20.0  # neutral baseline
 
@@ -45,26 +52,6 @@ def score_trend(ctx: TickerContext) -> CategoryScore:
     elif ctx.trend.iloc[-1] == "bearish":
         score = 10.0
         reasons.append("Below 20/50/200 SMA (bearish trend alignment)")
-
-    if ctx.structure == "higher_highs_higher_lows":
-        score += 15
-        reasons.append("Market structure: higher highs, higher lows")
-    elif ctx.structure == "lower_highs_lower_lows":
-        score -= 15
-        reasons.append("Market structure: lower highs, lower lows")
-
-    if ctx.structure_break == "bullish_bos":
-        score += 10
-        reasons.append("Break of structure: close above the last swing high, confirming the uptrend")
-    elif ctx.structure_break == "bullish_choch":
-        score += 8
-        reasons.append("Change of character: first close above the last swing high in a weak/bearish structure")
-    elif ctx.structure_break == "bearish_choch":
-        score -= 12
-        reasons.append("Change of character: closed below the last swing low — trend may be turning")
-    elif ctx.structure_break == "bearish_bos":
-        score -= 15
-        reasons.append("Break of structure to the downside")
 
     if ctx.adx14.iloc[-1] > 25 and ctx.plus_di.iloc[-1] > ctx.minus_di.iloc[-1]:
         score += 10
@@ -97,6 +84,39 @@ def score_trend(ctx: TickerContext) -> CategoryScore:
             reasons.append("Anchored VWAP sloping up")
 
     return CategoryScore("trend", _clamp(score), 0, 0, reasons)
+
+
+def score_market_structure(ctx: TickerContext) -> CategoryScore:
+    """Market STRUCTURE: the swing-point pattern (higher highs/higher lows vs.
+    lower highs/lower lows) and any break of structure / change of character —
+    kept separate from `score_trend` (see its docstring) so a scanner user can
+    see at a glance whether a stock's structure agrees with its moving-average
+    trend or is diverging from it (an early warning `score_trend` alone can't
+    give, since MAs lag price by construction)."""
+    reasons: list[str] = []
+    score = 30.0  # neutral baseline — no structural signal yet
+
+    if ctx.structure == "higher_highs_higher_lows":
+        score += 35
+        reasons.append("Market structure: higher highs, higher lows")
+    elif ctx.structure == "lower_highs_lower_lows":
+        score -= 20
+        reasons.append("Market structure: lower highs, lower lows")
+
+    if ctx.structure_break == "bullish_bos":
+        score += 25
+        reasons.append("Break of structure: close above the last swing high, confirming the uptrend")
+    elif ctx.structure_break == "bullish_choch":
+        score += 20
+        reasons.append("Change of character: first close above the last swing high in a weak/bearish structure")
+    elif ctx.structure_break == "bearish_choch":
+        score -= 25
+        reasons.append("Change of character: closed below the last swing low — trend may be turning")
+    elif ctx.structure_break == "bearish_bos":
+        score -= 30
+        reasons.append("Break of structure to the downside")
+
+    return CategoryScore("market_structure", _clamp(score), 0, 0, reasons)
 
 
 def score_momentum(ctx: TickerContext) -> CategoryScore:
@@ -407,6 +427,7 @@ def score_ticker(
 ) -> ScoreResult:
     raw_categories = {
         "trend": score_trend(ctx),
+        "market_structure": score_market_structure(ctx),
         "momentum": score_momentum(ctx),
         "volume": score_volume(ctx),
         "price_action": score_price_action(ctx, matched_strategies),

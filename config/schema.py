@@ -120,7 +120,8 @@ class GatesConfig:
 
 
 DEFAULT_SCORING_WEIGHTS = {
-    "trend": 15,
+    "trend": 8,
+    "market_structure": 7,
     "momentum": 10,
     "volume": 10,
     "price_action": 15,

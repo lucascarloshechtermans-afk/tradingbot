@@ -42,7 +42,8 @@ gates:                     # hard pass/fail pre-filters, applied BEFORE scoring 
 
 scoring:
   weights:                 # moet optellen tot ~100
-    trend: 15
+    trend: 8
+    market_structure: 7    # HH/HL/LH/LL + BOS/CHOCH, apart van trend (zie README)
     momentum: 10
     volume: 10
     price_action: 15

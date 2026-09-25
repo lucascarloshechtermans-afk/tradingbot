@@ -39,9 +39,12 @@ def test_scoring_weights_must_sum_to_100():
 
 
 def test_scoring_weights_partial_override_merges_with_defaults():
-    cfg = AppConfig.from_dict({"scoring": {"weights": {"trend": 20}}})
-    assert cfg.scoring.weights["trend"] == 20
-    assert cfg.scoring.weights["momentum"] == 10
+    # trend(8) + market_structure(7) = 15 originally; shift 5 points from trend to
+    # momentum here so the total still lands in the accepted 95-105 range
+    cfg = AppConfig.from_dict({"scoring": {"weights": {"trend": 3, "momentum": 15}}})
+    assert cfg.scoring.weights["trend"] == 3
+    assert cfg.scoring.weights["momentum"] == 15
+    assert cfg.scoring.weights["market_structure"] == 7
 
 
 def test_default_config_is_valid():

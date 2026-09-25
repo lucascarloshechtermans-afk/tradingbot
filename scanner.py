@@ -69,6 +69,7 @@ class TradePlan:
     rsi: float = 0.0
     recent_closes: list[float] = field(default_factory=list)
     max_holding_days: int = 5
+    category_breakdown: list[dict] = field(default_factory=list)
 
 
 def compute_breadth_pct_above_50ma(universe_histories: dict[str, pd.DataFrame]) -> float | None:
@@ -152,6 +153,21 @@ def build_trade_plan(
     if earnings_warning and earnings_warning.message:
         risks.append(earnings_warning.message)
 
+    # Per-category breakdown (trend, market structure, momentum, volume, ...),
+    # each with its own score/weight/contribution/reasons — surfaced on the
+    # TradePlan so the dashboard can show it instead of collapsing everything
+    # into the single composite `score` above.
+    category_breakdown = [
+        {
+            "category": cat.category,
+            "score": round(cat.score, 1),
+            "weight": cat.weight,
+            "contribution": round(cat.contribution, 1),
+            "reasons": cat.reasons,
+        }
+        for cat in score_result.categories
+    ]
+
     return TradePlan(
         ticker=ticker,
         setup=best.strategy if best else "No confirmed setup",
@@ -173,6 +189,7 @@ def build_trade_plan(
         rsi=round(float(ctx.rsi14.iloc[-1]), 1) if pd.notna(ctx.rsi14.iloc[-1]) else 50.0,
         recent_closes=[round(float(c), 2) for c in ctx.close.tail(SPARKLINE_BARS).tolist()],
         max_holding_days=max_holding_days,
+        category_breakdown=category_breakdown,
     )
 
 

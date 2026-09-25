@@ -198,12 +198,18 @@ the (strategy-agnostic) minimum R:R gate.
 
 ## How scoring works
 
-Every ticker gets a 0-100 composite score from 10 weighted categories (weights
-configurable in `config.yaml`, must sum to ~100):
+Every ticker gets a 0-100 composite score from 11 weighted categories (weights
+configurable in `config.yaml`, must sum to ~100). Trend and Market Structure are
+deliberately SEPARATE categories, not merged — a stock can be in a clean
+moving-average uptrend while its swing-point structure is quietly breaking down
+(or the reverse, a fresh higher-low forming before the MAs catch up), and folding
+them into one number would hide exactly that kind of divergence from the scanner
+output:
 
 | Category | Default weight | What it measures |
 |---|---|---|
-| Trend | 15% | MA alignment, HH/HL structure, BOS/CHOCH, ADX(+slope)/DI, EMA 8/21/50 stack/cross, anchored VWAP |
+| Trend | 8% | MA alignment, ADX(+slope)/DI, EMA 8/21/50 stack/cross, anchored VWAP — direction & strength only |
+| Market Structure | 7% | HH/HL vs. LH/LL swing-point pattern, Break of Structure / Change of Character — the swing-point pattern itself, independent of the MA-based trend read above |
 | Price Action | 15% | Best-matched *tradeable* strategy setup, candlestick confluence, liquidity sweeps, S/R confluence, gap type |
 | Momentum | 10% | RSI/MACD-histogram/ROC (capped combined "core momentum" vote — see below), MACD cross/zero-line/acceleration, regular + hidden RSI divergence, extension-from-EMA21 |
 | Volume | 10% | Relative volume, OBV + Accumulation/Distribution (capped combined vote), OBV divergence |

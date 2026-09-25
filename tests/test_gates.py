@@ -185,6 +185,17 @@ def test_build_trade_plan_blocks_trend_following_setup_on_low_rs_rank():
     assert plan is None
 
 
+def test_build_trade_plan_populates_category_breakdown():
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    plan = build_trade_plan("BRK", ctx, ctx, config, None, None, rs_rank=100.0)
+    assert plan is not None
+    categories = {c["category"] for c in plan.category_breakdown}
+    assert {"trend", "market_structure", "momentum", "volume"} <= categories
+    for cat in plan.category_breakdown:
+        assert 0 <= cat["score"] <= 100
+
+
 def test_build_trade_plan_blocks_trend_following_setup_on_bearish_regime():
     ctx = context_from(breakout_history())
     config = AppConfig()

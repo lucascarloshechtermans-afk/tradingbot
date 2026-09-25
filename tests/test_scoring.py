@@ -3,6 +3,7 @@ from market_regime.regime import MarketRegime
 from strategies.base import StrategySignal
 from scoring.scorer import (
     score_market_regime,
+    score_market_structure,
     score_momentum,
     score_multi_timeframe,
     score_price_action,
@@ -117,11 +118,29 @@ def test_score_ticker_reasons_are_explainable():
     assert len(result.all_reasons) > 0
 
 
-def test_score_trend_rewards_bullish_structure_break():
+def test_score_market_structure_rewards_bullish_structure_break():
     ctx = context_from(breakout_history())
-    result = score_trend(ctx)
+    result = score_market_structure(ctx)
     if ctx.structure_break == "bullish_bos":
         assert any("Break of structure" in r for r in result.reasons)
+
+
+def test_score_market_structure_higher_for_hh_hl():
+    bullish_ctx = context_from(breakout_history())
+    flat_ctx = context_from(flat_history())
+    assert score_market_structure(bullish_ctx).score >= score_market_structure(flat_ctx).score
+
+
+def test_score_market_structure_is_separate_from_trend():
+    # score_trend no longer reacts to structure at all — moving structure fields
+    # shouldn't change score_trend's output, only score_market_structure's
+    from dataclasses import replace
+
+    ctx = context_from(breakout_history())
+    with_break = replace(ctx, structure_break="bullish_bos", structure="higher_highs_higher_lows")
+    without_break = replace(ctx, structure_break="none", structure="mixed")
+    assert score_trend(with_break).score == score_trend(without_break).score
+    assert score_market_structure(with_break).score > score_market_structure(without_break).score
 
 
 def test_score_momentum_penalizes_extension():
@@ -162,7 +181,7 @@ def test_score_risk_reward_rewards_room_to_resistance():
 def test_score_ticker_custom_weights_change_total():
     ctx = context_from(breakout_history())
     config_default = ScoringConfig.from_dict({})
-    config_trend_heavy = ScoringConfig.from_dict({"weights": {"trend": 100, "momentum": 0, "volume": 0, "price_action": 0, "volatility": 0, "relative_strength": 0, "market_regime": 0, "sector": 0, "risk_reward": 0, "multi_timeframe": 0}})
+    config_trend_heavy = ScoringConfig.from_dict({"weights": {"trend": 100, "market_structure": 0, "momentum": 0, "volume": 0, "price_action": 0, "volatility": 0, "relative_strength": 0, "market_regime": 0, "sector": 0, "risk_reward": 0, "multi_timeframe": 0}})
     default_result = score_ticker(ctx, config_default, matched_strategies=[])
     trend_only_result = score_ticker(ctx, config_trend_heavy, matched_strategies=[])
     trend_cat = next(c for c in trend_only_result.categories if c.category == "trend")

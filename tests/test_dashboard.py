@@ -25,6 +25,10 @@ def _sample_plan():
         risks=["Resistance nearby"],
         rsi=64.0,
         recent_closes=[180, 182, 185, 188, 190],
+        category_breakdown=[
+            {"category": "trend", "score": 70.0, "weight": 8, "contribution": 5.6, "reasons": ["Above 20/50/200 SMA"]},
+            {"category": "market_structure", "score": 85.0, "weight": 7, "contribution": 5.95, "reasons": ["Higher highs, higher lows"]},
+        ],
     )
 
 
@@ -33,6 +37,22 @@ def test_trade_plan_to_row_has_expected_keys():
     assert row["ticker"] == "AAPL"
     assert row["score"] == 82.5
     assert row["recent_closes"] == [180, 182, 185, 188, 190]
+
+
+def test_trade_plan_to_row_includes_category_breakdown():
+    row = trade_plan_to_row(_sample_plan())
+    assert len(row["category_breakdown"]) == 2
+    assert row["category_breakdown"][0]["category"] == "trend"
+    assert row["category_breakdown"][1]["category"] == "market_structure"
+
+
+def test_build_dashboard_html_embeds_category_breakdown():
+    row = trade_plan_to_row(_sample_plan())
+    html = build_dashboard_html(
+        scan_rows=[row], market_regime={}, sector_ranked=[], watchlist_entries=[], universe_size=1, scan_duration_s=0.1,
+    )
+    assert "renderCategoryBreakdown" in html
+    assert "market_structure" in html
 
 
 def test_build_dashboard_html_embeds_scan_data():

@@ -54,6 +54,14 @@ PAGE_TEMPLATE = """<!doctype html>
   .status-triggered {{ background: rgba(63,185,80,.15); color: var(--green); }}
   .status-invalidated {{ background: rgba(248,81,73,.15); color: var(--red); }}
   code {{ background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }}
+  .cat-breakdown {{ display: flex; flex-direction: column; gap: 4px; min-width: 260px; }}
+  .cat-row {{ font-size: 12px; }}
+  .cat-row-head {{ display: flex; justify-content: space-between; }}
+  .cat-bar-bg {{ background: var(--surface); border-radius: 4px; height: 6px; margin: 2px 0 4px; overflow: hidden; }}
+  .cat-bar-fill {{ height: 100%; background: var(--blue); }}
+  .cat-bar-fill.high {{ background: var(--green); }}
+  .cat-bar-fill.low {{ background: var(--red); }}
+  .cat-reasons {{ margin: 0 0 6px; padding-left: 16px; color: var(--ink-soft); font-size: 11px; }}
 </style>
 </head>
 <body>
@@ -131,6 +139,27 @@ function scoreClass(score) {{
   return 'low';
 }}
 
+const CATEGORY_LABELS = {{
+  trend: 'Trend', market_structure: 'Market Structure', momentum: 'Momentum',
+  volume: 'Volume', price_action: 'Price Action', volatility: 'Volatility',
+  relative_strength: 'Relative Strength', market_regime: 'Market Regime',
+  sector: 'Sector', risk_reward: 'Risk/Reward', multi_timeframe: 'Multi-Timeframe',
+}};
+
+function renderCategoryBreakdown(categories) {{
+  if (!categories || categories.length === 0) return '<div style="color:var(--ink-soft)">no breakdown</div>';
+  return categories.map(cat => {{
+    const barClass = cat.score >= 70 ? 'high' : (cat.score < 40 ? 'low' : '');
+    const label = CATEGORY_LABELS[cat.category] || cat.category;
+    const reasonsHtml = (cat.reasons || []).map(r => `<li>${{r}}</li>`).join('');
+    return `<div class="cat-row">
+      <div class="cat-row-head"><strong>${{label}}</strong><span>${{cat.score.toFixed(0)}}/100 &middot; weight ${{cat.weight}}%</span></div>
+      <div class="cat-bar-bg"><div class="cat-bar-fill ${{barClass}}" style="width:${{Math.max(0, Math.min(100, cat.score))}}%"></div></div>
+      ${{reasonsHtml ? `<ul class="cat-reasons">${{reasonsHtml}}</ul>` : ''}}
+    </div>`;
+  }}).join('');
+}}
+
 function renderSparkline(closes) {{
   if (!closes || closes.length < 2) return '';
   const w = 160, h = 32;
@@ -169,6 +198,7 @@ SCAN_DATA.forEach((row, idx) => {{
         <strong>Sector</strong><div>${{row.sector || 'n/a'}}</div>
         <strong>Max holding period</strong><div>${{row.max_holding_days}} trading days</div>
       </div>
+      <div class="cat-breakdown"><strong>Score breakdown</strong>${{renderCategoryBreakdown(row.category_breakdown)}}</div>
     </div>
   </td>`;
 
@@ -264,4 +294,5 @@ def trade_plan_to_row(plan) -> dict[str, Any]:
         "risks": plan.risks,
         "recent_closes": plan.recent_closes,
         "max_holding_days": plan.max_holding_days,
+        "category_breakdown": getattr(plan, "category_breakdown", []),
     }
