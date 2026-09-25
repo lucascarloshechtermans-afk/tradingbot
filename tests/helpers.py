@@ -52,12 +52,9 @@ def mean_reversion_history(rise_days: int = 220, step: float = 0.4, start: float
 
 
 def support_bounce_history() -> pd.DataFrame:
-    # 3 touches of the ~130 support level, each followed by enough bars to
-    # confirm as a swing low (order=3 needs 3 bars on both sides that don't
-    # undercut it) — SupportBounceStrategy requires min_touches=3.
     rise_days, step, start = 220, 0.4, 50.0
     rising = start + step * np.arange(rise_days)
-    tail_closes = [130.0, 132, 134, 136, 135, 133, 130.2, 132, 133.5, 132.5, 130.1, 131, 132, 133.5, 130.3, 132.8]
+    tail_closes = [130.0, 132, 134, 136, 135, 133, 130.2, 132, 133.5, 132.5, 130.5]
     all_close = np.concatenate([rising, tail_closes])
     idx = pd.date_range("2023-01-01", periods=len(all_close), freq="D")
     close = pd.Series(all_close, index=idx)
@@ -67,7 +64,6 @@ def support_bounce_history() -> pd.DataFrame:
     touch_positions = {rise_days: 130.0, rise_days + 6: 130.2, rise_days + 10: 130.1}
     for pos, val in touch_positions.items():
         low.iloc[pos] = val
-    low.iloc[-1] = 130.3  # today's bar: low touches the confirmed 130.1 support (within tolerance), close recovers above it
     volume = pd.Series(1_000_000.0, index=idx)
     return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": volume})
 

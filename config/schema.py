@@ -91,7 +91,7 @@ class RiskConfig:
     # merely still-positive at the 5-day forced close) — 1.5x implied a target
     # ~3.35 ATRs away against a 2-ATR stop, a move that a 5-day swing rarely
     # completes. See README's "Target realism" section for the validated effect.
-    target_volatility_multiplier: float = 1.2
+    target_volatility_multiplier: float = 1.5
 
     @classmethod
     def from_dict(cls, raw: dict) -> "RiskConfig":
@@ -101,7 +101,7 @@ class RiskConfig:
             max_portfolio_risk_pct=float(raw.get("max_portfolio_risk_pct", 6.0)),
             max_position_pct=float(raw.get("max_position_pct", 20.0)),
             max_holding_days=int(raw.get("max_holding_days", 5)),
-            target_volatility_multiplier=float(raw.get("target_volatility_multiplier", 1.2)),
+            target_volatility_multiplier=float(raw.get("target_volatility_multiplier", 1.5)),
         )
         if cfg.account_size <= 0:
             raise ConfigError("risk.account_size must be positive")
