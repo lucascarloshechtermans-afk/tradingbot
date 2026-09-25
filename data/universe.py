@@ -120,6 +120,9 @@ def apply_universe_filters(
         if info.market_cap < config.min_market_cap:
             result.excluded[ticker] = f"market cap {info.market_cap:,.0f} < min {config.min_market_cap:,.0f}"
             continue
+        if config.max_market_cap is not None and info.market_cap > config.max_market_cap:
+            result.excluded[ticker] = f"market cap {info.market_cap:,.0f} > max {config.max_market_cap:,.0f} (mega-cap excluded)"
+            continue
 
         if config.sectors:
             if info.sector is None:

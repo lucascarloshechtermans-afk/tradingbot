@@ -40,6 +40,12 @@ class UniverseConfig:
     # (fewer shares per trade, different per-tick feel), not a claim that
     # cheaper-per-share names are objectively more volatile.
     max_price: float | None = None
+    # Optional ceiling on market cap (None = no ceiling). Complements
+    # min_market_cap (a floor): a stock can be well under the $50-300 price
+    # band and still be a mega-cap in market-cap terms, so this is the direct
+    # lever for "no mega-caps" rather than relying on price/ATR as a proxy.
+    # Common mega-cap convention is >$200B.
+    max_market_cap: float | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "UniverseConfig":
@@ -71,6 +77,11 @@ class UniverseConfig:
             max_price=(
                 float(merged.get("max_price", defaults.get("max_price")))
                 if merged.get("max_price", defaults.get("max_price")) is not None
+                else None
+            ),
+            max_market_cap=(
+                float(merged.get("max_market_cap", defaults.get("max_market_cap")))
+                if merged.get("max_market_cap", defaults.get("max_market_cap")) is not None
                 else None
             ),
         )

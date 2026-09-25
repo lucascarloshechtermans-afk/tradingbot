@@ -161,6 +161,32 @@ def test_max_price_none_disables_the_ceiling():
     assert result.included == ["EXPENSIVE"]
 
 
+def test_filters_reject_market_cap_above_max_market_cap():
+    cfg = UniverseConfig.from_dict({"preset": "BALANCED", "max_market_cap": 200_000_000_000})
+    candidates = {
+        "MEGACAP": (
+            TickerInfo(ticker="MEGACAP", market_cap=3_000_000_000_000),
+            _history(price=200.0, volume=1_000_000),
+        )
+    }
+    result = apply_universe_filters(candidates, cfg)
+    assert "MEGACAP" in result.excluded
+    assert "mega-cap" in result.excluded["MEGACAP"]
+
+
+def test_max_market_cap_none_disables_the_ceiling():
+    cfg = UniverseConfig.from_dict({"preset": "BALANCED"})
+    assert cfg.max_market_cap is None
+    candidates = {
+        "MEGACAP": (
+            TickerInfo(ticker="MEGACAP", market_cap=3_000_000_000_000),
+            _history(price=200.0, volume=1_000_000),
+        )
+    }
+    result = apply_universe_filters(candidates, cfg)
+    assert result.included == ["MEGACAP"]
+
+
 def test_aggressive_preset_allows_lower_price_and_cap():
     cfg = UniverseConfig.from_dict({"preset": "AGGRESSIVE"})
     candidates = {
