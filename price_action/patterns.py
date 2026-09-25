@@ -111,6 +111,51 @@ def is_gap_filled(open_: pd.Series, low: pd.Series, high: pd.Series, close: pd.S
     return bool(high.iloc[-1] >= prev_close)
 
 
+def classify_gap(
+    open_: pd.Series,
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    sma50: pd.Series,
+    atr_value: float,
+    threshold_pct: float = 1.0,
+    consolidation_window: int = 10,
+    extension_atr_threshold: float = 4.0,
+) -> str | None:
+    """Classify a detected gap using the state of the prior bars — an honest
+    heuristic, not a certainty:
+
+    - '{gap}_breakaway': the PRIOR bars (excluding today) were consolidating in a
+      tight range — the classic gap-out-of-a-base pattern.
+    - '{gap}_exhaustion': price was already far extended from its 50-day MA
+      (more than `extension_atr_threshold` ATRs) before this gap — a possible
+      blow-off/exhaustion gap rather than a fresh move.
+    - '{gap}_continuation': neither of the above — a gap in the direction of an
+      already-underway, not-yet-extended trend.
+
+    Returns None if there's no gap at all.
+    """
+    gap = detect_gap(open_, close, threshold_pct)
+    if gap is None or len(high) < consolidation_window + 1:
+        return gap
+
+    prior_high = high.iloc[-(consolidation_window + 1):-1]
+    prior_low = low.iloc[-(consolidation_window + 1):-1]
+    was_consolidating = is_consolidation(prior_high, prior_low, window=consolidation_window)
+
+    extended = False
+    prev_close = close.iloc[-2]
+    prev_sma50 = sma50.iloc[-2] if len(sma50) >= 2 else float("nan")
+    if pd.notna(prev_sma50) and pd.notna(atr_value) and atr_value > 0:
+        extended = abs(prev_close - prev_sma50) / atr_value > extension_atr_threshold
+
+    if was_consolidating:
+        return f"{gap}_breakaway"
+    if extended:
+        return f"{gap}_exhaustion"
+    return f"{gap}_continuation"
+
+
 def is_volatility_contraction(close: pd.Series, window: int = 20, lookback: int = 120, percentile: float = 0.10) -> bool:
     squeeze = is_squeeze(close, window=window, lookback=lookback, percentile=percentile)
     if squeeze.dropna().empty:

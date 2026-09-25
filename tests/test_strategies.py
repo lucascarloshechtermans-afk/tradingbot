@@ -10,6 +10,7 @@ from tests.helpers import (
     volatility_contraction_history,
     zigzag_uptrend_history,
 )
+from strategies.base import StrategySignal
 from strategies.breakout import BreakoutStrategy
 from strategies.mean_reversion import MeanReversionStrategy
 from strategies.momentum_continuation import MomentumContinuationStrategy
@@ -127,3 +128,31 @@ def test_all_strategies_are_registered():
     assert len(ALL_STRATEGIES) == 7
     names = {s.name for s in ALL_STRATEGIES}
     assert len(names) == 7  # all distinct
+
+
+def test_volatility_contraction_is_tradeable_after_vcp_rework():
+    # re-enabled (tradeable=True, the base-class default) after adding VCP-style
+    # preconditions (prior momentum + real volume dry-up) meant to fix the
+    # negative expectancy the bare-squeeze version showed in backtesting
+    assert VolatilityContractionStrategy().tradeable is True
+
+
+def test_best_tradeable_signal_ignores_untradeable_strategies():
+    from strategies import best_tradeable_signal
+
+    class FakeUntradeable:
+        tradeable = False
+
+    signals = [
+        StrategySignal(strategy="Fake Untradeable", matched=True, confidence=99.0),
+        StrategySignal(strategy="Bullish Breakout", matched=True, confidence=10.0),
+    ]
+    best = best_tradeable_signal(signals)
+    assert best is not None
+    assert best.strategy == "Bullish Breakout"
+
+
+def test_best_tradeable_signal_returns_none_when_nothing_matched():
+    from strategies import best_tradeable_signal
+
+    assert best_tradeable_signal([]) is None

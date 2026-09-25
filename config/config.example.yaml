@@ -20,7 +20,11 @@ data:
 
 risk:
   account_size: 10000
-  risk_per_trade_pct: 1.0
+  risk_per_trade_pct: 0.5   # lowered from 1.0 after a 5-year, 102-ticker backtest
+                             # found streaks of up to 20 consecutive losses — at 1%
+                             # that's a ~20% drawdown from one streak alone; at 0.5%
+                             # the same streak costs ~10%, easier to survive without
+                             # abandoning the system
   max_portfolio_risk_pct: 6.0
   max_position_pct: 20.0
   max_holding_days: 5       # scanner targets are capped to be realistic within this

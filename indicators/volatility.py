@@ -49,3 +49,25 @@ def is_squeeze(
     width = bollinger_band_width(close, window, num_std)
     threshold = width.rolling(window=lookback, min_periods=window).quantile(percentile)
     return width <= threshold
+
+
+def is_expanding(close: pd.Series, window: int = 20, num_std: float = 2.0, lookback: int = 3) -> pd.Series:
+    """True where Bollinger Band width is now wider than it was `lookback` bars
+    ago — a squeeze (is_squeeze) followed by is_expanding is the "coiled, now
+    releasing" pattern; a bare squeeze alone says nothing about direction or
+    timing, which is why VolatilityContractionStrategy requires both.
+    """
+    width = bollinger_band_width(close, window, num_std)
+    return width > width.shift(lookback)
+
+
+def distance_in_atr(price: float, level: float, atr_value: float) -> float:
+    """Signed distance between `price` and `level`, expressed in ATR units — a
+    volatility-normalized way to ask "how far is X from Y, relative to how much
+    this stock typically moves in a day." Used both for extension-from-moving-
+    average checks and for distance-to-resistance checks. Positive means `price`
+    is above `level`.
+    """
+    if atr_value is None or pd.isna(atr_value) or atr_value <= 0:
+        return float("nan")
+    return (price - level) / atr_value

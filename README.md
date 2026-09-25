@@ -123,6 +123,31 @@ days), so you see how it performs across different market periods instead of one
 aggregate number. This is validation, not optimization — it does not re-fit any
 parameters per window. See "Scope & honest limitations" below.
 
+## Backtesting the whole screener across a universe
+
+```bash
+python backtest_screener.py --period 5y                          # full DEFAULT_UNIVERSE (~100 tickers)
+python backtest_screener.py --period 5y --tickers AAPL,MSFT,NVDA
+python backtest_screener.py --dry-run
+```
+
+Runs all 7 strategies together (whichever matches with the highest confidence
+wins the bar — the same rule the live scanner uses, via
+`strategies.best_tradeable_signal`) across every ticker in the universe, and
+reports an aggregate win rate plus a per-strategy and per-ticker breakdown. Each
+bar's indicators are computed once and shared across signal/stop/target
+evaluation (`SharedContextCache`), which is what makes a 100+-ticker, 5-year
+backtest finish in tens of minutes instead of hours.
+
+This is genuinely how the strategies/scoring here were tuned: a 5-year,
+102-ticker run surfaced that the original bare-squeeze Volatility Contraction
+strategy was the only net-losing strategy of the 7, that Mean Reversion had the
+best expectancy but fired far too rarely, and that max_holding_days=5 combined
+with 1% risk/trade could produce a ~20% drawdown from one losing streak alone —
+all three are now fixed (see `strategies/volatility_contraction.py`'s docstring,
+`strategies/mean_reversion.py`'s comment, and `risk.risk_per_trade_pct` in
+`config.example.yaml`).
+
 ## How scoring works
 
 Every ticker gets a 0-100 composite score from 10 weighted categories (weights
@@ -130,14 +155,14 @@ configurable in `config.yaml`, must sum to ~100):
 
 | Category | Default weight | What it measures |
 |---|---|---|
-| Trend | 15% | MA alignment, swing structure (HH/HL vs LH/LL), ADX/DI |
-| Price Action | 15% | Best-matched strategy setup + candlestick confluence |
-| Momentum | 10% | RSI, MACD histogram, ROC, RSI divergence |
-| Volume | 10% | Relative volume, OBV, Accumulation/Distribution |
-| Volatility | 10% | ATR% in a healthy range, squeeze detection |
+| Trend | 15% | MA alignment, HH/HL structure, BOS/CHOCH, ADX(+slope)/DI, EMA 8/21/50 stack/cross, anchored VWAP |
+| Price Action | 15% | Best-matched *tradeable* strategy setup, candlestick confluence, liquidity sweeps, S/R confluence, gap type |
+| Momentum | 10% | RSI, MACD (histogram/cross/zero-line/acceleration), ROC, regular + hidden RSI divergence, extension-from-EMA21 |
+| Volume | 10% | Relative volume, OBV (+ divergence), Accumulation/Distribution |
+| Volatility | 10% | ATR% in a healthy range, squeeze detection, squeeze→expansion |
 | Relative Strength | 10% | 1M/3M performance vs SPY |
 | Market Regime | 10% | SPY/QQQ/IWM/VIX-based regime (see below) |
-| Risk/Reward | 10% | Computed R:R ratio for the trade plan |
+| Risk/Reward | 10% | Computed R:R ratio, distance to resistance in ATRs |
 | Sector | 5% | Sector ETF's relative-strength rank (1-11) |
 | Multi-Timeframe | 5% | Weekly/Daily trend confluence |
 
@@ -146,6 +171,47 @@ Thresholds (configurable): **90-100 Exceptional · 80-89 Strong · 70-79 Interes
 
 Every category's contribution and the specific reasons behind it are visible in
 the dashboard's expanded row for each ticker — nothing is a black box.
+
+### Deep technicals (`TickerContext`, `strategies/context.py`)
+
+Beyond the headline indicators above, every scan also computes and exposes:
+
+- **EMA 8/21/50**: slope of each (`ma_slope`), spread between 8-21 and 21-50 as %
+  (`ema_spread_pct`), and the 8/21 cross event (`crossover`).
+- **Market structure**: HH/HL/LH/LL (`indicators/trend.py:market_structure`), plus
+  **Break of Structure / Change of Character** (`price_action/structure.py`) — a
+  close beyond the last swing point, classified by whether it agrees with or
+  reverses the prevailing structure. Named after the popular retail "ICT" framing,
+  but implemented as plain mechanical price-action rules — no claim is made about
+  market participants' intent.
+- **Liquidity sweeps**: a wick that pierces a known support/resistance level and
+  closes back inside it (`price_action/structure.py:detect_liquidity_sweep`).
+- **Anchored VWAP** (`indicators/vwap.py`): a **daily-bar approximation** — true
+  intraday VWAP needs tick/minute data this free source doesn't provide. Anchored
+  by default at the most recent confirmed swing low.
+- **Hidden divergence** (RSI and OBV): the trend-continuation counterpart to
+  regular reversal divergence — see `indicators/trend.py:detect_divergence`'s
+  docstring for the exact price/oscillator pairing each variant requires.
+- **OBV divergence**, **volume dry-up** (`is_volume_drying_up` — recent average
+  volume well below its longer-term baseline, the VCP "quiet before the breakout"
+  tell).
+- **ADX slope**, **Bollinger squeeze→expansion** (`is_expanding`), **MACD**
+  zero-line state, cross event, and histogram acceleration.
+- **Extension check**: how many ATRs price sits above its own EMA21
+  (`distance_in_atr`) — a large value means the move may already be too stretched
+  to chase, and penalizes the momentum score accordingly.
+- **Distance to resistance in ATRs**: how much room is left before the nearest
+  resistance, feeding into the risk/reward score.
+- **Confluence** (`price_action/levels.py:confluence_score`): counts how many
+  independent references — a support/resistance level, anchored VWAP, a Fibonacci
+  retracement, a round number — cluster near the current price.
+- **Fibonacci retracements** (`price_action/fibonacci.py`) are deliberately a
+  **minor** confluence input, not a scored signal of their own — a research pass
+  on well-known swing-trading systems found weak/contested evidence that Fibonacci
+  levels carry standalone predictive value.
+- **Gap classification** (`price_action/patterns.py:classify_gap`): breakaway
+  (gapped out of a consolidation), exhaustion (gapped while already far extended),
+  or continuation (neither) — an honest heuristic, not a certainty.
 
 ## The 7 strategies
 
@@ -162,9 +228,24 @@ logic — never a single giant if-statement:
    positive ROC across 5/10/20-day windows.
 6. **Mean Reversion** — a sharp, short-term oversold dip *within* a long-term
    uptrend (filtered by SMA200 to avoid catching a falling knife in an actual
-   downtrend).
-7. **Volatility Contraction** — a Bollinger Band squeeze within an uptrend and low
-   ADX: a "setup forming" watchlist signal, not a directional entry.
+   downtrend). Thresholds (RSI<35, band×1.03) were loosened from the original
+   (RSI<30, band×1.01) after backtesting showed the tighter version had the best
+   expectancy of all 7 strategies but fired far too rarely to be useful.
+7. **Volatility Contraction** — reworked into a VCP-style ("Volatility
+   Contraction Pattern") setup: a genuine prior momentum move (>15% over ~90
+   days), then a tightening squeeze with real volume dry-up, not just a bare
+   Bollinger squeeze. The original bare-squeeze version was the only one of the 7
+   strategies with negative expectancy in backtesting; literature on squeeze
+   breakouts generally shows only ~55-60% standalone win rate, which is why a
+   real precondition (was there something worth consolidating from?) was added
+   rather than just disabling the strategy.
+
+Every strategy has a `tradeable` flag (`strategies/base.py`). A non-tradeable
+strategy can still fire, appear in reasons, and contribute to the price-action
+score, but can never be picked as the primary setup that drives entry/stop/target
+(`strategies.best_tradeable_signal` is the single shared rule the scanner and
+backtester both use) — the mechanism exists for exactly this kind of
+watchlist-only signal if a future backtest calls for it again.
 
 Candlestick patterns (`price_action/candlesticks.py`) are detected but never used
 as a standalone signal — they only contribute as supporting context inside a
@@ -190,8 +271,9 @@ unreasonably far from entry. Targets are computed at 1:1/1.5:1/2:1/3:1 R:R, plus
 the nearest real resistance level when one exists.
 
 `risk/position_sizing.py` sizes each position so a stop-out loses exactly
-`risk_per_trade_pct` of the account (default 1%), capped by `max_position_pct`
-(default 20%) — shares always round down, never up.
+`risk_per_trade_pct` of the account (default 0.5% — see "Backtesting the whole
+screener" above for why), capped by `max_position_pct` (default 20%) — shares
+always round down, never up.
 
 ## Look-ahead bias: how it's actually prevented
 
@@ -221,8 +303,9 @@ regression tests that directly exercise these guarantees (e.g.
 ```
 config/          Config schema, presets, and the example YAML
 data/            DataProvider interface, yfinance implementation, disk cache, universe filters
-indicators/      Trend, momentum, volatility, volume, trend-strength (ADX) indicators
-price_action/    Support/resistance levels, price-action setups, candlestick patterns
+indicators/      Trend, momentum, volatility, volume, trend-strength (ADX), VWAP
+price_action/    S/R levels + confluence, price-action setups, candlestick patterns,
+                 BOS/CHOCH + liquidity sweeps (structure.py), Fibonacci (fibonacci.py)
 market_regime/   SPY/QQQ/IWM/VIX-based regime classification
 sector/          Sector ETF rotation ranking
 relative_strength/  Stock-vs-benchmark performance
@@ -234,10 +317,11 @@ backtesting/     Event-driven backtester, metrics, walk-forward validation
 watchlist/       JSON-backed watchlist + status state machine
 alerts/          Alert rules + console/JSON-log dispatcher
 ui/              Static HTML dashboard generator
-tests/           ~250 tests, all using synthetic/deterministic data (no network)
-scanner.py       Main CLI entrypoint
-backtest.py      Backtest CLI entrypoint
-watchlist_cli.py Watchlist management CLI
+tests/           300+ tests, all using synthetic/deterministic data (no network)
+scanner.py           Main CLI entrypoint
+backtest.py          Single-ticker, single-strategy backtest CLI
+backtest_screener.py Whole-universe, all-strategies-combined backtest CLI
+watchlist_cli.py     Watchlist management CLI
 ```
 
 ## Running the tests
@@ -246,7 +330,7 @@ watchlist_cli.py Watchlist management CLI
 pytest -v
 ```
 
-All ~250 tests run against synthetic, deterministic data fixtures
+300+ tests run against synthetic, deterministic data fixtures
 (`tests/helpers.py`) — none require network access, which is why they can (and do)
 pass in this sandboxed environment even though live data fetching can't be tested
 here. Once you have network access, `python scanner.py --dry-run` becomes
@@ -277,3 +361,16 @@ Documented up front so nothing here pretends to be more complete than it is:
 - **The dashboard is a single static HTML file** (Dashboard/Scanner/Watchlist
   tabs), not a multi-page app with its own backend server — a clean next step once
   there's a reason to add one (e.g. real users, live data feeds).
+- **Anchored VWAP is a daily-bar approximation**, not true intraday VWAP (see
+  "Deep technicals" above) — this data source has no tick/minute history to
+  compute the real thing from.
+- **Macro events / news catalysts are not implemented.** Earnings, dividends and
+  splits are (via yfinance's calendar data), but general macro events (Fed
+  decisions, CPI prints, etc.) and other news catalysts have no free, reliable
+  data source available here — rather than fabricate or guess at these, they're
+  simply left out.
+- **Supply/demand "zones"** (as opposed to the price-point levels this scanner
+  builds from swing highs/lows) were deliberately not implemented — turning a
+  zone into a well-defined, testable rule is considerably more subjective than a
+  clustered price level, and wasn't judged worth the added complexity relative to
+  the levels/confluence system already in place.

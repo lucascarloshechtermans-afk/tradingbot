@@ -32,6 +32,7 @@ from data.universe import DEFAULT_UNIVERSE
 from data.yfinance_provider import YFinanceProvider
 from risk.stops_targets import cap_target_to_horizon, compute_rr_targets, compute_stop, nearest_structure_target
 from scanner import evaluate_strategies
+from strategies import best_tradeable_signal
 from strategies.context import TickerContext, build_context
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -63,15 +64,14 @@ def make_screener_functions(cache: SharedContextCache, config: AppConfig, attemp
             return False
         ctx = cache.get(history_so_far)
         signals = evaluate_strategies(ctx)
-        return any(s.matched for s in signals)
+        return best_tradeable_signal(signals) is not None
 
     def stop_fn(history_before_entry: pd.DataFrame, entry: float) -> float:
         if len(history_before_entry) < MIN_WARMUP_BARS:
             return entry * 0.95
         ctx = cache.get(history_before_entry)
         signals = evaluate_strategies(ctx)
-        matched = [s for s in signals if s.matched]
-        best = max(matched, key=lambda s: s.confidence) if matched else None
+        best = best_tradeable_signal(signals)
         attempted_strategy_by_bar[len(history_before_entry)] = best.strategy if best else "Unknown"
 
         atr = ctx.atr14.iloc[-1]
@@ -152,7 +152,6 @@ def run_universe_backtest(provider: DataProvider, config: AppConfig, tickers: li
 
 def print_report(all_trades, all_trade_strategies, per_ticker_summaries, errors, config: AppConfig, period: str):
     closed = [t for t in all_trades if t.pnl is not None]
-    equity_proxy = pd.Series(range(len(closed)))  # metrics needs a curve; approximate with trade sequence
     # build a pseudo equity curve from cumulative pnl for drawdown/sharpe purposes
     cum_pnl = pd.Series([t.pnl for t in closed]).cumsum() + config.backtesting.initial_capital
     if cum_pnl.empty:

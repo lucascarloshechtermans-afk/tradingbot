@@ -50,7 +50,12 @@ def test_score_price_action_uses_best_matched_strategy():
 def test_score_price_action_no_setup_gives_low_baseline():
     ctx = context_from(flat_history())
     result = score_price_action(ctx, [])
-    assert result.score == 20.0
+    # a perfectly flat $50 fixture coincidentally sits at a confluence zone
+    # (VWAP, a Fibonacci level, and the round-$50 number all land on the same
+    # price when nothing moves) — the baseline itself is 20, confluence adds on
+    # top, so this checks the no-setup floor rather than an exact total.
+    assert "No specific tradeable price-action setup confirmed" in result.reasons
+    assert result.score < 40.0
 
 
 def test_score_volatility_penalizes_extremes():
@@ -110,6 +115,48 @@ def test_score_ticker_reasons_are_explainable():
     signals = [StrategySignal(strategy="Bullish Breakout", matched=True, confidence=75.0, reasons=["Breakout confirmed"])]
     result = score_ticker(ctx, config, matched_strategies=signals)
     assert len(result.all_reasons) > 0
+
+
+def test_score_trend_rewards_bullish_structure_break():
+    ctx = context_from(breakout_history())
+    result = score_trend(ctx)
+    if ctx.structure_break == "bullish_bos":
+        assert any("Break of structure" in r for r in result.reasons)
+
+
+def test_score_momentum_penalizes_extension():
+    from dataclasses import replace
+
+    ctx = context_from(breakout_history())
+    stretched = replace(ctx, extension_atr=6.0)
+    calm = replace(ctx, extension_atr=1.0)
+    stretched_score = score_momentum(stretched).score
+    calm_score = score_momentum(calm).score
+    assert stretched_score < calm_score
+
+
+def test_score_volume_rewards_bullish_obv_divergence():
+    from dataclasses import replace
+
+    ctx = context_from(breakout_history())
+    with_divergence = replace(ctx, obv_bullish_divergence=True)
+    without = replace(ctx, obv_bullish_divergence=False)
+    assert score_volume(with_divergence).score > score_volume(without).score
+
+
+def test_score_price_action_rewards_liquidity_sweep():
+    from dataclasses import replace
+
+    ctx = context_from(breakout_history())
+    with_sweep = replace(ctx, liquidity_sweep="bullish_sweep")
+    without = replace(ctx, liquidity_sweep=None)
+    assert score_price_action(with_sweep, []).score > score_price_action(without, []).score
+
+
+def test_score_risk_reward_rewards_room_to_resistance():
+    close_resistance = score_risk_reward(2.0, distance_to_resistance_atr=0.5)
+    far_resistance = score_risk_reward(2.0, distance_to_resistance_atr=5.0)
+    assert far_resistance.score > close_resistance.score
 
 
 def test_score_ticker_custom_weights_change_total():

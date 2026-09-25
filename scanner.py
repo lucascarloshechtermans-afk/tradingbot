@@ -41,7 +41,7 @@ from risk.stops_targets import (
 from scoring.multi_timeframe import multi_timeframe_confluence, resample_weekly
 from scoring.scorer import ScoreResult, score_ticker
 from sector.rotation import SECTOR_ETFS, SectorStrength, rank_sectors, sector_strength_for
-from strategies import ALL_STRATEGIES
+from strategies import ALL_STRATEGIES, best_tradeable_signal
 from strategies.base import StrategySignal
 from strategies.context import TickerContext, build_context
 
@@ -109,8 +109,7 @@ def build_trade_plan(
 
     entry = ctx.last_close
     matched_strategies = evaluate_strategies(ctx)
-    matched = [s for s in matched_strategies if s.matched]
-    best = max(matched, key=lambda s: s.confidence) if matched else None
+    best = best_tradeable_signal(matched_strategies)
 
     max_holding_days = config.risk.max_holding_days
 

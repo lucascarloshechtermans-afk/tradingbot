@@ -69,7 +69,7 @@ class DataConfig:
 @dataclass
 class RiskConfig:
     account_size: float = 10_000.0
-    risk_per_trade_pct: float = 1.0
+    risk_per_trade_pct: float = 0.5
     max_portfolio_risk_pct: float = 6.0
     max_position_pct: float = 20.0
     max_holding_days: int = 5
@@ -78,7 +78,7 @@ class RiskConfig:
     def from_dict(cls, raw: dict) -> "RiskConfig":
         cfg = cls(
             account_size=float(raw.get("account_size", 10_000.0)),
-            risk_per_trade_pct=float(raw.get("risk_per_trade_pct", 1.0)),
+            risk_per_trade_pct=float(raw.get("risk_per_trade_pct", 0.5)),
             max_portfolio_risk_pct=float(raw.get("max_portfolio_risk_pct", 6.0)),
             max_position_pct=float(raw.get("max_position_pct", 20.0)),
             max_holding_days=int(raw.get("max_holding_days", 5)),

@@ -36,3 +36,11 @@ def adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14):
     adx_series = _wilder_smooth(dx, window)
 
     return adx_series, plus_di, minus_di
+
+
+def adx_slope(adx_series: pd.Series, lookback: int = 5) -> pd.Series:
+    """Change in ADX over `lookback` bars — a rising slope means trend strength is
+    still BUILDING (a young/strengthening trend), a falling slope means an
+    established trend is losing steam, independent of the current ADX level.
+    """
+    return adx_series - adx_series.shift(lookback)

@@ -18,6 +18,15 @@ class StrategySignal:
 
 class Strategy(ABC):
     name: str
+    # False marks a strategy as informational/context-only: it can still appear in
+    # reasons and contribute to the price-action score, but it can never be picked
+    # as the PRIMARY setup that drives entry/stop/target, and a match on a
+    # non-tradeable strategy alone never opens a backtest position. Used for
+    # VolatilityContractionStrategy, whose own docstring already frames it as a
+    # "setup forming" watchlist signal rather than a directional entry — a 5-year,
+    # 102-ticker backtest then confirmed it as the only net-losing strategy
+    # (-0.22%/trade expectancy) when it WAS allowed to trigger entries.
+    tradeable: bool = True
 
     @abstractmethod
     def evaluate(self, ctx: TickerContext) -> StrategySignal:

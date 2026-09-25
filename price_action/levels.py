@@ -74,3 +74,44 @@ def nearest_level(levels: list[Level], price: float, kind: str | None = None) ->
     if not candidates:
         return None
     return min(candidates, key=lambda lv: abs(lv.price - price))
+
+
+def confluence_score(
+    price: float,
+    levels: list[Level],
+    vwap_value: float | None = None,
+    fib_levels: dict[float, float] | None = None,
+    tolerance_pct: float = 1.0,
+) -> tuple[int, list[str]]:
+    """Count how many INDEPENDENT reference points cluster near `price` —
+    multiple unrelated methods agreeing on the same zone is a stronger signal
+    than any one of them alone. Returns (count, human-readable sources).
+    """
+    count = 0
+    sources: list[str] = []
+
+    level = nearest_level(levels, price)
+    if level is not None and level.price > 0 and abs(level.price - price) / level.price * 100 <= tolerance_pct:
+        count += 1
+        sources.append(f"{level.kind} level ({level.touches} touches)")
+
+    if vwap_value is not None and vwap_value == vwap_value and vwap_value > 0:  # not NaN
+        if abs(vwap_value - price) / vwap_value * 100 <= tolerance_pct:
+            count += 1
+            sources.append("anchored VWAP")
+
+    if fib_levels:
+        from price_action.fibonacci import nearest_fib_ratio
+
+        ratio = nearest_fib_ratio(price, fib_levels, tolerance_pct)
+        if ratio is not None:
+            count += 1
+            sources.append(f"{ratio * 100:.1f}% Fibonacci retracement")
+
+    if price > 0:
+        round_number = round(price / 5) * 5
+        if round_number > 0 and abs(round_number - price) / price * 100 <= tolerance_pct * 0.5:
+            count += 1
+            sources.append(f"round number (${round_number:g})")
+
+    return count, sources

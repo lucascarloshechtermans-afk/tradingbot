@@ -40,63 +40,134 @@ def score_trend(ctx: TickerContext) -> CategoryScore:
     score = 20.0  # neutral baseline
 
     if ctx.trend.iloc[-1] == "bullish":
-        score = 60.0
+        score = 55.0
         reasons.append("Above 20/50/200 SMA (bullish trend alignment)")
     elif ctx.trend.iloc[-1] == "bearish":
         score = 10.0
         reasons.append("Below 20/50/200 SMA (bearish trend alignment)")
 
     if ctx.structure == "higher_highs_higher_lows":
-        score += 25
+        score += 15
         reasons.append("Market structure: higher highs, higher lows")
     elif ctx.structure == "lower_highs_lower_lows":
         score -= 15
         reasons.append("Market structure: lower highs, lower lows")
 
+    if ctx.structure_break == "bullish_bos":
+        score += 10
+        reasons.append("Break of structure: close above the last swing high, confirming the uptrend")
+    elif ctx.structure_break == "bullish_choch":
+        score += 8
+        reasons.append("Change of character: first close above the last swing high in a weak/bearish structure")
+    elif ctx.structure_break == "bearish_choch":
+        score -= 12
+        reasons.append("Change of character: closed below the last swing low — trend may be turning")
+    elif ctx.structure_break == "bearish_bos":
+        score -= 15
+        reasons.append("Break of structure to the downside")
+
     if ctx.adx14.iloc[-1] > 25 and ctx.plus_di.iloc[-1] > ctx.minus_di.iloc[-1]:
-        score += 15
+        score += 10
         reasons.append(f"ADX {ctx.adx14.iloc[-1]:.0f} with +DI > -DI (confirmed uptrend strength)")
+
+    adx_slope_now = ctx.adx_slope.iloc[-1]
+    if pd.notna(adx_slope_now) and adx_slope_now > 0 and ctx.adx14.iloc[-1] < 40:
+        score += 5
+        reasons.append("ADX rising — trend strength still building, not yet exhausted")
+
+    ema8_now, ema21_now, ema50_now = ctx.ema8.iloc[-1], ctx.ema21.iloc[-1], ctx.ema50.iloc[-1]
+    if pd.notna(ema8_now) and pd.notna(ema21_now) and pd.notna(ema50_now) and ema8_now > ema21_now > ema50_now:
+        score += 5
+        reasons.append("EMA 8/21/50 stacked bullishly")
+
+    if ctx.ema8_21_cross == "bullish_cross":
+        score += 5
+        reasons.append("EMA8 just crossed above EMA21")
+    elif ctx.ema8_21_cross == "bearish_cross":
+        score -= 8
+        reasons.append("EMA8 just crossed below EMA21")
+
+    vwap_now = ctx.anchored_vwap.iloc[-1]
+    if pd.notna(vwap_now) and vwap_now > 0:
+        if ctx.last_close > vwap_now:
+            score += 5
+            reasons.append("Price above anchored VWAP")
+        vwap_slope_now = ctx.vwap_slope.iloc[-1]
+        if pd.notna(vwap_slope_now) and vwap_slope_now > 0:
+            reasons.append("Anchored VWAP sloping up")
 
     return CategoryScore("trend", _clamp(score), 0, 0, reasons)
 
 
 def score_momentum(ctx: TickerContext) -> CategoryScore:
     reasons: list[str] = []
+    risk_notes: list[str] = []
     score = 30.0
 
     r = ctx.rsi14.iloc[-1]
     if 50 <= r <= 70:
-        score += 25
+        score += 20
         reasons.append(f"RSI {r:.0f} — bullish momentum without being overbought")
     elif r > 70:
-        score += 10
+        score += 8
         reasons.append(f"RSI {r:.0f} — overbought, momentum extended")
     elif r < 30:
         score -= 10
         reasons.append(f"RSI {r:.0f} — oversold, momentum weak")
 
     if ctx.macd_hist.iloc[-1] > 0:
-        score += 20
+        score += 12
         reasons.append("MACD histogram positive")
-        if len(ctx.macd_hist) > 3 and ctx.macd_hist.iloc[-1] > ctx.macd_hist.iloc[-3]:
+        if ctx.macd_histogram_accelerating:
             score += 10
-            reasons.append("MACD histogram expanding")
+            reasons.append("MACD histogram accelerating (momentum building, not fading)")
     else:
         reasons.append("MACD histogram negative")
 
+    if ctx.macd_above_zero:
+        score += 5
+        reasons.append("MACD above the zero line")
+
+    if ctx.macd_cross_state == "bullish_cross":
+        score += 8
+        reasons.append("MACD just crossed above its signal line")
+    elif ctx.macd_cross_state == "bearish_cross":
+        score -= 8
+        reasons.append("MACD just crossed below its signal line")
+
     roc20 = roc(ctx.close, 20).iloc[-1]
     if pd.notna(roc20) and roc20 > 0:
-        score += 10
+        score += 8
         reasons.append(f"20-day ROC positive ({roc20:.1f}%)")
 
     if ctx.bullish_rsi_divergence:
-        score += 10
+        score += 8
         reasons.append("Bullish RSI divergence")
     if ctx.bearish_rsi_divergence:
         score -= 10
         reasons.append("Bearish RSI divergence")
+    if ctx.hidden_bullish_rsi_divergence:
+        score += 6
+        reasons.append("Hidden bullish RSI divergence (trend-continuation signal)")
+    if ctx.hidden_bearish_rsi_divergence:
+        score -= 6
+        reasons.append("Hidden bearish RSI divergence (downtrend-continuation signal)")
 
-    return CategoryScore("momentum", _clamp(score), 0, 0, reasons)
+    # "Is the setup already too extended?" — distance of price above its own
+    # EMA21, in ATR units. A stretched move is more likely to mean-revert before
+    # a swing target is reached than to run further.
+    extension = ctx.extension_atr
+    if pd.notna(extension):
+        if extension > 4:
+            score -= 15
+            risk_notes.append(f"Price is {extension:.1f} ATRs above EMA21 — already extended, chase risk")
+        elif extension > 2.5:
+            score -= 5
+            risk_notes.append(f"Price is {extension:.1f} ATRs above EMA21 — somewhat extended")
+
+    cat = CategoryScore("momentum", _clamp(score), 0, 0, reasons)
+    cat.reasons.extend(risk_notes)
+    return cat
 
 
 def score_volume(ctx: TickerContext) -> CategoryScore:
@@ -106,10 +177,10 @@ def score_volume(ctx: TickerContext) -> CategoryScore:
     rvol = ctx.rvol.iloc[-1]
     if pd.notna(rvol):
         if rvol >= 1.5:
-            score += 30
+            score += 25
             reasons.append(f"Relative volume {rvol:.1f}x — strong participation")
         elif rvol >= 1.0:
-            score += 10
+            score += 8
             reasons.append(f"Relative volume {rvol:.1f}x — average participation")
         else:
             score -= 10
@@ -118,7 +189,7 @@ def score_volume(ctx: TickerContext) -> CategoryScore:
     if len(ctx.obv) > 10:
         obv_rising = ctx.obv.iloc[-1] > ctx.obv.iloc[-10]
         if obv_rising:
-            score += 15
+            score += 12
             reasons.append("OBV trending up (accumulation)")
         else:
             reasons.append("OBV trending down (distribution)")
@@ -126,34 +197,64 @@ def score_volume(ctx: TickerContext) -> CategoryScore:
     if len(ctx.ad_line) > 10:
         ad_rising = ctx.ad_line.iloc[-1] > ctx.ad_line.iloc[-10]
         if ad_rising:
-            score += 15
+            score += 10
             reasons.append("Accumulation/Distribution line rising")
+
+    if ctx.obv_bullish_divergence:
+        score += 10
+        reasons.append("Bullish OBV divergence (volume strengthening while price dipped)")
+    if ctx.obv_bearish_divergence:
+        score -= 10
+        reasons.append("Bearish OBV divergence (volume weakening while price rose)")
 
     return CategoryScore("volume", _clamp(score), 0, 0, reasons)
 
 
 def score_price_action(ctx: TickerContext, matched_strategies: list[StrategySignal]) -> CategoryScore:
+    from strategies import best_tradeable_signal
+
     reasons: list[str] = []
     matched = [s for s in matched_strategies if s.matched]
+    best = best_tradeable_signal(matched_strategies)
 
-    if not matched:
-        return CategoryScore("price_action", 20.0, 0, 0, ["No specific price-action setup confirmed"])
+    if best is None:
+        score = 20.0
+        reasons.append("No specific tradeable price-action setup confirmed")
+    else:
+        score = best.confidence
+        reasons.append(f"{best.strategy} setup confirmed")
+        reasons.extend(best.reasons[:3])
 
-    best = max(matched, key=lambda s: s.confidence)
-    score = best.confidence
-    reasons.append(f"{best.strategy} setup confirmed")
-    reasons.extend(best.reasons[:3])
-
-    if len(matched) > 1:
-        score += min((len(matched) - 1) * 8, 20)
-        other_names = ", ".join(s.strategy for s in matched if s is not best)
-        reasons.append(f"Additional confirming setups: {other_names}")
+        other_matched = [s for s in matched if s.strategy != best.strategy]
+        if other_matched:
+            score += min(len(other_matched) * 8, 20)
+            other_names = ", ".join(s.strategy for s in other_matched)
+            reasons.append(f"Additional confirming setups: {other_names}")
 
     supportive_candles = {"bullish_engulfing", "hammer", "morning_star"}
-    if supportive_candles & set(ctx.candlestick_patterns):
+    present_candles = supportive_candles & set(ctx.candlestick_patterns)
+    if present_candles:
+        score += 8
+        reasons.append(f"Supporting candlestick pattern: {', '.join(present_candles)}")
+
+    if ctx.liquidity_sweep == "bullish_sweep":
         score += 10
-        matched_candles = supportive_candles & set(ctx.candlestick_patterns)
-        reasons.append(f"Supporting candlestick pattern: {', '.join(matched_candles)}")
+        reasons.append("Bullish liquidity sweep: support was pierced then reclaimed on the same bar")
+    elif ctx.liquidity_sweep == "bearish_sweep":
+        score -= 10
+        reasons.append("Bearish liquidity sweep: resistance was pierced then rejected")
+
+    if ctx.confluence_count >= 2:
+        score += 10
+        reasons.append(f"Price sits at a confluence zone: {', '.join(ctx.confluence_sources)}")
+
+    if ctx.gap_classification:
+        if "breakaway" in ctx.gap_classification and "up" in ctx.gap_classification:
+            score += 8
+            reasons.append("Breakaway gap up from a consolidation")
+        elif "exhaustion" in ctx.gap_classification and "up" in ctx.gap_classification:
+            score -= 8
+            reasons.append("Gap up after an already-extended move — possible exhaustion gap")
 
     return CategoryScore("price_action", _clamp(score), 0, 0, reasons)
 
@@ -166,7 +267,7 @@ def score_volatility(ctx: TickerContext) -> CategoryScore:
         return CategoryScore("volatility", 40.0, 0, 0, ["Insufficient history for ATR%"])
 
     if 1.5 <= atr_pct <= 6.0:
-        score = 70.0
+        score = 65.0
         reasons.append(f"ATR {atr_pct:.1f}% of price — healthy range for a multi-day swing")
     elif atr_pct < 1.5:
         score = 40.0
@@ -175,9 +276,14 @@ def score_volatility(ctx: TickerContext) -> CategoryScore:
         score = 35.0
         reasons.append(f"ATR {atr_pct:.1f}% of price — high volatility, wider stops needed")
 
-    if bool(ctx.squeeze.iloc[-1]) if pd.notna(ctx.squeeze.iloc[-1]) else False:
-        score += 15
-        reasons.append("Volatility squeeze — potential energy building for a move")
+    is_squeezing = bool(ctx.squeeze.iloc[-1]) if pd.notna(ctx.squeeze.iloc[-1]) else False
+    if is_squeezing:
+        if ctx.bb_expanding:
+            score += 20
+            reasons.append("Squeeze already expanding — the move may be starting now, not just possible later")
+        else:
+            score += 10
+            reasons.append("Volatility squeeze — potential energy building for a move")
 
     return CategoryScore("volatility", _clamp(score), 0, 0, reasons)
 
@@ -242,13 +348,22 @@ def score_sector(ctx: TickerContext) -> CategoryScore:
     return CategoryScore("sector", _clamp(score), 0, 0, reasons)
 
 
-def score_risk_reward(risk_reward_ratio: float | None) -> CategoryScore:
+def score_risk_reward(risk_reward_ratio: float | None, distance_to_resistance_atr: float | None = None) -> CategoryScore:
     if risk_reward_ratio is None:
         return CategoryScore("risk_reward", 40.0, 0, 0, ["No risk/reward computed"])
 
     score = _clamp(risk_reward_ratio / 3.0 * 100.0)
     reasons = [f"Risk/reward ratio {risk_reward_ratio:.1f}:1"]
-    return CategoryScore("risk_reward", score, 0, 0, reasons)
+
+    if distance_to_resistance_atr is not None:
+        if distance_to_resistance_atr < 1.0:
+            score -= 15
+            reasons.append(f"Resistance is only {distance_to_resistance_atr:.1f} ATRs away — little room to run")
+        elif distance_to_resistance_atr > 3.0:
+            score += 10
+            reasons.append(f"Resistance is {distance_to_resistance_atr:.1f} ATRs away — plenty of room")
+
+    return CategoryScore("risk_reward", _clamp(score), 0, 0, reasons)
 
 
 def score_multi_timeframe(mtf_score: float | None, mtf_reasons: list[str] | None) -> CategoryScore:
@@ -275,7 +390,7 @@ def score_ticker(
         "relative_strength": score_relative_strength(ctx),
         "market_regime": score_market_regime(market_regime),
         "sector": score_sector(ctx),
-        "risk_reward": score_risk_reward(risk_reward_ratio),
+        "risk_reward": score_risk_reward(risk_reward_ratio, ctx.distance_to_resistance_atr),
         "multi_timeframe": score_multi_timeframe(multi_timeframe_score, multi_timeframe_reasons),
     }
 

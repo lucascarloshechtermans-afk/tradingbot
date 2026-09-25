@@ -23,6 +23,34 @@ def price_above_ma(price: pd.Series, ma: pd.Series) -> pd.Series:
     return price > ma
 
 
+def ema_spread_pct(fast: pd.Series, slow: pd.Series) -> pd.Series:
+    """Distance between two EMAs as a % of the slower one — a simple proxy for
+    trend strength/separation: a wide, widening spread means a strong trend, a
+    spread collapsing toward zero means the trend is losing momentum or the EMAs
+    are about to cross.
+    """
+    return (fast - slow) / slow.replace(0, float("nan")) * 100
+
+
+def crossover(fast: pd.Series, slow: pd.Series) -> str:
+    """'bullish_cross' if `fast` crossed above `slow` on the latest bar,
+    'bearish_cross' if it crossed below, else 'none'. Only looks at the last two
+    bars, so it flags the cross event itself, not merely the current ordering.
+    Generic enough to reuse for EMA crosses, MACD-vs-signal crosses, etc.
+    """
+    if len(fast) < 2 or pd.isna(fast.iloc[-2]) or pd.isna(slow.iloc[-2]) or pd.isna(fast.iloc[-1]) or pd.isna(slow.iloc[-1]):
+        return "none"
+    was_below_or_equal = fast.iloc[-2] <= slow.iloc[-2]
+    now_above = fast.iloc[-1] > slow.iloc[-1]
+    was_above_or_equal = fast.iloc[-2] >= slow.iloc[-2]
+    now_below = fast.iloc[-1] < slow.iloc[-1]
+    if was_below_or_equal and now_above:
+        return "bullish_cross"
+    if was_above_or_equal and now_below:
+        return "bearish_cross"
+    return "none"
+
+
 def trend_alignment(price: pd.Series, ma_fast: pd.Series, ma_mid: pd.Series, ma_slow: pd.Series) -> pd.Series:
     """Classify each bar as 'bullish', 'bearish' or 'mixed' based on whether
     price > fast MA > mid MA > slow MA (bullish) or the reverse (bearish).
@@ -65,6 +93,53 @@ def confirmed_swing_lows(low: pd.Series, order: int = 3) -> pd.Series:
     rolling_min = low.rolling(window=2 * order + 1, center=True).min()
     raw_mask = (low == rolling_min) & rolling_min.notna()
     return _dedupe_plateaus(raw_mask)
+
+
+def detect_divergence(
+    price_extreme: pd.Series,
+    oscillator: pd.Series,
+    swing_mask: pd.Series,
+    order: int,
+    kind: str,
+) -> bool:
+    """Compare the last two confirmed swing points on `price_extreme` against the
+    oscillator's value at those same points. `kind` is one of:
+
+    - 'regular_bullish' (use with swing LOWS): price makes a LOWER low while the
+      oscillator makes a HIGHER low — classic reversal signal at a bottom.
+    - 'regular_bearish' (use with swing HIGHS): price makes a HIGHER high while
+      the oscillator makes a LOWER high — classic reversal signal at a top.
+    - 'hidden_bullish' (use with swing LOWS): price makes a HIGHER low (a
+      shallower pullback) while the oscillator makes a LOWER low — a trend-
+      CONTINUATION signal inside an existing uptrend, the opposite pairing of
+      regular_bullish.
+    - 'hidden_bearish' (use with swing HIGHS): price makes a LOWER high while the
+      oscillator makes a HIGHER high — a continuation signal inside a downtrend.
+
+    Reusable for any oscillator (RSI, OBV, ...) paired with price swing points.
+    """
+    usable_end = max(len(price_extreme) - order, 0)
+    mask = swing_mask.copy()
+    mask.iloc[usable_end:] = False
+    swing_positions = price_extreme[mask]
+    if len(swing_positions) < 2:
+        return False
+
+    idx_a, idx_b = swing_positions.index[-2], swing_positions.index[-1]
+    price_a, price_b = price_extreme.loc[idx_a], price_extreme.loc[idx_b]
+    osc_a, osc_b = oscillator.loc[idx_a], oscillator.loc[idx_b]
+    if pd.isna(osc_a) or pd.isna(osc_b):
+        return False
+
+    if kind == "regular_bullish":
+        return bool(price_b < price_a and osc_b > osc_a)
+    if kind == "regular_bearish":
+        return bool(price_b > price_a and osc_b < osc_a)
+    if kind == "hidden_bullish":
+        return bool(price_b > price_a and osc_b < osc_a)
+    if kind == "hidden_bearish":
+        return bool(price_b < price_a and osc_b > osc_a)
+    raise ValueError(f"unknown divergence kind: {kind}")
 
 
 def market_structure(high: pd.Series, low: pd.Series, order: int = 3) -> str:

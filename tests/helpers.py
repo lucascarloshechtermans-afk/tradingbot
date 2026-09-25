@@ -78,13 +78,26 @@ def momentum_continuation_history(flat_days: int = 200, accel_days: int = 20, se
     return _to_ohlcv(close, spread=0.2)
 
 
-def volatility_contraction_history(rise_days: int = 150, flat_days: int = 120, step: float = 0.4, start: float = 50.0, seed: int = 8, flat_noise: float = 0.08) -> pd.DataFrame:
+def volatility_contraction_history(
+    rise_days: int = 150, flat_days: int = 50, step: float = 0.5, start: float = 50.0,
+    seed: int = 0, flat_noise: float = 0.08, rise_noise: float = 1.5,
+) -> pd.DataFrame:
+    """A genuine prior momentum move (noisy enough that ADX decays at a realistic
+    rate, not an artificially clean trend that stays pinned near 100), followed by
+    a tightening consolidation with declining volume — the VCP-style precondition
+    VolatilityContractionStrategy now requires (see its docstring)."""
     rng = np.random.default_rng(seed)
-    rising = start + step * np.arange(rise_days) + rng.normal(0, 0.3, rise_days)
+    rising = start + step * np.arange(rise_days) + rng.normal(0, rise_noise, rise_days)
     flat = rising[-1] + rng.normal(0, flat_noise, flat_days)
     idx = pd.date_range("2023-01-01", periods=rise_days + flat_days, freq="D")
     close = pd.Series(np.concatenate([rising, flat]), index=idx)
-    return _to_ohlcv(close, spread=0.1)
+    open_ = close.shift(1).fillna(close.iloc[0])
+    high = pd.concat([open_, close], axis=1).max(axis=1) + 0.1
+    low = pd.concat([open_, close], axis=1).min(axis=1) - 0.1
+    rise_volume = np.full(rise_days, 1_000_000.0)
+    flat_volume = np.linspace(1_000_000.0, 300_000.0, flat_days)  # dries up during the consolidation
+    volume = pd.Series(np.concatenate([rise_volume, flat_volume]), index=idx)
+    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": volume})
 
 
 def downtrend_oversold_history(decline_days: int = 220, step: float = 0.4, start: float = 200.0, sharp_days: int = 5, sharp_pct: float = 10.0) -> pd.DataFrame:

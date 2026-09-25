@@ -20,9 +20,14 @@ class MeanReversionStrategy(Strategy):
         reasons: list[str] = []
         risks: list[str] = []
 
+        # Thresholds loosened from the original RSI<30 / band*1.01 after a 5-year,
+        # 102-ticker backtest showed this strategy had the best expectancy of all 7
+        # (+1.02%/trade) but triggered far too rarely (116 trades total) to be
+        # useful week to week — widened to RSI<35 / band*1.03 to fire more often
+        # while keeping the long-term-uptrend safety filter untouched.
         long_term_uptrend = pd.notna(ctx.sma200.iloc[-1]) and ctx.last_close > ctx.sma200.iloc[-1]
-        oversold = ctx.rsi14.iloc[-1] < 30
-        at_lower_band = pd.notna(ctx.bb_lower.iloc[-1]) and ctx.close.iloc[-1] <= ctx.bb_lower.iloc[-1] * 1.01
+        oversold = ctx.rsi14.iloc[-1] < 35
+        at_lower_band = pd.notna(ctx.bb_lower.iloc[-1]) and ctx.close.iloc[-1] <= ctx.bb_lower.iloc[-1] * 1.03
 
         matched = bool(long_term_uptrend and oversold and at_lower_band)
         if not matched:
