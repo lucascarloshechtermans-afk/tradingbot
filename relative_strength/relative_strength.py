@@ -58,3 +58,41 @@ def compute_relative_strength(close: pd.Series, benchmark_close: pd.Series) -> R
         relative=relative,
         outperforming_benchmark_1m=bool(outperforming),
     )
+
+
+RS_RANK_WINDOW = 60  # ~3 trading months, matching the CANSLIM/Minervini RS Rating lookback
+
+
+def compute_universe_rs_ranks(closes: dict[str, pd.Series], window: int = RS_RANK_WINDOW) -> dict[str, float]:
+    """Percentile rank (0-100) of each ticker's trailing `window`-day return among
+    ALL tickers currently being scanned — this is the live-scan equivalent of an
+    IBD-style RS Rating (require >=70 to even consider a setup, per Minervini's
+    Trend Template / CANSLIM). Every input closes at the SAME (most recent) date,
+    so this is a single point-in-time snapshot, not a walk-forward series — use
+    `universe_rs_rank_series` for a backtest instead.
+    """
+    trailing_return = {}
+    for ticker, close in closes.items():
+        if len(close) <= window:
+            continue
+        r = roc(close, window).iloc[-1]
+        if pd.notna(r):
+            trailing_return[ticker] = float(r)
+    if not trailing_return:
+        return {}
+    ranks = pd.Series(trailing_return).rank(pct=True) * 100
+    return ranks.to_dict()
+
+
+def universe_rs_rank_series(closes: dict[str, pd.Series], window: int = RS_RANK_WINDOW) -> pd.DataFrame:
+    """Walk-forward version of `compute_universe_rs_ranks`: for EVERY date, the
+    percentile rank (0-100) of each ticker's trailing `window`-day return among
+    all other tickers with data on that date. Each row only depends on prices
+    through that row's own date (roc() is strictly trailing), so this is safe to
+    use as a same-day entry gate in an event-driven backtest without introducing
+    look-ahead bias. Returns a DataFrame indexed by date, one column per ticker;
+    a ticker missing data on a given date is simply excluded from that date's
+    ranking (NaN), not treated as the weakest.
+    """
+    roc_frame = pd.DataFrame({ticker: roc(close, window) for ticker, close in closes.items()})
+    return roc_frame.rank(axis=1, pct=True) * 100

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
 from indicators.momentum import roc
@@ -121,3 +122,64 @@ def classify_market_regime(
         label = "NEUTRAL"
 
     return MarketRegime(label=label, score=score, factors=factors)
+
+
+BLOCKED_REGIME_LABELS = ("BEARISH", "HIGH_VOLATILITY")
+
+
+def classify_market_regime_series(spy: pd.DataFrame, qqq: pd.DataFrame, iwm: pd.DataFrame, vix: pd.DataFrame) -> pd.Series:
+    """Walk-forward version of `classify_market_regime`: the regime label at
+    EVERY historical date, computed from data through that date only (sma/roc are
+    strictly trailing, so nothing here looks ahead). Used to gate backtest entries
+    on "was the market actually in a tradeable regime on this date" rather than
+    only checking today's regime once, as the live scanner does.
+
+    Simplification vs. `classify_market_regime`: breadth (% of the scanned
+    universe above its 50MA) is left out here, since it would require every
+    ticker's full history aligned and recomputed at every date — a large extra
+    cost for one of eight factors. SPY/QQQ/IWM trend + VIX still capture the core
+    "is this a market environment worth trading in" question.
+    """
+    spy_close = spy["close"]
+    idx = spy_close.index
+    spy_sma50 = sma(spy_close, 50)
+    spy_sma200 = sma(spy_close, 200)
+
+    bull = pd.Series(0.0, index=idx)
+    bear = pd.Series(0.0, index=idx)
+    total = pd.Series(0.0, index=idx)
+
+    has_sma200 = spy_sma200.notna()
+    total += has_sma200.astype(float) * 2
+    bull += (has_sma200 & (spy_close > spy_sma50) & (spy_sma50 > spy_sma200)).astype(float) * 2
+    bear += (has_sma200 & (spy_close < spy_sma50) & (spy_sma50 < spy_sma200)).astype(float) * 2
+
+    mom = roc(spy_close, 20)
+    has_mom = mom.notna()
+    total += has_mom.astype(float)
+    bull += (has_mom & (mom > 0)).astype(float)
+    bear += (has_mom & (mom < 0)).astype(float)
+
+    vix_close = vix["close"].reindex(idx).ffill()
+    high_vol = vix_close >= VIX_HIGH_VOLATILITY_THRESHOLD
+    not_high_vol_and_known = vix_close.notna() & ~high_vol
+    total += not_high_vol_and_known.astype(float)
+    bull += (not_high_vol_and_known & (vix_close < VIX_LOW_THRESHOLD)).astype(float)
+    bear += (not_high_vol_and_known & (vix_close >= VIX_ELEVATED_THRESHOLD)).astype(float)
+
+    for df in (qqq, iwm):
+        c = df["close"].reindex(idx).ffill()
+        s50 = sma(c, 50)
+        has_s50 = s50.notna() & c.notna()
+        total += has_s50.astype(float) * 0.5
+        bull += (has_s50 & (c > s50)).astype(float) * 0.5
+        bear += (has_s50 & (c < s50)).astype(float) * 0.5
+
+    score = (bull - bear) / total.replace(0, np.nan) * 100
+
+    label = pd.Series("NEUTRAL", index=idx)
+    label[score >= REGIME_SCORE_BULLISH] = "BULLISH"
+    label[score <= REGIME_SCORE_BEARISH] = "BEARISH"
+    label[total == 0] = "NEUTRAL"
+    label[high_vol.fillna(False)] = "HIGH_VOLATILITY"
+    return label

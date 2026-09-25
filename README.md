@@ -148,6 +148,42 @@ all three are now fixed (see `strategies/volatility_contraction.py`'s docstring,
 `strategies/mean_reversion.py`'s comment, and `risk.risk_per_trade_pct` in
 `config.example.yaml`).
 
+## Hard entry gates (before scoring)
+
+A weighted 0-100 composite score alone lets a setup make up for a real weakness
+with strength in unrelated categories — e.g. a laggard stock in a downtrending
+market can still score reasonably if its chart pattern and volume look good.
+Research on systems with a documented, replicated edge (Minervini's Trend
+Template, CANSLIM, academic momentum studies) consistently gates entries on hard,
+sequential pass/fail conditions FIRST, and only scores/ranks what's left.
+`config.gates` (`GatesConfig` in `config/schema.py`) implements three such gates,
+applied in both `scanner.py` and `backtest_screener.py` before a ticker is even
+scored:
+
+1. **RS rank vs. the scanned universe** (`min_rs_percentile`, default 70): a
+   ticker's trailing 60-day return must rank in at least the 70th percentile among
+   the OTHER tickers being scanned — an IBD/Minervini-style "RS Rating" pre-filter,
+   not a scored input. `relative_strength.compute_universe_rs_ranks` (live) and
+   `universe_rs_rank_series` (walk-forward, no look-ahead — every date's rank uses
+   only that date's trailing data) implement this.
+2. **Market regime gate** (`regime_gate_enabled`, default on): entries are blocked
+   outright while the market regime is BEARISH or HIGH_VOLATILITY
+   (`blocked_regime_labels`). The backtest uses `classify_market_regime_series`, a
+   vectorized walk-forward version of the live regime classifier — every date's
+   label depends only on data through that date.
+3. **Minimum risk/reward** (`min_risk_reward`, default 1.2): a setup whose
+   horizon-capped R:R doesn't clear this bar is rejected outright rather than just
+   scoring lower in one of ten categories — this is what actually makes a win rate
+   below 50% still add up to a profitable system (`risk/stops_targets.py:plan_trade_levels`
+   is the shared stop/target/R:R pipeline both the scanner and the backtest use).
+
+These are deliberately configurable and can be disabled
+(`backtest_screener.py --no-regime-gate` / `--no-rs-gate`, or `min_risk_reward: 0`
+in config) — research on regime filters specifically warns they can be a source of
+overfitting themselves ("perfect in backtest, worse live"), so the honest approach
+is to validate their effect empirically rather than assume they help. See
+"Backtesting the whole screener" above for how to compare with/without.
+
 ## How scoring works
 
 Every ticker gets a 0-100 composite score from 10 weighted categories (weights
@@ -157,10 +193,10 @@ configurable in `config.yaml`, must sum to ~100):
 |---|---|---|
 | Trend | 15% | MA alignment, HH/HL structure, BOS/CHOCH, ADX(+slope)/DI, EMA 8/21/50 stack/cross, anchored VWAP |
 | Price Action | 15% | Best-matched *tradeable* strategy setup, candlestick confluence, liquidity sweeps, S/R confluence, gap type |
-| Momentum | 10% | RSI, MACD (histogram/cross/zero-line/acceleration), ROC, regular + hidden RSI divergence, extension-from-EMA21 |
-| Volume | 10% | Relative volume, OBV (+ divergence), Accumulation/Distribution |
+| Momentum | 10% | RSI/MACD-histogram/ROC (capped combined "core momentum" vote — see below), MACD cross/zero-line/acceleration, regular + hidden RSI divergence, extension-from-EMA21 |
+| Volume | 10% | Relative volume, OBV + Accumulation/Distribution (capped combined vote), OBV divergence |
 | Volatility | 10% | ATR% in a healthy range, squeeze detection, squeeze→expansion |
-| Relative Strength | 10% | 1M/3M performance vs SPY |
+| Relative Strength | 10% | 1M/3M performance vs SPY (distinct from the RS-vs-universe hard gate below, which ranks against peers, not the index) |
 | Market Regime | 10% | SPY/QQQ/IWM/VIX-based regime (see below) |
 | Risk/Reward | 10% | Computed R:R ratio, distance to resistance in ATRs |
 | Sector | 5% | Sector ETF's relative-strength rank (1-11) |
@@ -171,6 +207,15 @@ Thresholds (configurable): **90-100 Exceptional · 80-89 Strong · 70-79 Interes
 
 Every category's contribution and the specific reasons behind it are visible in
 the dashboard's expanded row for each ticker — nothing is a black box.
+
+**Indicator redundancy:** RSI, MACD histogram and 20-day ROC are all derived from
+the same underlying fact (recent price change), so they usually agree — summing a
+full bonus for each would let one real "price is rising" observation get counted
+three times as if it were three independent pieces of evidence. Momentum scoring
+instead treats the three as votes and caps their *combined* contribution
+(`score_momentum` in `scoring/scorer.py`); volume scoring does the same for OBV and
+the Accumulation/Distribution line, which are both cumulative volume-flow measures
+built from the same bars.
 
 ### Deep technicals (`TickerContext`, `strategies/context.py`)
 
@@ -374,3 +419,15 @@ Documented up front so nothing here pretends to be more complete than it is:
   zone into a well-defined, testable rule is considerably more subjective than a
   clustered price level, and wasn't judged worth the added complexity relative to
   the levels/confluence system already in place.
+- **Survivorship bias in the backtest universe.** `DEFAULT_UNIVERSE`
+  (`data/universe.py`) is today's list of liquid large/mid-cap tickers, not a
+  point-in-time historical index membership list. A company that got delisted,
+  went bankrupt, or was dropped from its index partway through the 5-year backtest
+  window simply isn't in the universe at all — only tickers healthy enough to
+  still be liquid and mid/large-cap *today* are backtested. This structurally
+  inflates backtest results versus what a real point-in-time universe would have
+  shown, by an amount studies estimate at roughly 1-4 percentage points of annual
+  return. Fixing this properly needs a paid point-in-time constituents data
+  source (e.g. historical S&P 500/1000 membership with exact add/drop dates) that
+  isn't available here — rather than approximate it with a guess, this limitation
+  is left as-is and disclosed rather than silently ignored.

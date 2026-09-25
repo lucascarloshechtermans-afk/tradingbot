@@ -31,6 +31,15 @@ risk:
                              # many trading days, and the backtester force-closes any
                              # trade still open after this many bars
 
+gates:                     # hard pass/fail pre-filters, applied BEFORE scoring —
+                             # see "Hard entry gates" in README.md
+  min_rs_percentile: 70    # must rank >= this percentile vs. the rest of the
+                             # scanned universe on trailing rs_window-day return
+  rs_window: 60
+  regime_gate_enabled: true
+  blocked_regime_labels: ["BEARISH", "HIGH_VOLATILITY"]
+  min_risk_reward: 1.2     # reject a setup outright below this R:R
+
 scoring:
   weights:                 # moet optellen tot ~100
     trend: 15

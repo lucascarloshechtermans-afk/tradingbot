@@ -104,25 +104,44 @@ def score_momentum(ctx: TickerContext) -> CategoryScore:
     risk_notes: list[str] = []
     score = 30.0
 
+    # RSI, MACD and 20-day ROC are all derived from the same underlying signal —
+    # recent price change — so they move together far more often than not. Adding
+    # a full independent bonus for each would let one real "price is going up"
+    # fact get counted three times as if it were three separate pieces of
+    # evidence (the "indicator redundancy" problem: correlated inputs inflating a
+    # composite score without adding real information). Instead, each of the
+    # three casts one vote and the combined "core momentum" bonus is capped,
+    # regardless of how many of the three agree.
+    core_votes = 0
     r = ctx.rsi14.iloc[-1]
     if 50 <= r <= 70:
-        score += 20
+        core_votes += 1
         reasons.append(f"RSI {r:.0f} — bullish momentum without being overbought")
     elif r > 70:
-        score += 8
         reasons.append(f"RSI {r:.0f} — overbought, momentum extended")
     elif r < 30:
-        score -= 10
+        core_votes -= 1
         reasons.append(f"RSI {r:.0f} — oversold, momentum weak")
 
     if ctx.macd_hist.iloc[-1] > 0:
-        score += 12
+        core_votes += 1
         reasons.append("MACD histogram positive")
         if ctx.macd_histogram_accelerating:
-            score += 10
             reasons.append("MACD histogram accelerating (momentum building, not fading)")
     else:
         reasons.append("MACD histogram negative")
+
+    roc20 = roc(ctx.close, 20).iloc[-1]
+    if pd.notna(roc20):
+        if roc20 > 0:
+            core_votes += 1
+            reasons.append(f"20-day ROC positive ({roc20:.1f}%)")
+        elif roc20 < 0:
+            core_votes -= 1
+
+    # capped at +/-24 total regardless of vote count (was up to +55 additively
+    # across RSI/MACD-hist/MACD-accel/ROC before this fix)
+    score += max(-24.0, min(24.0, core_votes * 12.0))
 
     if ctx.macd_above_zero:
         score += 5
@@ -134,11 +153,6 @@ def score_momentum(ctx: TickerContext) -> CategoryScore:
     elif ctx.macd_cross_state == "bearish_cross":
         score -= 8
         reasons.append("MACD just crossed below its signal line")
-
-    roc20 = roc(ctx.close, 20).iloc[-1]
-    if pd.notna(roc20) and roc20 > 0:
-        score += 8
-        reasons.append(f"20-day ROC positive ({roc20:.1f}%)")
 
     if ctx.bullish_rsi_divergence:
         score += 8
@@ -186,19 +200,29 @@ def score_volume(ctx: TickerContext) -> CategoryScore:
             score -= 10
             reasons.append(f"Relative volume {rvol:.1f}x — below average")
 
+    # OBV and the A/D line are both cumulative volume-flow measures built from the
+    # same daily price/volume bars, so they usually agree — sum their bonuses
+    # independently and "two confirmations" is really one fact double-counted.
+    # Cap the combined contribution the same way score_momentum caps its votes.
+    flow_votes = 0
     if len(ctx.obv) > 10:
         obv_rising = ctx.obv.iloc[-1] > ctx.obv.iloc[-10]
         if obv_rising:
-            score += 12
+            flow_votes += 1
             reasons.append("OBV trending up (accumulation)")
         else:
+            flow_votes -= 1
             reasons.append("OBV trending down (distribution)")
 
     if len(ctx.ad_line) > 10:
         ad_rising = ctx.ad_line.iloc[-1] > ctx.ad_line.iloc[-10]
         if ad_rising:
-            score += 10
+            flow_votes += 1
             reasons.append("Accumulation/Distribution line rising")
+        else:
+            flow_votes -= 1
+
+    score += max(-12.0, min(12.0, flow_votes * 6.0))
 
     if ctx.obv_bullish_divergence:
         score += 10

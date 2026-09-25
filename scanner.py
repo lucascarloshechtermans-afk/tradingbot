@@ -31,13 +31,8 @@ from data.yfinance_provider import YFinanceProvider
 from events.earnings import EarningsWarning, check_earnings_proximity
 from indicators.trend import sma
 from market_regime.regime import MarketRegime, classify_market_regime
-from risk.stops_targets import (
-    cap_target_to_horizon,
-    compute_rr_targets,
-    compute_stop,
-    nearest_structure_target,
-    risk_reward_ratio,
-)
+from relative_strength.relative_strength import compute_universe_rs_ranks
+from risk.stops_targets import plan_trade_levels
 from scoring.multi_timeframe import multi_timeframe_confluence, resample_weekly
 from scoring.scorer import ScoreResult, score_ticker
 from sector.rotation import SECTOR_ETFS, SectorStrength, rank_sectors, sector_strength_for
@@ -113,23 +108,17 @@ def build_trade_plan(
 
     max_holding_days = config.risk.max_holding_days
 
-    stop_levels = compute_stop(entry, atr, ctx.levels, direction="long")
-    structure_target = nearest_structure_target(entry, ctx.levels, direction="long")
-    rr_targets = compute_rr_targets(entry, stop_levels.final_stop, direction="long", rr_multiples=(1.5, 3.0))
-    target1 = rr_targets[0].price
-    target2 = structure_target.price if structure_target and structure_target.price > target1 else rr_targets[1].price
+    trade_levels = plan_trade_levels(entry, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0))
+    if trade_levels is None:
+        return None
+    stop_levels = trade_levels.stop_levels
+    target1, target2, rr = trade_levels.target1, trade_levels.target2, trade_levels.risk_reward
 
-    # A target computed purely from a fixed R:R multiple (or a far-off resistance
-    # level) can imply a move that historically takes far longer than the intended
-    # holding period — cap both targets to what's realistically reachable within
-    # max_holding_days, estimated from ATR (see risk/stops_targets.py).
-    target1 = cap_target_to_horizon(entry, target1, atr, max_holding_days, direction="long")
-    target2 = cap_target_to_horizon(entry, target2, atr, max_holding_days, direction="long")
-    target2 = max(target2, target1)  # keep target2 as the further of the two after capping
-
-    try:
-        rr = risk_reward_ratio(entry, stop_levels.final_stop, target2)
-    except ValueError:
+    # Hard gate, not just a scoring input: a setup whose realistically-achievable
+    # (horizon-capped) reward doesn't clear the risk by a wide enough margin gets
+    # rejected outright, rather than merely scoring lower in one category among
+    # ten — this is what actually makes a win rate below 50% still profitable.
+    if rr < config.gates.min_risk_reward:
         return None
 
     mtf_score, mtf_reasons = multi_timeframe_confluence(ctx, weekly_ctx)
@@ -181,6 +170,7 @@ def scan_ticker(
     spy_close: pd.Series,
     sector_ranked: list[SectorStrength],
     market_regime: MarketRegime | None,
+    rs_rank: float | None,
 ) -> TradePlan | None:
     try:
         history = provider.get_history(ticker, period=config.data.period)
@@ -191,6 +181,15 @@ def scan_ticker(
 
     if len(history) < 60:
         logger.info("skipping %s: insufficient history (%d bars)", ticker, len(history))
+        return None
+
+    gates = config.gates
+    if gates.regime_gate_enabled and market_regime is not None and market_regime.label in gates.blocked_regime_labels:
+        logger.info("skipping %s: market regime %s is blocked by the regime gate", ticker, market_regime.label)
+        return None
+
+    if rs_rank is not None and rs_rank < gates.min_rs_percentile:
+        logger.info("skipping %s: RS rank %.0f < min_rs_percentile %.0f (not a market leader)", ticker, rs_rank, gates.min_rs_percentile)
         return None
 
     sector_strength = sector_strength_for(info.sector, sector_ranked)
@@ -271,10 +270,19 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
 
     spy_close = benchmarks["spy"]["close"] if "spy" in benchmarks else None
 
+    # RS rank vs. the rest of the SCANNED universe (not vs. SPY) — a hard
+    # pre-filter (see GatesConfig) modeled on the IBD/Minervini RS Rating: only
+    # tickers that are themselves leaders relative to their peers pass through.
+    rs_ranks = compute_universe_rs_ranks(
+        {t: candidates[t][1]["close"] for t in filter_result.included if t in candidates},
+        window=config.gates.rs_window,
+    )
+    logger.info("computed RS rank for %d/%d tickers (min_rs_percentile=%.0f)", len(rs_ranks), len(filter_result.included), config.gates.min_rs_percentile)
+
     trade_plans: list[TradePlan] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(scan_ticker, ticker, provider, config, spy_close, sector_ranked, market_regime): ticker
+            pool.submit(scan_ticker, ticker, provider, config, spy_close, sector_ranked, market_regime, rs_ranks.get(ticker)): ticker
             for ticker in filter_result.included
         }
         for future in as_completed(futures):
@@ -338,6 +346,23 @@ class SyntheticDataProvider(DataProvider):
     def get_history(self, ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
         n = 300
         idx = pd.date_range(end=pd.Timestamp.today(), periods=n, freq="B", tz="UTC")
+        if ticker == "^VIX":
+            # VIX trades in a characteristic ~10-35 band, not the arbitrary
+            # 50-150 range the generic formula below produces for a "price" —
+            # generating it unrealistically high would make classify_market_regime's
+            # high-volatility override fire on every single dry-run scan.
+            drift = self._rng.uniform(-0.05, 0.05)
+            noise_scale = self._rng.uniform(0.1, 0.3)
+            base = 18.0
+            close = pd.Series(
+                base + np.cumsum(self._rng.normal(drift, noise_scale, n)), index=idx
+            ).clip(lower=10.0, upper=35.0)
+            open_ = close.shift(1).fillna(close.iloc[0])
+            high = pd.concat([open_, close], axis=1).max(axis=1) + self._rng.uniform(0.1, 0.3)
+            low = pd.concat([open_, close], axis=1).min(axis=1) - self._rng.uniform(0.1, 0.3)
+            volume = pd.Series(self._rng.uniform(500_000, 5_000_000, n), index=idx)
+            return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "adj_close": close, "volume": volume})
+
         drift = self._rng.uniform(-0.1, 0.4)
         noise_scale = self._rng.uniform(0.5, 2.0)
         base = 50 + hash(ticker) % 100

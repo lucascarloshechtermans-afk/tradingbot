@@ -89,7 +89,7 @@ def test_scan_ticker_with_synthetic_provider():
     provider = SyntheticDataProvider(seed=1)
     config = AppConfig()
     spy_close = provider.get_history("SPY")["close"]
-    plan = scan_ticker("SYNTEST", provider, config, spy_close, sector_ranked=[], market_regime=None)
+    plan = scan_ticker("SYNTEST", provider, config, spy_close, sector_ranked=[], market_regime=None, rs_rank=100.0)
     assert plan is not None
     assert plan.ticker == "SYNTEST"
 

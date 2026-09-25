@@ -92,6 +92,33 @@ class RiskConfig:
         return cfg
 
 
+@dataclass
+class GatesConfig:
+    """Hard, sequential pre-filters applied BEFORE a setup is scored — as opposed
+    to the weighted 0-100 composite in ScoringConfig. Research on systems with a
+    documented, replicated edge (Minervini's Trend Template, CANSLIM, academic
+    momentum studies) consistently uses hard gates like these rather than folding
+    everything into one weighted score, specifically because a weighted score lets
+    a strong showing in unrelated categories compensate for a fundamentally weak
+    setup (e.g. a laggard stock in a bear market with a pretty chart pattern)."""
+
+    min_rs_percentile: float = 70.0  # ticker must rank >= this percentile vs. the rest of the scanned universe on trailing rs_window-day return
+    rs_window: int = 60
+    regime_gate_enabled: bool = True
+    blocked_regime_labels: list[str] = field(default_factory=lambda: ["BEARISH", "HIGH_VOLATILITY"])
+    min_risk_reward: float = 1.2  # reject a setup outright if its computed (horizon-capped) R:R falls below this
+
+    @classmethod
+    def from_dict(cls, raw: dict) -> "GatesConfig":
+        return cls(
+            min_rs_percentile=float(raw.get("min_rs_percentile", 70.0)),
+            rs_window=int(raw.get("rs_window", 60)),
+            regime_gate_enabled=bool(raw.get("regime_gate_enabled", True)),
+            blocked_regime_labels=list(raw.get("blocked_regime_labels", ["BEARISH", "HIGH_VOLATILITY"])),
+            min_risk_reward=float(raw.get("min_risk_reward", 1.2)),
+        )
+
+
 DEFAULT_SCORING_WEIGHTS = {
     "trend": 15,
     "momentum": 10,
@@ -192,6 +219,7 @@ class AppConfig:
     data: DataConfig = field(default_factory=DataConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
+    gates: GatesConfig = field(default_factory=GatesConfig)
     earnings: EarningsConfig = field(default_factory=EarningsConfig)
     backtesting: BacktestConfig = field(default_factory=BacktestConfig)
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
@@ -203,6 +231,7 @@ class AppConfig:
             data=DataConfig.from_dict(raw.get("data", {})),
             risk=RiskConfig.from_dict(raw.get("risk", {})),
             scoring=ScoringConfig.from_dict(raw.get("scoring", {})),
+            gates=GatesConfig.from_dict(raw.get("gates", {})),
             earnings=EarningsConfig.from_dict(raw.get("earnings", {})),
             backtesting=BacktestConfig.from_dict(raw.get("backtesting", {})),
             alerts=AlertsConfig.from_dict(raw.get("alerts", {})),

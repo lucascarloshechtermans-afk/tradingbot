@@ -140,3 +140,41 @@ def risk_reward_ratio(entry: float, stop: float, target: float) -> float:
     if risk <= 0:
         raise ValueError("risk (entry - stop distance) must be positive")
     return reward / risk
+
+
+@dataclass
+class TradeLevels:
+    stop_levels: StopLevels
+    target1: float
+    target2: float
+    risk_reward: float
+
+
+def plan_trade_levels(
+    entry: float,
+    atr: float,
+    levels: list[Level],
+    max_holding_days: int,
+    direction: str = "long",
+    rr_multiples: tuple[float, float] = (1.5, 3.0),
+) -> TradeLevels | None:
+    """The full stop/target/R:R pipeline shared by the live scanner and the
+    backtest: ATR+structure stop, then the further of a fixed-R:R target or the
+    nearest structure level, both capped to what's realistically reachable within
+    `max_holding_days` (see `cap_target_to_horizon`). Returns None only when the
+    resulting risk is zero/invalid (division-by-zero guard)."""
+    stop_levels = compute_stop(entry, atr, levels, direction=direction)
+    structure_target = nearest_structure_target(entry, levels, direction=direction)
+    rr_targets = compute_rr_targets(entry, stop_levels.final_stop, direction=direction, rr_multiples=rr_multiples)
+    target1 = rr_targets[0].price
+    target2 = structure_target.price if structure_target and structure_target.price > target1 else rr_targets[1].price
+
+    target1 = cap_target_to_horizon(entry, target1, atr, max_holding_days, direction=direction)
+    target2 = cap_target_to_horizon(entry, target2, atr, max_holding_days, direction=direction)
+    target2 = max(target2, target1) if direction == "long" else min(target2, target1)
+
+    try:
+        rr = risk_reward_ratio(entry, stop_levels.final_stop, target2)
+    except ValueError:
+        return None
+    return TradeLevels(stop_levels=stop_levels, target1=target1, target2=target2, risk_reward=rr)
