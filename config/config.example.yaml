@@ -5,8 +5,8 @@
 universe:
   preset: BALANCED        # CONSERVATIVE | BALANCED | AGGRESSIVE | CUSTOM
   # onderstaande waarden overschrijven de preset-defaults als je ze zet
-  min_price: 50.0           # samen met max_price: voorkeur voor de $50-300 band
-  max_price: 300.0           # (verruimd van 100-200, dat liet te weinig namen door)
+  # min_price: 50.0         # prijsband uitgeschakeld op verzoek (sloot SMCI @ $43 uit)
+  # max_price: 300.0        # min_atr_pct + max_market_cap doen het zware werk nu
   # min_avg_dollar_volume: 5000000
   # min_market_cap: 2000000000
   max_market_cap: 200000000000  # geen mega-caps (>$200B) — sluit AAPL/MSFT/NVDA/
@@ -18,11 +18,12 @@ universe:
   # max_spread_pct_estimate: 1.5  # Corwin-Schultz spread-schatting; hoger =
                                     # ruimer, want de schatter loopt bij
                                     # volatiele-maar-liquide namen vanzelf op
-  min_atr_pct: 4.0         # sluit low-movement large caps uit (bv. mega-cap namen
+  min_atr_pct: 3.0         # sluit low-movement large caps uit (bv. mega-cap namen
                              # die elke liquiditeitsfilter halen maar te weinig
                              # bewegen om binnen 5 dagen een target te raken) --
-                             # verlaagd van 5.0 omdat dat de survivor-pool op een
-                             # AGGRESSIVE-scan tot ~10 tickers had teruggebracht
+                             # verlaagd van 5.0 -> 4.0 -> 3.0 op verzoek, om de
+                             # survivor-pool te vergroten (los van de prijsband,
+                             # die inmiddels los is uitgeschakeld)
 
 data:
   period: "1y"             # hoeveel historie opgehaald wordt per ticker
