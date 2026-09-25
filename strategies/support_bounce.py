@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from price_action.patterns import is_support_bounce
 from strategies.base import Strategy, StrategySignal
 from strategies.context import TickerContext
@@ -23,8 +25,14 @@ class SupportBounceStrategy(Strategy):
             None,
         )
         not_overbought = ctx.rsi14.iloc[-1] < 70
+        # This strategy had the highest trade count and lowest win rate of the 7
+        # in backtesting (still net positive on R:R asymmetry alone) — a light
+        # volume floor filters out bounces happening on abnormally thin
+        # participation, which is a weaker signal of real buying interest than a
+        # bounce most traders are actually watching and acting on.
+        not_on_dead_volume = pd.notna(ctx.rvol.iloc[-1]) and ctx.rvol.iloc[-1] >= 0.8
 
-        matched = bool(bounce and support and support.touches >= self.min_touches and not_overbought)
+        matched = bool(bounce and support and support.touches >= self.min_touches and not_overbought and not_on_dead_volume)
         if not matched:
             return StrategySignal(strategy=self.name, matched=False, confidence=0.0)
 

@@ -69,6 +69,17 @@ def test_support_bounce_matches_on_repeated_level_touch():
     assert "130" in signal.reasons[0]
 
 
+def test_support_bounce_rejects_dead_volume():
+    import pandas as pd
+    from dataclasses import replace
+
+    ctx = context_from(support_bounce_history())
+    assert SupportBounceStrategy().evaluate(ctx).matched is True  # sanity
+
+    dead_volume = replace(ctx, rvol=pd.Series(0.2, index=ctx.rvol.index))
+    assert SupportBounceStrategy().evaluate(dead_volume).matched is False
+
+
 def test_support_bounce_does_not_match_without_levels():
     ctx = context_from(flat_history())
     signal = SupportBounceStrategy().evaluate(ctx)

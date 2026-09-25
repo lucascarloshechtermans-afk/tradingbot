@@ -286,7 +286,12 @@ logic — never a single giant if-statement:
    cools without crashing.
 3. **Trend Continuation** — an already-strong trend (ADX>25, HH/HL structure)
    pauses briefly rather than reversing.
-4. **Support Bounce** — price bounces off a support level with ≥2 prior touches.
+4. **Support Bounce** — price bounces off a support level with ≥2 prior touches,
+   RVOL >= 0.8 (not on dead volume). Had the highest trade count and lowest win
+   rate of the 7 in backtesting — still net positive on R:R asymmetry alone
+   (low win rate + big-enough average winner is a legitimate, if less intuitive,
+   profitable archetype — see "Hard entry gates" above), but the volume floor
+   filters out the weakest, least-watched bounces.
 5. **Momentum Continuation** — RSI rising through 50, MACD histogram expanding,
    ROC positive across 5/10/20-day windows with the 20-day figure required to
    exceed 2% (not just >0 — a barely-positive drift isn't "broadening
