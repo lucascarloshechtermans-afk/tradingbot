@@ -64,6 +64,8 @@ def make_screener_functions(
     config: AppConfig,
     attempted_strategy_by_bar: dict[int, str],
     score_by_bar: dict[int, float],
+    regime_by_bar: dict[int, str],
+    rr_by_bar: dict[int, float],
     min_score: float | None = None,
     regime_series: pd.Series | None = None,
     rs_rank_series: pd.Series | None = None,
@@ -134,6 +136,14 @@ def make_screener_functions(
         trade_levels = plan_trade_levels(ctx.last_close, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0))
         if trade_levels is None or trade_levels.risk_reward < gates.min_risk_reward:
             return False
+        rr_by_bar[len(history_so_far)] = trade_levels.risk_reward
+
+        # For the loser/regime-performance reports below — the regime label as
+        # of the signal bar (same causal lookup _blocked_by_gates already uses).
+        if regime_series is not None:
+            label = regime_series.get(history_so_far.index[-1])
+            if label is not None:
+                regime_by_bar[len(history_so_far)] = label
 
         # score_ticker only needs ctx + the matched strategies here; sector and
         # multi-timeframe aren't threaded through this per-ticker backtest loop,
@@ -186,8 +196,10 @@ def backtest_ticker(
     cache = SharedContextCache(ticker)
     attempted_strategy_by_bar: dict[int, str] = {}
     score_by_bar: dict[int, float] = {}
+    regime_by_bar: dict[int, str] = {}
+    rr_by_bar: dict[int, float] = {}
     signal_fn, stop_fn, target_fn = make_screener_functions(
-        cache, config, attempted_strategy_by_bar, score_by_bar,
+        cache, config, attempted_strategy_by_bar, score_by_bar, regime_by_bar, rr_by_bar,
         min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
     )
 
@@ -203,6 +215,8 @@ def backtest_ticker(
 
     trade_strategies = []
     trade_scores = []
+    trade_regimes = []
+    trade_rrs = []
     for trade in result.trades:
         try:
             bar_index = history.index.get_loc(trade.entry_date)
@@ -210,8 +224,10 @@ def backtest_ticker(
             bar_index = None
         trade_strategies.append(attempted_strategy_by_bar.get(bar_index, "Unknown"))
         trade_scores.append(score_by_bar.get(bar_index))
+        trade_regimes.append(regime_by_bar.get(bar_index))
+        trade_rrs.append(rr_by_bar.get(bar_index))
 
-    return result, trade_strategies, trade_scores
+    return result, trade_strategies, trade_scores, trade_regimes, trade_rrs
 
 
 def build_gate_tables(provider: DataProvider, config: AppConfig, histories: dict[str, pd.DataFrame]):
@@ -250,6 +266,8 @@ def run_universe_backtest(
     all_trades = []
     all_trade_strategies = []
     all_trade_scores = []
+    all_trade_regimes = []
+    all_trade_rrs = []
     per_ticker_summaries = []
     errors = []
 
@@ -269,12 +287,14 @@ def run_universe_backtest(
 
     for i, (ticker, history) in enumerate(histories.items(), start=1):
         rs_rank_series = rs_rank_table[ticker] if ticker in rs_rank_table.columns else None
-        result, trade_strategies, trade_scores = backtest_ticker(
+        result, trade_strategies, trade_scores, trade_regimes, trade_rrs = backtest_ticker(
             ticker, history, config, min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series
         )
         all_trades.extend(result.trades)
         all_trade_strategies.extend(trade_strategies)
         all_trade_scores.extend(trade_scores)
+        all_trade_regimes.extend(trade_regimes)
+        all_trade_rrs.extend(trade_rrs)
 
         closed = [t for t in result.trades if t.pnl is not None]
         wins = sum(1 for t in closed if t.pnl > 0)
@@ -284,7 +304,7 @@ def run_universe_backtest(
         )
         logger.info("[%d/%d] %s: %d trades, %d wins", i, len(histories), ticker, len(closed), wins)
 
-    return all_trades, all_trade_strategies, all_trade_scores, per_ticker_summaries, errors
+    return all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, per_ticker_summaries, errors
 
 
 def print_score_bucket_report(all_trades, all_trade_scores):
@@ -316,7 +336,78 @@ def print_score_bucket_report(all_trades, all_trade_scores):
     print()
 
 
-def print_report(all_trades, all_trade_strategies, all_trade_scores, per_ticker_summaries, errors, config: AppConfig, period: str):
+def print_regime_performance_report(all_trades, all_trade_regimes):
+    """Per user requirement #7/#20: test whether the SAME strategies perform
+    differently by market regime rather than assuming one universal rule set
+    works everywhere. Buckets closed trades by the regime label active at
+    entry."""
+    print(f"\n{'--- Win rate / expectancy by market regime at entry ---':<40}")
+    print(f"{'Regime':<18}{'Trades':<9}{'Win rate':<11}{'Avg win':<10}{'Avg loss':<10}{'Expectancy'}")
+    by_regime = defaultdict(list)
+    for t, regime in zip(all_trades, all_trade_regimes):
+        if t.pnl is not None:
+            by_regime[regime or "unknown"].append(t)
+    for regime, trades in sorted(by_regime.items(), key=lambda kv: -len(kv[1])):
+        wins = [t for t in trades if t.pnl > 0]
+        losses = [t for t in trades if t.pnl < 0]
+        wr = len(wins) / len(trades) * 100 if trades else 0
+        avg_w = sum(t.pnl_pct for t in wins) / len(wins) if wins else 0
+        avg_l = sum(t.pnl_pct for t in losses) / len(losses) if losses else 0
+        expectancy = (len(wins) / len(trades) * avg_w) + (len(losses) / len(trades) * avg_l) if trades else 0
+        print(f"{regime:<18}{len(trades):<9}{f'{wr:.1f}%':<11}{f'{avg_w:.2f}%':<10}{f'{avg_l:.2f}%':<10}{expectancy:+.2f}%")
+    print()
+
+
+def print_losing_trade_analysis(all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs):
+    """Required, not optional (per explicit instruction): a backtest report that
+    only shows aggregate win rate hides WHY trades lose. This compares losers
+    against winners across every dimension already being tracked (strategy,
+    score at entry, regime at entry, R:R at entry, exit reason) to surface
+    patterns worth fixing rather than just a single win-rate number."""
+    closed = [t for t in all_trades if t.pnl is not None]
+    if not closed:
+        return
+    zipped = list(zip(closed, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs))
+    losers = [z for z in zipped if z[0].pnl < 0]
+    winners = [z for z in zipped if z[0].pnl > 0]
+
+    print(f"\n{'=' * 60}")
+    print(f"LOSING-TRADE ANALYSIS  ({len(losers)} losers of {len(closed)} closed trades)")
+    print(f"{'=' * 60}")
+
+    def _avg(values):
+        values = [v for v in values if v is not None and pd.notna(v)]
+        return sum(values) / len(values) if values else None
+
+    loser_scores = _avg([s for _, _, s, _, _ in losers])
+    winner_scores = _avg([s for _, _, s, _, _ in winners])
+    loser_rrs = _avg([rr for _, _, _, _, rr in losers])
+    winner_rrs = _avg([rr for _, _, _, _, rr in winners])
+    print(f"{'Avg score at entry:':<28}losers {loser_scores:.1f}  vs  winners {winner_scores:.1f}" if loser_scores and winner_scores else "")
+    print(f"{'Avg R:R at entry:':<28}losers {loser_rrs:.2f}  vs  winners {winner_rrs:.2f}" if loser_rrs and winner_rrs else "")
+
+    print(f"\n{'--- Losers by exit reason ---':<40}")
+    exit_reasons = Counter(t.exit_reason for t, *_ in losers)
+    for reason, count in exit_reasons.most_common():
+        print(f"  {reason:<20}{count} ({count / len(losers) * 100:.0f}% of losers)")
+
+    print(f"\n{'--- Losers by strategy ---':<40}")
+    by_strategy_all = defaultdict(list)
+    for t, strat, _, _, _ in zipped:
+        by_strategy_all[strat].append(t)
+    for strategy, trades in sorted(by_strategy_all.items(), key=lambda kv: -len(kv[1])):
+        losses = [t for t in trades if t.pnl < 0]
+        loss_rate = len(losses) / len(trades) * 100 if trades else 0
+        print(f"  {strategy:<26}{len(losses)}/{len(trades)} losers ({loss_rate:.0f}% loss rate)")
+
+    print(f"\n{'--- Losers by regime at entry ---':<40}")
+    regime_counter = Counter(regime or "unknown" for _, _, _, regime, _ in losers)
+    for regime, count in regime_counter.most_common():
+        print(f"  {regime:<18}{count} ({count / len(losers) * 100:.0f}% of losers)")
+    print()
+
+
+def print_report(all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, per_ticker_summaries, errors, config: AppConfig, period: str):
     closed = [t for t in all_trades if t.pnl is not None]
     # build a pseudo equity curve from cumulative pnl for drawdown/sharpe purposes
     cum_pnl = pd.Series([t.pnl for t in closed]).cumsum() + config.backtesting.initial_capital
@@ -376,6 +467,8 @@ def print_report(all_trades, all_trade_strategies, all_trade_scores, per_ticker_
     print()
 
     print_score_bucket_report(all_trades, all_trade_scores)
+    print_regime_performance_report(all_trades, all_trade_regimes)
+    print_losing_trade_analysis(all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -415,12 +508,15 @@ def main(argv: list[str] | None = None) -> int:
         tickers = args.tickers.split(",") if args.tickers else DEFAULT_UNIVERSE
 
     started = time.time()
-    all_trades, all_trade_strategies, all_trade_scores, per_ticker_summaries, errors = run_universe_backtest(
+    all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, per_ticker_summaries, errors = run_universe_backtest(
         provider, config, tickers, args.period, min_score=args.min_score
     )
     logger.info("done in %.1fs", time.time() - started)
 
-    print_report(all_trades, all_trade_strategies, all_trade_scores, per_ticker_summaries, errors, config, args.period)
+    print_report(
+        all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs,
+        per_ticker_summaries, errors, config, args.period,
+    )
     return 0
 
 

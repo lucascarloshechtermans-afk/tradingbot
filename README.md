@@ -148,6 +148,15 @@ all three are now fixed (see `strategies/volatility_contraction.py`'s docstring,
 `strategies/mean_reversion.py`'s comment, and `risk.risk_per_trade_pct` in
 `config.example.yaml`).
 
+`backtest_screener.py` also reports, on every run (required, not optional, per
+an explicit instruction that a backtest must analyze losers, not just an
+aggregate win rate): a **losing-trade analysis** (average score/R:R at entry
+for losers vs. winners, losers broken down by exit reason/strategy/regime —
+surfacing patterns worth fixing, not just a single win-rate number) and a
+**performance-per-regime breakdown** (win rate/expectancy bucketed by the
+market regime active at entry, testing whether the same rule set actually
+performs consistently across regimes rather than assuming it does).
+
 **Latest full validation** (5y, 103 tickers, all current gates/fixes applied):
 6118 trades, 44.8% win rate, profit factor 1.15, expectancy +0.21%/trade, max 13
 consecutive losses — and for the first time, all 6 tradeable strategies are
