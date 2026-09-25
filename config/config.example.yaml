@@ -10,6 +10,9 @@ universe:
   # min_market_cap: 2000000000
   # exclude_penny_stocks: true
   # sectors: []          # leeg = alle sectoren
+  # max_spread_pct_estimate: 1.5  # Corwin-Schultz spread-schatting; hoger =
+                                    # ruimer, want de schatter loopt bij
+                                    # volatiele-maar-liquide namen vanzelf op
 
 data:
   period: "1y"             # hoeveel historie opgehaald wordt per ticker

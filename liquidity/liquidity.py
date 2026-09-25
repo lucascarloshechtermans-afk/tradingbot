@@ -77,7 +77,7 @@ def evaluate_liquidity(
     atr_pct: pd.Series,
     window: int = DEFAULT_LIQUIDITY_WINDOW,
     min_avg_dollar_volume: float = 5_000_000,
-    max_spread_pct_estimate: float = 0.5,
+    max_spread_pct_estimate: float = 1.5,
     volatile_day_threshold_percentile: float = 0.75,
 ) -> LiquidityProfile:
     """The full liquidity picture for one ticker, and whether it clears the bar

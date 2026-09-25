@@ -20,7 +20,14 @@ class UniverseConfig:
     min_market_cap: float = 2_000_000_000
     exclude_penny_stocks: bool = True
     sectors: list[str] = field(default_factory=list)
-    max_spread_pct_estimate: float = 0.5  # Corwin-Schultz estimated spread, see liquidity/liquidity.py
+    # Corwin-Schultz ESTIMATED spread, see liquidity/liquidity.py. Calibrated
+    # loose (1.5% default) on purpose: the estimator is known to run higher
+    # for genuinely volatile-but-liquid names (their wide daily high-low range
+    # partly reads as "spread" even though real execution cost is small) — a
+    # tight threshold here would systematically filter out exactly the
+    # higher-beta swing candidates this scanner is meant to surface, while a
+    # true illiquidity problem (small/thin names) shows up far above 1.5%.
+    max_spread_pct_estimate: float = 1.5
 
     @classmethod
     def from_dict(cls, raw: dict) -> "UniverseConfig":
@@ -46,7 +53,7 @@ class UniverseConfig:
             ),
             sectors=list(merged.get("sectors", [])),
             max_spread_pct_estimate=float(
-                merged.get("max_spread_pct_estimate", defaults.get("max_spread_pct_estimate", 0.5))
+                merged.get("max_spread_pct_estimate", defaults.get("max_spread_pct_estimate", 1.5))
             ),
         )
 
