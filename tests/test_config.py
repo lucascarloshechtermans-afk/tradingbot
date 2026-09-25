@@ -1,6 +1,7 @@
 import pytest
+import yaml
 
-from config.schema import AppConfig, ConfigError, UniverseConfig
+from config.schema import AppConfig, ConfigError, UniverseConfig, load_config
 
 
 def test_universe_preset_defaults_applied():
@@ -71,3 +72,23 @@ def test_risk_rejects_nonpositive_max_holding_days():
 def test_risk_max_holding_days_overridable():
     cfg = AppConfig.from_dict({"risk": {"max_holding_days": 10}})
     assert cfg.risk.max_holding_days == 10
+
+
+def test_load_config_preset_override_reapplies_full_preset_thresholds(tmp_path):
+    # A config.yaml pinned to BALANCED; preset_override=AGGRESSIVE must reapply
+    # ALL of that preset's thresholds (min_price, max_spread_pct_estimate, ...),
+    # not just relabel .universe.preset while leaving BALANCED's numbers in effect.
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.dump({"universe": {"preset": "BALANCED"}}))
+    cfg = load_config(str(path), preset_override="AGGRESSIVE")
+    assert cfg.universe.preset == "AGGRESSIVE"
+    assert cfg.universe.min_price == 3.0
+    assert cfg.universe.exclude_penny_stocks is False
+
+
+def test_load_config_without_preset_override_keeps_file_preset(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.dump({"universe": {"preset": "CONSERVATIVE"}}))
+    cfg = load_config(str(path))
+    assert cfg.universe.preset == "CONSERVATIVE"
+    assert cfg.universe.min_price == 20.0

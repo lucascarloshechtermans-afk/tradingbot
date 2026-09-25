@@ -605,9 +605,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
-    config = load_config(args.config)
-    if args.preset:
-        config.universe.preset = args.preset
+    config = load_config(args.config, preset_override=args.preset)
 
     if args.dry_run:
         logger.info("running in --dry-run mode: synthetic data, no network required")

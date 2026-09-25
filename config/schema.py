@@ -281,7 +281,7 @@ class AppConfig:
         )
 
 
-def load_config(path: str | Path | None = None) -> AppConfig:
+def load_config(path: str | Path | None = None, preset_override: str | None = None) -> AppConfig:
     if path is None:
         candidate = Path("config.yaml")
         path = candidate if candidate.exists() else Path("config/config.example.yaml")
@@ -290,4 +290,12 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         raise ConfigError(f"Config file not found: {path}")
     with open(path) as f:
         raw = yaml.safe_load(f) or {}
+    if preset_override:
+        # Re-derive the FULL preset (thresholds, not just the label) by overriding
+        # the preset key in the raw dict before parsing, rather than mutating the
+        # already-built AppConfig afterwards -- setting .universe.preset on a
+        # built config only relabels it, it doesn't reapply min_price/
+        # min_avg_dollar_volume/min_market_cap/max_spread_pct_estimate for the
+        # new preset, silently leaving the OLD preset's thresholds in effect.
+        raw = {**raw, "universe": {**raw.get("universe", {}), "preset": preset_override}}
     return AppConfig.from_dict(raw)
