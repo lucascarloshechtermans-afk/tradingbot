@@ -84,6 +84,14 @@ class RiskConfig:
     max_portfolio_risk_pct: float = 6.0
     max_position_pct: float = 20.0
     max_holding_days: int = 5
+    # How far a target is allowed to sit (in ATR*sqrt(holding_days) units) before
+    # cap_target_to_horizon pulls it in — see risk/stops_targets.py. Lowered from
+    # the function's own 1.5 default after a backtest showed only 21.7% of
+    # winning trades ever actually reached their formal target (the rest were
+    # merely still-positive at the 5-day forced close) — 1.5x implied a target
+    # ~3.35 ATRs away against a 2-ATR stop, a move that a 5-day swing rarely
+    # completes. See README's "Target realism" section for the validated effect.
+    target_volatility_multiplier: float = 1.2
 
     @classmethod
     def from_dict(cls, raw: dict) -> "RiskConfig":
@@ -93,6 +101,7 @@ class RiskConfig:
             max_portfolio_risk_pct=float(raw.get("max_portfolio_risk_pct", 6.0)),
             max_position_pct=float(raw.get("max_position_pct", 20.0)),
             max_holding_days=int(raw.get("max_holding_days", 5)),
+            target_volatility_multiplier=float(raw.get("target_volatility_multiplier", 1.2)),
         )
         if cfg.account_size <= 0:
             raise ConfigError("risk.account_size must be positive")

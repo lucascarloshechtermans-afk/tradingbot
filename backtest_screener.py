@@ -133,7 +133,10 @@ def make_screener_functions(
         atr = ctx.atr14.iloc[-1]
         if pd.isna(atr) or atr <= 0:
             return False
-        trade_levels = plan_trade_levels(ctx.last_close, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0))
+        trade_levels = plan_trade_levels(
+            ctx.last_close, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0),
+            target_volatility_multiplier=config.risk.target_volatility_multiplier,
+        )
         if trade_levels is None or trade_levels.risk_reward < gates.min_risk_reward:
             return False
         rr_by_bar[len(history_so_far)] = trade_levels.risk_reward
@@ -168,7 +171,10 @@ def make_screener_functions(
         atr = ctx.atr14.iloc[-1]
         if pd.isna(atr) or atr <= 0:
             return entry * 0.95
-        trade_levels = plan_trade_levels(entry, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0))
+        trade_levels = plan_trade_levels(
+            entry, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0),
+            target_volatility_multiplier=config.risk.target_volatility_multiplier,
+        )
         if trade_levels is None:
             return entry * 0.95
         planned_levels_by_bar[len(history_before_entry)] = trade_levels
@@ -448,6 +454,14 @@ def print_report(all_trades, all_trade_strategies, all_trade_scores, all_trade_r
     print(f"\n{'--- Exit reasons ---':<40}")
     for reason, count in exit_reasons.most_common():
         print(f"{reason:<20}{count} ({count / len(closed) * 100:.0f}%)" if closed else "")
+
+    print(f"\n{'--- Exit reason by strategy (does the target ever get hit?) ---':<40}")
+    print(f"{'Strategy':<26}{'Target':<9}{'Stop':<9}{'Time':<9}{'Target-hit-rate'}")
+    for strategy, trades in sorted(by_strategy.items(), key=lambda kv: -len(kv[1])):
+        reason_counts = Counter(t.exit_reason for t in trades)
+        target_n, stop_n, time_n = reason_counts.get("target", 0), reason_counts.get("stop", 0), reason_counts.get("time_exit", 0)
+        target_rate = target_n / len(trades) * 100 if trades else 0
+        print(f"{strategy:<26}{target_n:<9}{stop_n:<9}{time_n:<9}{target_rate:.1f}%")
 
     print(f"\n{'--- Best / worst tickers (min 3 trades) ---':<40}")
     qualifying = [s for s in per_ticker_summaries if s["trades"] >= 3]
