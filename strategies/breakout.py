@@ -47,6 +47,24 @@ class BreakoutStrategy(Strategy):
         if nearest_resistance and (nearest_resistance.price - ctx.last_close) / ctx.last_close * 100 < 2:
             risks.append(f"Resistance nearby at {nearest_resistance.price:.2f}")
 
+        # A close breaking today's N-day high isn't automatically a strong
+        # breakout — check the bigger historical picture too, since a 20-day
+        # high can sit well below a much more significant ceiling.
+        hist_ctx = ctx.historical_context
+        if hist_ctx is not None:
+            if hist_ctx.is_fresh_52w_high:
+                reasons.append("Breaking out to a fresh 52-week high — no overhead supply from the past year")
+                confidence += 12
+            overhead = hist_ctx.major_resistance_overhead
+            if overhead is not None:
+                dist_pct = (overhead.price - ctx.last_close) / ctx.last_close * 100
+                if dist_pct < 5 and overhead.touches >= 2:
+                    risks.append(
+                        f"A stronger historical resistance sits {dist_pct:.1f}% above at ${overhead.price:.2f} "
+                        f"({overhead.touches} prior touches) — this may be a local breakout, not a break of the bigger ceiling"
+                    )
+                    confidence -= 12
+
         if ctx.atr_pct.iloc[-1] > 6:
             risks.append(f"ATR high ({ctx.atr_pct.iloc[-1]:.1f}% of price) — wide expected swings")
 

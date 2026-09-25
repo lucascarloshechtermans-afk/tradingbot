@@ -28,6 +28,34 @@ def test_breakout_matches_on_confirmed_breakout_with_volume():
     assert len(signal.reasons) > 0
 
 
+def test_breakout_rewards_fresh_52w_high_over_capped_breakout():
+    from dataclasses import replace
+
+    from price_action.historical_context import HistoricalContext
+    from price_action.levels import Level
+
+    ctx = context_from(breakout_history())
+
+    fresh_high = replace(ctx, historical_context=HistoricalContext(
+        fifty_two_week_high=ctx.last_close, fifty_two_week_low=ctx.last_close * 0.5,
+        distance_to_52w_high_pct=0.0, distance_to_52w_low_pct=100.0,
+        all_time_high_in_window=ctx.last_close, is_fresh_52w_high=True, major_resistance_overhead=None,
+    ))
+    capped_by_ceiling = replace(ctx, historical_context=HistoricalContext(
+        fifty_two_week_high=ctx.last_close * 1.5, fifty_two_week_low=ctx.last_close * 0.5,
+        distance_to_52w_high_pct=-33.0, distance_to_52w_low_pct=100.0,
+        all_time_high_in_window=ctx.last_close * 1.5, is_fresh_52w_high=False,
+        major_resistance_overhead=Level(price=ctx.last_close * 1.02, kind="resistance", touches=4, strength=80, last_touch=None),
+    ))
+
+    fresh_signal = BreakoutStrategy().evaluate(fresh_high)
+    capped_signal = BreakoutStrategy().evaluate(capped_by_ceiling)
+    assert fresh_signal.matched is True and capped_signal.matched is True
+    assert fresh_signal.confidence > capped_signal.confidence
+    assert any("fresh 52-week high" in r.lower() for r in fresh_signal.reasons)
+    assert any("stronger historical resistance" in r.lower() for r in capped_signal.risks)
+
+
 def test_breakout_does_not_match_flat_market():
     ctx = context_from(flat_history())
     signal = BreakoutStrategy().evaluate(ctx)

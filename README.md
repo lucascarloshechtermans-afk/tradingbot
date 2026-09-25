@@ -335,6 +335,16 @@ Beyond the headline indicators above, every scan also computes and exposes:
 - **Gap classification** (`price_action/patterns.py:classify_gap`): breakaway
   (gapped out of a consolidation), exhaustion (gapped while already far extended),
   or continuation (neither) — an honest heuristic, not a certainty.
+- **52-week / historical context** (`price_action/historical_context.py`):
+  52-week high/low and distance to each, plus the strongest historical
+  resistance level (from the existing swing-point clustering) still above the
+  current price. `all_time_high_in_window` is honestly named — it's the highest
+  close within whatever history was fetched, not necessarily the stock's real
+  all-time high unless `config.data.period` is `"max"`. This feeds directly
+  into Breakout quality (see below): a close above today's 20-day high isn't
+  treated as equally bullish whether it's a fresh 52-week high with no overhead
+  supply, or a local breakout still sitting well under a much bigger historical
+  ceiling.
 
 ## The 7 strategies
 
@@ -342,6 +352,10 @@ Each strategy is an independent module (`strategies/*.py`) with its own matching
 logic — never a single giant if-statement:
 
 1. **Breakout** — close breaks the prior N-day high with volume confirmation.
+   Rewarded further when it's a fresh 52-week high (no overhead supply);
+   flagged as a risk when a stronger historical resistance level still sits
+   close above — a local N-day-high break isn't automatically a real breakout
+   of the bigger picture (see "52-week / historical context" above).
 2. **Pullback** — an uptrend pulls back to EMA21 without breaking structure, RSI
    cools without crashing.
 3. **Trend Continuation** — an already-strong trend (ADX>25, HH/HL structure)

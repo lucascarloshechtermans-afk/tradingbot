@@ -37,6 +37,7 @@ from indicators.volume import (
 from indicators.vwap import anchored_vwap, default_vwap_anchor_index, vwap_slope
 from price_action.candlesticks import detect_all as detect_candlesticks
 from price_action.fibonacci import fibonacci_retracement_levels
+from price_action.historical_context import HistoricalContext, compute_historical_context
 from price_action.levels import Level, confluence_score, find_levels, nearest_level
 from price_action.patterns import classify_gap
 from price_action.structure import classify_structure_break, detect_liquidity_sweep
@@ -134,6 +135,8 @@ class TickerContext:
     large_gap_frequency_pct: float | None = None
     up_gap_bias: float | None = None
 
+    historical_context: HistoricalContext | None = None
+
     @property
     def free_float_pct(self) -> float | None:
         if self.float_shares is None or self.shares_outstanding is None or self.shares_outstanding <= 0:
@@ -228,6 +231,7 @@ def build_context(
 
     relative_strength = compute_relative_strength(close, benchmark_close) if benchmark_close is not None else None
     gap_risk = analyze_gap_risk(history)
+    historical_context = compute_historical_context(close, last_close, levels)
 
     return TickerContext(
         ticker=ticker,
@@ -299,4 +303,5 @@ def build_context(
         avg_abs_gap_pct=gap_risk.avg_abs_gap_pct,
         large_gap_frequency_pct=gap_risk.large_gap_frequency_pct,
         up_gap_bias=gap_risk.up_gap_bias,
+        historical_context=historical_context,
     )
