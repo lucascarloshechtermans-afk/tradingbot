@@ -255,6 +255,46 @@ instead treats the three as votes and caps their *combined* contribution
 the Accumulation/Distribution line, which are both cumulative volume-flow measures
 built from the same bars.
 
+## Liquidity, float, and overnight gap risk
+
+Three more filters/context signals, all deliberately kept OUTSIDE the weighted
+score — they're either hard executability gates or pure risk disclosure, not
+"more bullish/bearish evidence":
+
+- **Liquidity** (`liquidity/liquidity.py`) goes beyond a simple volume filter, per
+  an explicit design requirement: average dollar volume AND an estimated
+  bid-ask spread are both hard universe gates (`config.universe.max_spread_pct_estimate`,
+  default 0.5%, tighter for CONSERVATIVE/looser for AGGRESSIVE presets). Real
+  historical bid-ask/quote data isn't available from this free data source, so
+  the spread is estimated with the Corwin & Schultz (2012) high-low estimator —
+  a published, peer-reviewed method for estimating effective spread from daily
+  OHLC alone (see the module docstring for the citation and exact formula), not
+  a guess. The module also compares average dollar volume on the most volatile
+  vs. calmest days in the trailing window, and flags (as a risk note, not a
+  gate) when liquidity measurably thins out exactly when a fast exit would be
+  most needed.
+- **Free float / shares outstanding** (`data/provider.py:TickerInfo`, best-effort
+  via yfinance `.info`) is used strictly as **risk context, never a score
+  input** — two otherwise-identical setups score identically regardless of
+  float, per the explicit design requirement not to treat a low float as
+  automatically bullish or bearish. A low free-float or small share count adds a
+  risk note (can move more erratically than a typical large-cap); so does
+  elevated short interest (`short_percent_of_float`, a point-in-time snapshot
+  only — no free historical short-interest time series exists), explicitly
+  without an automatic "high short interest = squeeze = buy" rule.
+- **Overnight gap risk** (`risk/gap_risk.py`) is directly relevant to a
+  multi-day hold: a ~5-trading-day position sits through ~4 overnight sessions
+  where price can jump straight past a stop with no fill at the stop price.
+  `avg_gap_pct`/`avg_abs_gap_pct`/`large_gap_frequency_pct`/`up_gap_bias` are
+  computed purely from OHLCV (safe to use walk-forward in the backtest, no
+  look-ahead) and surfaced as a risk note when gaps are frequent. Which
+  fraction of those gaps coincided with a **known** earnings date is a
+  **live-scan-only** enrichment (`earnings_gap_fraction`) — correctly
+  attributing a historical gap to earnings in a backtest would require knowing
+  exactly when that earnings date was first announced to stay causal, which
+  isn't available, so this cross-reference is deliberately not computed in
+  `backtest_screener.py` to avoid a subtle look-ahead bug.
+
 ### Deep technicals (`TickerContext`, `strategies/context.py`)
 
 Beyond the headline indicators above, every scan also computes and exposes:

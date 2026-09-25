@@ -105,12 +105,21 @@ class YFinanceProvider(DataProvider):
         sector = raw_info.get("sector")
         industry = raw_info.get("industry")
         market_cap = raw_info.get("marketCap")
+        shares_outstanding = raw_info.get("sharesOutstanding")
+        float_shares = raw_info.get("floatShares")
+        short_percent_of_float = raw_info.get("shortPercentOfFloat")
         if sector is None:
             missing.append("sector")
         if industry is None:
             missing.append("industry")
         if market_cap is None:
             missing.append("market_cap")
+        if shares_outstanding is None:
+            missing.append("shares_outstanding")
+        if float_shares is None:
+            missing.append("float_shares")
+        if short_percent_of_float is None:
+            missing.append("short_percent_of_float")
 
         fundamentals = {}
         for local_name, yf_key in EXPECTED_FUNDAMENTAL_FIELDS.items():
@@ -125,6 +134,9 @@ class YFinanceProvider(DataProvider):
             sector=sector,
             industry=industry,
             market_cap=market_cap,
+            shares_outstanding=shares_outstanding,
+            float_shares=float_shares,
+            short_percent_of_float=float(short_percent_of_float * 100) if short_percent_of_float is not None else None,
             fundamentals=fundamentals,
             missing_fields=missing,
         )

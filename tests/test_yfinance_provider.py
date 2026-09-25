@@ -110,6 +110,27 @@ def test_get_info_reports_missing_fields_explicitly(monkeypatch):
     assert info.market_cap is None
     assert "market_cap" in info.missing_fields
     assert "industry" in info.missing_fields
+    assert "shares_outstanding" in info.missing_fields
+    assert "float_shares" in info.missing_fields
+    assert "short_percent_of_float" in info.missing_fields
+
+
+def test_get_info_populates_float_and_short_interest(monkeypatch):
+    monkeypatch.setattr(
+        "yfinance.Ticker",
+        lambda t: FakeTicker(t, info={
+            "sector": "Technology",
+            "sharesOutstanding": 1_000_000_000,
+            "floatShares": 800_000_000,
+            "shortPercentOfFloat": 0.05,  # yfinance reports this as a fraction, not a percent
+        }),
+    )
+    provider = YFinanceProvider(cache=None, max_retries=1)
+    info = provider.get_info("FAKE")
+    assert info.shares_outstanding == 1_000_000_000
+    assert info.float_shares == 800_000_000
+    assert info.short_percent_of_float == pytest.approx(5.0)
+    assert info.free_float_pct == pytest.approx(80.0)
 
 
 def test_get_earnings_dates_returns_empty_on_failure(monkeypatch):

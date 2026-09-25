@@ -32,6 +32,7 @@ from events.earnings import EarningsWarning, check_earnings_proximity
 from indicators.trend import sma
 from market_regime.regime import MarketRegime, classify_market_regime
 from relative_strength.relative_strength import compute_universe_rs_ranks
+from risk.gap_risk import earnings_gap_fraction
 from risk.stops_targets import plan_trade_levels
 from scoring.multi_timeframe import multi_timeframe_confluence, resample_weekly
 from scoring.scorer import ScoreResult, score_ticker
@@ -99,6 +100,7 @@ def build_trade_plan(
     market_regime: MarketRegime | None,
     earnings_warning: EarningsWarning | None,
     rs_rank: float | None = None,
+    earnings_gap_frac: float | None = None,
 ) -> TradePlan | None:
     atr = ctx.atr14.iloc[-1]
     if pd.isna(atr) or atr <= 0:
@@ -152,6 +154,33 @@ def build_trade_plan(
     risks = list(best.risks) if best else []
     if earnings_warning and earnings_warning.message:
         risks.append(earnings_warning.message)
+
+    # Free float / shares outstanding: RISK CONTEXT ONLY, never a bullish/bearish
+    # input to the score — a low-float name can move (in either direction) more
+    # violently than a large-cap on the same news/volume, which matters for a
+    # multi-day hold's stop distance and slippage risk, but says nothing about
+    # direction.
+    if ctx.free_float_pct is not None and ctx.free_float_pct < 30:
+        risks.append(f"Low free float ({ctx.free_float_pct:.0f}% of shares outstanding) — can move more erratically than a typical large-cap")
+    elif ctx.shares_outstanding is not None and ctx.shares_outstanding < 50_000_000:
+        risks.append(f"Small share count outstanding ({ctx.shares_outstanding / 1e6:.0f}M) — can move more erratically than a typical large-cap")
+    if ctx.short_percent_of_float is not None and ctx.short_percent_of_float > 15:
+        risks.append(f"Short interest ~{ctx.short_percent_of_float:.0f}% of float — added volatility risk in both directions, not a squeeze signal on its own")
+
+    # Overnight gap risk: a ~5-trading-day hold sits through ~4 overnight
+    # sessions where price can jump past a stop with no chance to exit at the
+    # stop price — this is disclosure, not a hard gate (no gap frequency is
+    # universally "too high" for every setup/account).
+    if ctx.large_gap_frequency_pct is not None and ctx.large_gap_frequency_pct >= 10:
+        direction_note = ""
+        if ctx.up_gap_bias is not None and (ctx.up_gap_bias >= 0.7 or ctx.up_gap_bias <= 0.3):
+            direction_note = f", historically skewed {'up' if ctx.up_gap_bias >= 0.7 else 'down'}"
+        risks.append(
+            f"Elevated overnight gap risk: large gaps on {ctx.large_gap_frequency_pct:.0f}% of recent sessions{direction_note} "
+            f"— a stop can be jumped over intact across the ~4 overnight holds in a 5-day swing"
+        )
+        if earnings_gap_frac is not None and earnings_gap_frac >= 0.5:
+            risks.append(f"{earnings_gap_frac * 100:.0f}% of those large gaps coincided with a known earnings date")
 
     # Per-category breakdown (trend, market structure, momentum, volume, ...),
     # each with its own score/weight/contribution/reasons — surfaced on the
@@ -222,6 +251,8 @@ def scan_ticker(
     ctx = build_context(
         ticker, history, benchmark_close=spy_close, sector_strength=sector_strength,
         market_cap=info.market_cap, sector_name=info.sector,
+        shares_outstanding=info.shares_outstanding, float_shares=info.float_shares,
+        short_percent_of_float=info.short_percent_of_float,
     )
 
     weekly_history = resample_weekly(history)
@@ -235,8 +266,13 @@ def scan_ticker(
         earnings_dates, as_of=datetime.now(), buffer_days=config.earnings.buffer_days,
         avoid_earnings=config.earnings.avoid_earnings,
     )
+    # Live-scan-only enrichment: which fraction of this ticker's recent large
+    # overnight gaps coincided with a KNOWN earnings date. Not computed in the
+    # backtest — see risk/gap_risk.py's docstring for why (avoiding a subtle
+    # look-ahead bug around when an earnings date was actually first known).
+    earnings_gap_frac = earnings_gap_fraction(history, earnings_dates)
 
-    return build_trade_plan(ticker, ctx, weekly_ctx, config, market_regime, earnings_warning, rs_rank)
+    return build_trade_plan(ticker, ctx, weekly_ctx, config, market_regime, earnings_warning, rs_rank, earnings_gap_frac)
 
 
 @dataclass
@@ -403,11 +439,15 @@ class SyntheticDataProvider(DataProvider):
 
     def get_info(self, ticker: str) -> TickerInfo:
         sectors = ["Technology", "Healthcare", "Financial Services", "Energy", "Consumer Cyclical"]
+        shares_outstanding = float(200_000_000 + hash(ticker) % 800_000_000)
         return TickerInfo(
             ticker=ticker,
             sector=sectors[hash(ticker) % len(sectors)],
             industry="Synthetic Industry",
             market_cap=float(5_000_000_000 + hash(ticker) % 50_000_000_000),
+            shares_outstanding=shares_outstanding,
+            float_shares=shares_outstanding * 0.85,
+            short_percent_of_float=float(2 + hash(ticker) % 10),
         )
 
     def get_earnings_dates(self, ticker: str):

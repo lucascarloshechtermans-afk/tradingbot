@@ -185,6 +185,22 @@ def test_build_trade_plan_blocks_trend_following_setup_on_low_rs_rank():
     assert plan is None
 
 
+def test_build_trade_plan_flags_low_float_as_risk_not_score():
+    from dataclasses import replace
+
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    low_float_ctx = replace(ctx, shares_outstanding=1_000_000_000.0, float_shares=100_000_000.0)  # 10% free float
+    plan = build_trade_plan("LOWFLOAT", low_float_ctx, low_float_ctx, config, None, None, rs_rank=100.0)
+    assert plan is not None
+    assert any("free float" in r.lower() for r in plan.risks)
+    # context, not a score input: two otherwise-identical setups shouldn't score
+    # differently just because one has a float figure attached
+    high_float_ctx = replace(ctx, shares_outstanding=1_000_000_000.0, float_shares=950_000_000.0)
+    plan_high_float = build_trade_plan("HIGHFLOAT", high_float_ctx, high_float_ctx, config, None, None, rs_rank=100.0)
+    assert plan_high_float.score == plan.score
+
+
 def test_build_trade_plan_populates_category_breakdown():
     ctx = context_from(breakout_history())
     config = AppConfig()

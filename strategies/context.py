@@ -41,6 +41,7 @@ from price_action.levels import Level, confluence_score, find_levels, nearest_le
 from price_action.patterns import classify_gap
 from price_action.structure import classify_structure_break, detect_liquidity_sweep
 from relative_strength.relative_strength import RelativeStrength, compute_relative_strength
+from risk.gap_risk import analyze_gap_risk
 from sector.rotation import SectorStrength
 
 FIB_LOOKBACK_BARS = 60
@@ -124,6 +125,20 @@ class TickerContext:
     sector_strength: SectorStrength | None = None
     market_cap: float | None = None
     sector_name: str | None = None
+    shares_outstanding: float | None = None
+    float_shares: float | None = None
+    short_percent_of_float: float | None = None  # point-in-time snapshot only, no historical series available
+
+    avg_gap_pct: float | None = None
+    avg_abs_gap_pct: float | None = None
+    large_gap_frequency_pct: float | None = None
+    up_gap_bias: float | None = None
+
+    @property
+    def free_float_pct(self) -> float | None:
+        if self.float_shares is None or self.shares_outstanding is None or self.shares_outstanding <= 0:
+            return None
+        return self.float_shares / self.shares_outstanding * 100
 
     @property
     def close(self) -> pd.Series:
@@ -157,6 +172,9 @@ def build_context(
     sector_strength: SectorStrength | None = None,
     market_cap: float | None = None,
     sector_name: str | None = None,
+    shares_outstanding: float | None = None,
+    float_shares: float | None = None,
+    short_percent_of_float: float | None = None,
     swing_order: int = 3,
 ) -> TickerContext:
     close, open_, high, low, volume = (
@@ -209,6 +227,7 @@ def build_context(
     )
 
     relative_strength = compute_relative_strength(close, benchmark_close) if benchmark_close is not None else None
+    gap_risk = analyze_gap_risk(history)
 
     return TickerContext(
         ticker=ticker,
@@ -273,4 +292,11 @@ def build_context(
         sector_strength=sector_strength,
         market_cap=market_cap,
         sector_name=sector_name,
+        shares_outstanding=shares_outstanding,
+        float_shares=float_shares,
+        short_percent_of_float=short_percent_of_float,
+        avg_gap_pct=gap_risk.avg_gap_pct,
+        avg_abs_gap_pct=gap_risk.avg_abs_gap_pct,
+        large_gap_frequency_pct=gap_risk.large_gap_frequency_pct,
+        up_gap_bias=gap_risk.up_gap_bias,
     )

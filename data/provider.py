@@ -20,8 +20,20 @@ class TickerInfo:
     sector: str | None = None
     industry: str | None = None
     market_cap: float | None = None
+    shares_outstanding: float | None = None
+    float_shares: float | None = None
+    short_percent_of_float: float | None = None  # a point-in-time snapshot only — no free historical time series exists
     fundamentals: dict = field(default_factory=dict)
     missing_fields: list[str] = field(default_factory=list)
+
+    @property
+    def free_float_pct(self) -> float | None:
+        """Free-float shares as a % of shares outstanding — context on how much of
+        the company can actually trade hands, not itself a bullish/bearish signal.
+        None when either input is unavailable (never guessed)."""
+        if self.float_shares is None or self.shares_outstanding is None or self.shares_outstanding <= 0:
+            return None
+        return self.float_shares / self.shares_outstanding * 100
 
 
 class DataProvider(ABC):

@@ -7,6 +7,7 @@ import pandas as pd
 
 from config.schema import UniverseConfig
 from data.provider import TickerInfo
+from liquidity.liquidity import average_dollar_volume, corwin_schultz_spread_estimate
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +45,6 @@ class UniverseFilterResult:
     excluded: dict[str, str] = field(default_factory=dict)
 
 
-def average_dollar_volume(history: pd.DataFrame, window: int = 20) -> float | None:
-    if history is None or history.empty or len(history) < window:
-        return None
-    recent = history.tail(window)
-    dollar_volume = (recent["close"] * recent["volume"]).mean()
-    return float(dollar_volume) if pd.notna(dollar_volume) else None
-
-
 def apply_universe_filters(
     candidates: dict[str, tuple[TickerInfo, pd.DataFrame]],
     config: UniverseConfig,
@@ -81,6 +74,21 @@ def apply_universe_filters(
                 f"avg dollar volume {dollar_vol:,.0f} < min {config.min_avg_dollar_volume:,.0f}"
             )
             continue
+
+        # Dollar volume alone doesn't capture actual execution cost — a stock can
+        # have "enough" volume at a wide effective spread and still be expensive
+        # to trade. Real historical bid/ask isn't available from this free data
+        # source, so this uses the Corwin-Schultz (2012) high-low spread
+        # ESTIMATOR (see liquidity/liquidity.py) rather than skipping the check.
+        if len(history) >= 40:
+            spread_series = corwin_schultz_spread_estimate(history["high"], history["low"])
+            spread_last = spread_series.iloc[-1] if len(spread_series) else float("nan")
+            if pd.notna(spread_last) and spread_last > config.max_spread_pct_estimate:
+                result.excluded[ticker] = (
+                    f"estimated spread {spread_last:.2f}% > max {config.max_spread_pct_estimate:.2f}% "
+                    "(Corwin-Schultz estimate)"
+                )
+                continue
 
         if info.market_cap is None:
             result.excluded[ticker] = "market cap unavailable from provider"

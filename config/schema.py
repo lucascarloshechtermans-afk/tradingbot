@@ -20,6 +20,7 @@ class UniverseConfig:
     min_market_cap: float = 2_000_000_000
     exclude_penny_stocks: bool = True
     sectors: list[str] = field(default_factory=list)
+    max_spread_pct_estimate: float = 0.5  # Corwin-Schultz estimated spread, see liquidity/liquidity.py
 
     @classmethod
     def from_dict(cls, raw: dict) -> "UniverseConfig":
@@ -44,6 +45,9 @@ class UniverseConfig:
                 merged.get("exclude_penny_stocks", defaults.get("exclude_penny_stocks", True))
             ),
             sectors=list(merged.get("sectors", [])),
+            max_spread_pct_estimate=float(
+                merged.get("max_spread_pct_estimate", defaults.get("max_spread_pct_estimate", 0.5))
+            ),
         )
 
 
