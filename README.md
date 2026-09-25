@@ -784,8 +784,16 @@ Documented up front so nothing here pretends to be more complete than it is:
 - **Fundamentals**: pulled from yfinance's `.info` (P/E, margins, ROE,
   debt/equity, etc.) best-effort — fields that are genuinely unavailable are
   listed in `TickerInfo.missing_fields`, never silently defaulted.
-- **Institutional ownership**: not reliably available from this data source;
-  treated as unavailable rather than guessed.
+- **Institutional ownership**: not reliably available from yfinance; treated
+  as unavailable rather than guessed. **Update**: Alpha Vantage's
+  `INSTITUTIONAL_HOLDINGS` endpoint (connected as an MCP tool this session,
+  free tier) DOES provide this — verified live for SMCI (892 holders, 78%
+  institutional ownership, per-holder position changes with dates). Not wired
+  into `scanner.py`/`backtest_screener.py`: those run as standalone Python
+  processes with no MCP access, and the connector's API key isn't exposed as
+  an environment variable to them — usable only interactively (by an agent
+  in a chat session), not from the automated pipeline, unless the user
+  separately supplies the API key as an env var for a direct HTTP client.
 - **Walk-forward is validation, not optimization**: nothing here automatically
   re-fits scoring weights or strategy parameters per window. That's a
   substantially larger project (parameter search + overfitting control) and is a
@@ -803,7 +811,16 @@ Documented up front so nothing here pretends to be more complete than it is:
   splits are (via yfinance's calendar data), but general macro events (Fed
   decisions, CPI prints, etc.) and other news catalysts have no free, reliable
   data source available here — rather than fabricate or guess at these, they're
-  simply left out.
+  simply left out. **Update**: Alpha Vantage's `NEWS_SENTIMENT` (free tier)
+  works and returns genuinely useful, current, per-article sentiment-scored
+  news — verified live for MRNA, which correctly surfaced "Moderna Stock
+  Reached New 52-Week High" published the same day as a live scan that
+  independently flagged MRNA on pure technicals, a real (if anecdotal)
+  catalyst-confirms-technical-signal hit. Free tier is capped at 25
+  requests/day, which rules out scanning the full ~130-ticker universe but
+  comfortably covers checking a day's handful of final candidates by hand.
+  Same integration boundary as institutional ownership above: interactive-
+  only, not wired into the automated scanner.
 - **Supply/demand "zones"** (as opposed to the price-point levels this scanner
   builds from swing highs/lows) were deliberately not implemented — turning a
   zone into a well-defined, testable rule is considerably more subjective than a
@@ -828,7 +845,13 @@ Documented up front so nothing here pretends to be more complete than it is:
   project's own backtest-everything standard. Rather than wire up a
   live-only, never-backtested IV/options-flow signal, it's left out entirely.
   A future paid data source (e.g. a historical IV surface provider) is the
-  natural way to add this properly.
+  natural way to add this properly. **Checked concretely**: Alpha Vantage's
+  `HISTORICAL_OPTIONS` claims 15+ years of options history with IV and Greeks
+  by date, which would solve this cleanly if accessible — but a live test
+  call returned `"This is a premium endpoint"`, confirmed not usable on the
+  connected account's current (free) API key. This limitation stands, but
+  the concrete next step (upgrade that one endpoint) is now known rather
+  than "look for a paid source someday."
 - **Short interest has no historical time series either.** yfinance's
   `shortPercentOfFloat` (used for the free-float risk note — see "Liquidity,
   float, and overnight gap risk" above) is a point-in-time snapshot with no
