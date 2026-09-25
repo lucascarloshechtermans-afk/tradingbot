@@ -169,11 +169,14 @@ def test_all_strategies_are_registered():
     assert len(names) == 7  # all distinct
 
 
-def test_volatility_contraction_is_tradeable_after_vcp_rework():
-    # re-enabled (tradeable=True, the base-class default) after adding VCP-style
-    # preconditions (prior momentum + real volume dry-up) meant to fix the
-    # negative expectancy the bare-squeeze version showed in backtesting
-    assert VolatilityContractionStrategy().tradeable is True
+def test_volatility_contraction_is_not_tradeable():
+    # Was briefly re-enabled as tradeable after the VCP rework fixed its
+    # negative expectancy, but three separate 5-year backtests since then each
+    # showed only 26-31 trades total with the expectancy SIGN flipping between
+    # runs — too small a sample to trust as a primary entry trigger. Reverted
+    # to tradeable=False: it can still fire and contribute to price-action
+    # confirmation, just never drive entry/stop/target on its own.
+    assert VolatilityContractionStrategy().tradeable is False
 
 
 def test_best_tradeable_signal_ignores_untradeable_strategies():

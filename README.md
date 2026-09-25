@@ -320,8 +320,11 @@ Every strategy has a `tradeable` flag (`strategies/base.py`). A non-tradeable
 strategy can still fire, appear in reasons, and contribute to the price-action
 score, but can never be picked as the primary setup that drives entry/stop/target
 (`strategies.best_tradeable_signal` is the single shared rule the scanner and
-backtester both use) — the mechanism exists for exactly this kind of
-watchlist-only signal if a future backtest calls for it again.
+backtester both use). Volatility Contraction uses this: it fires far more rarely
+than the other 6 (26-31 trades across three separate 5-year backtests, vs.
+hundreds-to-thousands each for the rest), and its expectancy sign flipped between
+those three runs — too small and unstable a sample to trust as a primary trigger,
+even though the setup itself (see "The 7 strategies" above) is genuine.
 
 Candlestick patterns (`price_action/candlesticks.py`) are detected but never used
 as a standalone signal — they only contribute as supporting context inside a

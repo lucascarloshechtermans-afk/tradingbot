@@ -19,11 +19,21 @@ class VolatilityContractionStrategy(Strategy):
     generally shows only ~55-60% win rate with real whipsaw risk. Requiring an
     actual prior move AND real volume dry-up (not just low RVOL on one day) is
     meant to filter out the low-quality squeezes that were dragging the original
-    version's expectancy negative — re-validate with a fresh backtest before
-    trusting this version any more than the last.
+    version's expectancy negative.
+
+    Re-validated across three separate 5-year, 102-ticker backtests since: it
+    fires extremely rarely (26-31 trades total each time, vs. hundreds-to-
+    thousands for every other strategy) and its expectancy sign FLIPPED between
+    runs (+0.52%, +0.40%, +0.39%, then -0.05%) despite only small, unrelated
+    changes elsewhere in the codebase — a textbook symptom of a sample too small
+    to estimate a real edge from. `tradeable = False` below means it can still
+    fire, appear in reasons, and contribute to the price-action score as
+    confirmation, but is never picked as the primary setup that drives entry —
+    exactly the "not enough data to trust alone" situation this flag exists for.
     """
 
     name = "Volatility Contraction"
+    tradeable = False
 
     def evaluate(self, ctx: TickerContext) -> StrategySignal:
         reasons: list[str] = []
