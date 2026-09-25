@@ -36,7 +36,7 @@ from risk.stops_targets import plan_trade_levels
 from scoring.multi_timeframe import multi_timeframe_confluence, resample_weekly
 from scoring.scorer import ScoreResult, score_ticker
 from sector.rotation import SECTOR_ETFS, SectorStrength, rank_sectors, sector_strength_for
-from strategies import ALL_STRATEGIES, best_tradeable_signal
+from strategies import ALL_STRATEGIES, COUNTER_TREND_STRATEGY_NAMES, best_tradeable_signal
 from strategies.base import StrategySignal
 from strategies.context import TickerContext, build_context
 
@@ -97,6 +97,7 @@ def build_trade_plan(
     config: AppConfig,
     market_regime: MarketRegime | None,
     earnings_warning: EarningsWarning | None,
+    rs_rank: float | None = None,
 ) -> TradePlan | None:
     atr = ctx.atr14.iloc[-1]
     if pd.isna(atr) or atr <= 0:
@@ -105,6 +106,18 @@ def build_trade_plan(
     entry = ctx.last_close
     matched_strategies = evaluate_strategies(ctx)
     best = best_tradeable_signal(matched_strategies)
+
+    gates = config.gates
+    # Mean Reversion / Support Bounce buy weakness by design, so the RS/regime
+    # gates (which require the stock/market to already be STRONG) are exempted
+    # for them — see Strategy.counter_trend. A ticker with no confirmed setup at
+    # all still goes through the gates, matching the pre-gate behavior.
+    is_counter_trend = best is not None and best.strategy in COUNTER_TREND_STRATEGY_NAMES
+    if not is_counter_trend:
+        if gates.regime_gate_enabled and market_regime is not None and market_regime.label in gates.blocked_regime_labels:
+            return None
+        if rs_rank is not None and rs_rank < gates.min_rs_percentile:
+            return None
 
     max_holding_days = config.risk.max_holding_days
 
@@ -183,14 +196,10 @@ def scan_ticker(
         logger.info("skipping %s: insufficient history (%d bars)", ticker, len(history))
         return None
 
-    gates = config.gates
-    if gates.regime_gate_enabled and market_regime is not None and market_regime.label in gates.blocked_regime_labels:
-        logger.info("skipping %s: market regime %s is blocked by the regime gate", ticker, market_regime.label)
-        return None
-
-    if rs_rank is not None and rs_rank < gates.min_rs_percentile:
-        logger.info("skipping %s: RS rank %.0f < min_rs_percentile %.0f (not a market leader)", ticker, rs_rank, gates.min_rs_percentile)
-        return None
+    # RS/regime gates are applied inside build_trade_plan, AFTER strategies are
+    # evaluated — Mean Reversion / Support Bounce setups are exempt from them
+    # (see Strategy.counter_trend), so the decision needs to know which strategy
+    # matched, which isn't known yet at this point.
 
     sector_strength = sector_strength_for(info.sector, sector_ranked)
     ctx = build_context(
@@ -210,7 +219,7 @@ def scan_ticker(
         avoid_earnings=config.earnings.avoid_earnings,
     )
 
-    return build_trade_plan(ticker, ctx, weekly_ctx, config, market_regime, earnings_warning)
+    return build_trade_plan(ticker, ctx, weekly_ctx, config, market_regime, earnings_warning, rs_rank)
 
 
 @dataclass

@@ -22,6 +22,10 @@ ALL_STRATEGIES: list[Strategy] = [
 # VolatilityContractionStrategy is excluded.
 TRADEABLE_STRATEGIES: list[Strategy] = [s for s in ALL_STRATEGIES if s.tradeable]
 
+# Strategy names exempt from the RS-vs-universe / market-regime hard gates
+# (GatesConfig) — see Strategy.counter_trend for why.
+COUNTER_TREND_STRATEGY_NAMES: set[str] = {s.name for s in ALL_STRATEGIES if s.counter_trend}
+
 
 def best_tradeable_signal(signals: list[StrategySignal]) -> StrategySignal | None:
     """Pick the highest-confidence MATCHED signal among tradeable strategies only —
@@ -37,6 +41,7 @@ __all__ = [
     "StrategySignal",
     "ALL_STRATEGIES",
     "TRADEABLE_STRATEGIES",
+    "COUNTER_TREND_STRATEGY_NAMES",
     "best_tradeable_signal",
     "BreakoutStrategy",
     "PullbackStrategy",

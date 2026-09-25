@@ -184,6 +184,18 @@ overfitting themselves ("perfect in backtest, worse live"), so the honest approa
 is to validate their effect empirically rather than assume they help. See
 "Backtesting the whole screener" above for how to compare with/without.
 
+**Counter-trend exemption.** The RS-vs-universe and market-regime gates both
+require the stock/market to already be STRONG — which is the opposite of what
+Mean Reversion and Support Bounce look for (they deliberately buy a dip / a bounce
+off support). A 5-year backtest confirmed the mismatch is real, not theoretical:
+once those two strategies were subjected to the same gates as the trend-following
+ones, their expectancy flipped from solidly positive (+0.30-0.33%/trade) to
+negative. `Strategy.counter_trend` (`strategies/base.py`) marks them, and both
+`scanner.py`'s `build_trade_plan` and `backtest_screener.py`'s `signal_fn` check
+`best.strategy in COUNTER_TREND_STRATEGY_NAMES` before applying the RS/regime
+gates — a setup from either strategy is exempt from both, but still has to clear
+the (strategy-agnostic) minimum R:R gate.
+
 ## How scoring works
 
 Every ticker gets a 0-100 composite score from 10 weighted categories (weights

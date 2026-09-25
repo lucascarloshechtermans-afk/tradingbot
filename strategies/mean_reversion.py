@@ -15,6 +15,7 @@ class MeanReversionStrategy(Strategy):
     """
 
     name = "Mean Reversion"
+    counter_trend = True
 
     def evaluate(self, ctx: TickerContext) -> StrategySignal:
         reasons: list[str] = []

@@ -7,6 +7,7 @@ from strategies.context import TickerContext
 
 class SupportBounceStrategy(Strategy):
     name = "Support Bounce"
+    counter_trend = True
 
     def __init__(self, tolerance_pct: float = 1.5, min_touches: int = 2):
         self.tolerance_pct = tolerance_pct

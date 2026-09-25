@@ -3,10 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from config.schema import GatesConfig
-from market_regime.regime import classify_market_regime, classify_market_regime_series
+from config.schema import AppConfig, GatesConfig
+from market_regime.regime import MarketRegime, classify_market_regime, classify_market_regime_series
 from relative_strength.relative_strength import compute_universe_rs_ranks, universe_rs_rank_series
 from risk.stops_targets import plan_trade_levels
+from scanner import build_trade_plan
+from strategies import COUNTER_TREND_STRATEGY_NAMES
+from tests.helpers import breakout_history, context_from, mean_reversion_history
 
 
 def _idx(n):
@@ -153,3 +156,38 @@ def test_plan_trade_levels_none_when_atr_zero_gives_zero_risk():
     # an ATR of 0 collapses the ATR-stop onto entry itself -> zero risk -> None
     result = plan_trade_levels(entry=100.0, atr=0.0, levels=[], max_holding_days=5)
     assert result is None
+
+
+# --------------------------------------------------------------------------- #
+# Counter-trend strategy exemption from the RS/regime gates
+# --------------------------------------------------------------------------- #
+
+
+def test_mean_reversion_is_counter_trend():
+    assert "Mean Reversion" in COUNTER_TREND_STRATEGY_NAMES
+    assert "Support Bounce" in COUNTER_TREND_STRATEGY_NAMES
+    assert "Bullish Breakout" not in COUNTER_TREND_STRATEGY_NAMES
+
+
+def test_build_trade_plan_exempts_counter_trend_setup_from_regime_gate():
+    ctx = context_from(mean_reversion_history())
+    config = AppConfig()
+    bearish = MarketRegime(label="BEARISH", score=-50, factors={})
+    plan = build_trade_plan("MR", ctx, ctx, config, bearish, None, rs_rank=5.0)
+    assert plan is not None
+    assert plan.setup == "Mean Reversion"
+
+
+def test_build_trade_plan_blocks_trend_following_setup_on_low_rs_rank():
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    plan = build_trade_plan("BRK", ctx, ctx, config, None, None, rs_rank=5.0)
+    assert plan is None
+
+
+def test_build_trade_plan_blocks_trend_following_setup_on_bearish_regime():
+    ctx = context_from(breakout_history())
+    config = AppConfig()
+    bearish = MarketRegime(label="BEARISH", score=-50, factors={})
+    plan = build_trade_plan("BRK", ctx, ctx, config, bearish, None, rs_rank=100.0)
+    assert plan is None

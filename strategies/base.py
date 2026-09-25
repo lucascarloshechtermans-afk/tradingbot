@@ -28,6 +28,18 @@ class Strategy(ABC):
     # (-0.22%/trade expectancy) when it WAS allowed to trigger entries.
     tradeable: bool = True
 
+    # True marks a strategy as deliberately COUNTER-trend: it buys weakness
+    # (an oversold dip, a bounce off support) rather than strength, so it should
+    # be exempt from the RS-vs-universe and market-regime hard gates
+    # (GatesConfig) — those gates require the stock/market to already be strong,
+    # which is close to the opposite of this strategy's own entry condition. A
+    # 5-year backtest confirmed this isn't theoretical: once Mean Reversion and
+    # Support Bounce were subjected to the same gates as the trend-following
+    # strategies, their expectancy flipped from solidly positive to negative,
+    # because the gates filtered out exactly the dip-buying setups that made
+    # them work. Still subject to the min-R:R gate, which is strategy-agnostic.
+    counter_trend: bool = False
+
     @abstractmethod
     def evaluate(self, ctx: TickerContext) -> StrategySignal:
         """Evaluate this strategy's setup against the latest bar in ctx.history.

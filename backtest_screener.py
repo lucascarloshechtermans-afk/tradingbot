@@ -35,7 +35,7 @@ from relative_strength.relative_strength import universe_rs_rank_series
 from risk.stops_targets import plan_trade_levels
 from scanner import BENCHMARK_TICKERS, evaluate_strategies
 from scoring.scorer import score_ticker
-from strategies import best_tradeable_signal
+from strategies import COUNTER_TREND_STRATEGY_NAMES, best_tradeable_signal
 from strategies.context import TickerContext, build_context
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -90,13 +90,19 @@ def make_screener_functions(
     def signal_fn(history_so_far: pd.DataFrame) -> bool:
         if len(history_so_far) < MIN_WARMUP_BARS:
             return False
-        if _blocked_by_gates(history_so_far):
-            return False
 
         ctx = cache.get(history_so_far)
         signals = evaluate_strategies(ctx)
         best = best_tradeable_signal(signals)
         if best is None:
+            return False
+
+        # Mean Reversion / Support Bounce buy weakness by design, so the
+        # RS/regime gates (which require the stock/market to already be
+        # STRONG) are exempted for them — see Strategy.counter_trend. A
+        # backtest confirmed this isn't theoretical: gating them the same as
+        # the trend-following strategies flipped their expectancy negative.
+        if best.strategy not in COUNTER_TREND_STRATEGY_NAMES and _blocked_by_gates(history_so_far):
             return False
 
         # Approximate R:R pre-check using today's close as an entry proxy (the
