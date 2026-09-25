@@ -288,7 +288,12 @@ logic — never a single giant if-statement:
    pauses briefly rather than reversing.
 4. **Support Bounce** — price bounces off a support level with ≥2 prior touches.
 5. **Momentum Continuation** — RSI rising through 50, MACD histogram expanding,
-   positive ROC across 5/10/20-day windows.
+   ROC positive across 5/10/20-day windows with the 20-day figure required to
+   exceed 2% (not just >0 — a barely-positive drift isn't "broadening
+   momentum"), and RVOL >= 0.9 (not on thin, below-average volume). This was the
+   single highest-trade-count strategy in every backtest with only mediocre
+   expectancy, and both loosely-set conditions were part of why: a near-zero ROC
+   floor and no volume floor let noise-level moves qualify.
 6. **Mean Reversion** — a sharp, short-term oversold dip *within* a long-term
    uptrend (filtered by SMA200 to avoid catching a falling knife in an actual
    downtrend). Thresholds (RSI<35, band×1.03) were loosened from the original

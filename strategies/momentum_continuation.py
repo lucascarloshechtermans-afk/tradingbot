@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from indicators.momentum import roc
 from strategies.base import Strategy, StrategySignal
 from strategies.context import TickerContext
@@ -22,9 +24,19 @@ class MomentumContinuationStrategy(Strategy):
         roc_5 = roc(ctx.close, 5).iloc[-1]
         roc_10 = roc(ctx.close, 10).iloc[-1]
         roc_20 = roc(ctx.close, 20).iloc[-1]
-        broad_momentum = roc_5 > 0 and roc_10 > 0 and roc_20 > 0
+        # roc_20 > 2.0 (not just > 0) so a barely-positive drift over a month
+        # doesn't count as "broadening momentum" — this strategy fired on more
+        # trades than any other in backtesting with mediocre expectancy, and a
+        # near-zero ROC threshold was part of why: noise-level moves qualified.
+        broad_momentum = roc_5 > 0 and roc_10 > 0 and roc_20 > 2.0
+        # Unlike Breakout (which requires an elevated RVOL spike), continuation
+        # doesn't need a volume surge — but it does need to not be happening on
+        # thin, below-average participation, which is a classic false-positive
+        # source for momentum indicators (RSI/MACD/ROC can drift positive on
+        # dead volume with no real conviction behind the move).
+        volume_supportive = pd.notna(ctx.rvol.iloc[-1]) and ctx.rvol.iloc[-1] >= 0.9
 
-        matched = bool(rsi_rising and macd_expanding and broad_momentum)
+        matched = bool(rsi_rising and macd_expanding and broad_momentum and volume_supportive)
         if not matched:
             return StrategySignal(strategy=self.name, matched=False, confidence=0.0)
 

@@ -88,6 +88,34 @@ def test_momentum_continuation_does_not_match_flat_market():
     assert signal.matched is False
 
 
+def test_momentum_continuation_rejects_thin_volume():
+    import pandas as pd
+    from dataclasses import replace
+
+    ctx = context_from(momentum_continuation_history())
+    signal = MomentumContinuationStrategy().evaluate(ctx)
+    assert signal.matched is True  # sanity: the base fixture matches
+
+    thin = replace(ctx, rvol=pd.Series(0.3, index=ctx.rvol.index))
+    thin_signal = MomentumContinuationStrategy().evaluate(thin)
+    assert thin_signal.matched is False
+
+
+def test_momentum_continuation_rejects_near_zero_roc():
+    from dataclasses import replace
+
+    ctx = context_from(momentum_continuation_history())
+    # flatten the close column entirely so 20d ROC is ~0, via a modified history
+    # frame (close is a derived property, not a settable field, so replace()
+    # has to go through `history`) — other precomputed fields (rsi14, macd_hist,
+    # rvol) stay from the original fixture, isolating just the ROC-magnitude gate.
+    flat_history = ctx.history.copy()
+    flat_history["close"] = ctx.last_close
+    negligible_roc = replace(ctx, history=flat_history)
+    signal = MomentumContinuationStrategy().evaluate(negligible_roc)
+    assert signal.matched is False
+
+
 def test_mean_reversion_matches_on_oversold_dip_in_uptrend():
     ctx = context_from(mean_reversion_history())
     signal = MeanReversionStrategy().evaluate(ctx)
