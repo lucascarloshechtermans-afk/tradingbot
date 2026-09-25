@@ -1,5 +1,6 @@
 from strategies.base import Strategy, StrategySignal
 from strategies.breakout import BreakoutStrategy
+from strategies.episodic_pivot import EpisodicPivotStrategy
 from strategies.mean_reversion import MeanReversionStrategy
 from strategies.momentum_continuation import MomentumContinuationStrategy
 from strategies.pullback import PullbackStrategy
@@ -15,6 +16,7 @@ ALL_STRATEGIES: list[Strategy] = [
     MomentumContinuationStrategy(),
     MeanReversionStrategy(),
     VolatilityContractionStrategy(),
+    EpisodicPivotStrategy(),
 ]
 
 # Strategies allowed to be picked as the PRIMARY setup for entry/stop/target and to
@@ -50,4 +52,5 @@ __all__ = [
     "MomentumContinuationStrategy",
     "MeanReversionStrategy",
     "VolatilityContractionStrategy",
+    "EpisodicPivotStrategy",
 ]

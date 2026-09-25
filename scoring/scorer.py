@@ -345,7 +345,7 @@ def score_volatility(ctx: TickerContext) -> CategoryScore:
     return CategoryScore("volatility", _clamp(score), 0, 0, reasons)
 
 
-def score_relative_strength(ctx: TickerContext) -> CategoryScore:
+def score_relative_strength(ctx: TickerContext, rs_percentile: float | None = None) -> CategoryScore:
     if ctx.relative_strength is None:
         return CategoryScore("relative_strength", 40.0, 0, 0, ["No benchmark data supplied"])
 
@@ -376,6 +376,19 @@ def score_relative_strength(ctx: TickerContext) -> CategoryScore:
     if corr is not None and corr.is_idiosyncratic and pd.notna(rel_1m) and rel_1m > 0:
         score += 10
         reasons.append("Outperformance looks idiosyncratic (low correlation to SPY/QQQ/sector), not just riding the market")
+
+    # The RS-vs-universe percentile already gates entry (GatesConfig.
+    # min_rs_percentile) as a pass/fail check, but doesn't otherwise
+    # differentiate a ticker that BARELY cleared the gate from one leading the
+    # whole scanned universe -- Minervini's own guidance is to prefer RS
+    # "80s/90s", not just "above the minimum." New, unvalidated.
+    if rs_percentile is not None:
+        if rs_percentile >= 90:
+            score += 20
+            reasons.append(f"RS percentile {rs_percentile:.0f} — top decile vs. scanned universe")
+        elif rs_percentile >= 80:
+            score += 10
+            reasons.append(f"RS percentile {rs_percentile:.0f} — top quintile vs. scanned universe")
 
     return CategoryScore("relative_strength", _clamp(score), 0, 0, reasons)
 
@@ -472,6 +485,7 @@ def score_ticker(
     risk_reward_ratio: float | None = None,
     multi_timeframe_score: float | None = None,
     multi_timeframe_reasons: list[str] | None = None,
+    rs_percentile: float | None = None,
 ) -> ScoreResult:
     raw_categories = {
         "trend": score_trend(ctx),
@@ -480,7 +494,7 @@ def score_ticker(
         "volume": score_volume(ctx),
         "price_action": score_price_action(ctx, matched_strategies),
         "volatility": score_volatility(ctx),
-        "relative_strength": score_relative_strength(ctx),
+        "relative_strength": score_relative_strength(ctx, rs_percentile),
         "market_regime": score_market_regime(market_regime),
         "sector": score_sector(ctx),
         "risk_reward": score_risk_reward(risk_reward_ratio, ctx.distance_to_resistance_atr),

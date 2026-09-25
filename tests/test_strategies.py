@@ -2,6 +2,7 @@ from tests.helpers import (
     breakout_history,
     context_from,
     downtrend_oversold_history,
+    episodic_pivot_history,
     flat_history,
     mean_reversion_history,
     momentum_continuation_history,
@@ -12,6 +13,7 @@ from tests.helpers import (
 )
 from strategies.base import StrategySignal
 from strategies.breakout import BreakoutStrategy
+from strategies.episodic_pivot import EpisodicPivotStrategy
 from strategies.mean_reversion import MeanReversionStrategy
 from strategies.momentum_continuation import MomentumContinuationStrategy
 from strategies.pullback import PullbackStrategy
@@ -192,19 +194,20 @@ def test_volatility_contraction_does_not_match_trending_market():
 def test_all_strategies_are_registered():
     from strategies import ALL_STRATEGIES
 
-    assert len(ALL_STRATEGIES) == 7
+    assert len(ALL_STRATEGIES) == 8
     names = {s.name for s in ALL_STRATEGIES}
-    assert len(names) == 7  # all distinct
+    assert len(names) == 8  # all distinct
 
 
-def test_volatility_contraction_is_not_tradeable():
-    # Was briefly re-enabled as tradeable after the VCP rework fixed its
-    # negative expectancy, but three separate 5-year backtests since then each
-    # showed only 26-31 trades total with the expectancy SIGN flipping between
-    # runs — too small a sample to trust as a primary entry trigger. Reverted
-    # to tradeable=False: it can still fire and contribute to price-action
-    # confirmation, just never drive entry/stop/target on its own.
-    assert VolatilityContractionStrategy().tradeable is False
+def test_volatility_contraction_tradeable_flag_matches_current_state():
+    # Provisionally True again for a re-test against the widened 136-ticker
+    # universe (see volatility_contraction.py) -- three prior 5-year backtests
+    # on the smaller 102-ticker universe each showed only 26-31 trades with
+    # the expectancy SIGN flipping between runs, too small a sample to trust.
+    # This assertion tracks the current experiment; flip back to False (with
+    # this test updated to match) if the next backtest still shows a
+    # thin/sign-flipping sample.
+    assert VolatilityContractionStrategy().tradeable is True
 
 
 def test_best_tradeable_signal_ignores_untradeable_strategies():
@@ -226,3 +229,33 @@ def test_best_tradeable_signal_returns_none_when_nothing_matched():
     from strategies import best_tradeable_signal
 
     assert best_tradeable_signal([]) is None
+
+
+def test_episodic_pivot_matches_on_catalyst_sized_gap():
+    ctx = context_from(episodic_pivot_history())
+    signal = EpisodicPivotStrategy().evaluate(ctx)
+    assert signal.matched is True
+    assert signal.confidence > 0
+
+
+def test_episodic_pivot_rejects_routine_small_gap():
+    ctx = context_from(episodic_pivot_history(gap_pct=2.0))
+    signal = EpisodicPivotStrategy().evaluate(ctx)
+    assert signal.matched is False
+
+
+def test_episodic_pivot_rejects_low_volume_gap():
+    history = episodic_pivot_history()
+    history.iloc[-1, history.columns.get_loc("volume")] = 1_000_000.0  # no volume surge
+    ctx = context_from(history)
+    signal = EpisodicPivotStrategy().evaluate(ctx)
+    assert signal.matched is False
+
+
+def test_episodic_pivot_rejects_gap_already_filled():
+    history = episodic_pivot_history()
+    prev_close = history["close"].iloc[-2]
+    history.iloc[-1, history.columns.get_loc("low")] = prev_close - 1.0  # traded back through
+    ctx = context_from(history)
+    signal = EpisodicPivotStrategy().evaluate(ctx)
+    assert signal.matched is False

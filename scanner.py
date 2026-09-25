@@ -103,6 +103,7 @@ def build_trade_plan(
     rs_rank: float | None = None,
     earnings_gap_frac: float | None = None,
     no_trade_log: dict[str, str] | None = None,
+    earnings_growth: float | None = None,
 ) -> TradePlan | None:
     """Returns None when the setup is rejected outright by a hard gate — the
     NO-TRADE engine. A high composite score must never override one of these:
@@ -141,6 +142,13 @@ def build_trade_plan(
     if earnings_warning is not None and earnings_warning.should_avoid:
         return _reject(f"earnings_too_close: {earnings_warning.message}")
 
+    if (
+        gates.min_earnings_growth is not None
+        and earnings_growth is not None
+        and earnings_growth < gates.min_earnings_growth
+    ):
+        return _reject(f"weak_earnings_growth: {earnings_growth:.1%} < {gates.min_earnings_growth:.1%}")
+
     if gates.block_extreme_overextension and ctx.overextension is not None and ctx.overextension.stretched_reference_count >= 5:
         return _reject("extreme_overextension: stretched from every reference at once")
 
@@ -178,6 +186,7 @@ def build_trade_plan(
         risk_reward_ratio=rr,
         multi_timeframe_score=mtf_score,
         multi_timeframe_reasons=mtf_reasons,
+        rs_percentile=rs_rank,
     )
 
     reasons = list(best.reasons) if best else []
@@ -350,9 +359,11 @@ def scan_ticker(
     # backtest — see risk/gap_risk.py's docstring for why (avoiding a subtle
     # look-ahead bug around when an earnings date was actually first known).
     earnings_gap_frac = earnings_gap_fraction(history, earnings_dates)
+    earnings_growth = info.fundamentals.get("earnings_growth")
 
     return build_trade_plan(
         ticker, ctx, weekly_ctx, config, market_regime, earnings_warning, rs_rank, earnings_gap_frac, no_trade_log,
+        earnings_growth=earnings_growth,
     )
 
 

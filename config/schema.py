@@ -158,13 +158,25 @@ class GatesConfig:
     min_distance_to_resistance_atr: float = 0.5  # reject when there's virtually no room before resistance
     block_bearish_higher_timeframe: bool = True  # reject a long setup when the WEEKLY trend is bearish
     block_extreme_overextension: bool = True  # reject when ALL distance references agree price is stretched
+    # Minervini/CANSLIM-style fundamental quality gate: reject when yfinance's
+    # most-recent quarterly earnings growth (YoY) is BELOW this. None (default)
+    # disables the gate entirely -- unlike market_cap, missing earnings_growth
+    # data does NOT reject a ticker (only a too-LOW known value does), since
+    # free-data earnings-growth coverage is patchy (ETFs, some foreign filers,
+    # recent IPOs) and blanket-rejecting missing data here would silently wipe
+    # out an unpredictable chunk of the universe rather than apply a real
+    # quality bar. Unvalidated as of writing -- needs a dedicated backtest
+    # before being trusted, same discipline as every other gate here.
+    min_earnings_growth: float | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "GatesConfig":
+        meg = raw.get("min_earnings_growth", None)
         return cls(
             min_rs_percentile=float(raw.get("min_rs_percentile", 50.0)),
             rs_window=int(raw.get("rs_window", 60)),
             regime_gate_enabled=bool(raw.get("regime_gate_enabled", True)),
+            min_earnings_growth=float(meg) if meg is not None else None,
             blocked_regime_labels=list(raw.get("blocked_regime_labels", ["BEARISH", "HIGH_VOLATILITY"])),
             min_risk_reward=float(raw.get("min_risk_reward", 1.2)),
             min_distance_to_resistance_atr=float(raw.get("min_distance_to_resistance_atr", 0.5)),

@@ -69,6 +69,7 @@ def make_screener_functions(
     min_score: float | None = None,
     regime_series: pd.Series | None = None,
     rs_rank_series: pd.Series | None = None,
+    earnings_growth: float | None = None,
 ):
     max_holding_days = config.risk.max_holding_days
     gates = config.gates
@@ -87,6 +88,12 @@ def make_screener_functions(
             rank = rs_rank_series.get(date)
             if pd.notna(rank) and rank < gates.min_rs_percentile:
                 return True
+        if (
+            gates.min_earnings_growth is not None
+            and earnings_growth is not None
+            and earnings_growth < gates.min_earnings_growth
+        ):
+            return True
         return False
 
     def signal_fn(history_so_far: pd.DataFrame) -> bool:
@@ -164,9 +171,14 @@ def make_screener_functions(
         # not which trades are taken (regime/R:R remain separate hard gates,
         # unaffected by this).
         regime_obj = MarketRegime(label=regime_label, score=0.0) if regime_label else None
+        rs_percentile = None
+        if rs_rank_series is not None:
+            rank = rs_rank_series.get(history_so_far.index[-1])
+            rs_percentile = float(rank) if pd.notna(rank) else None
         score_result = score_ticker(
             ctx, config.scoring, matched_strategies=signals,
             market_regime=regime_obj, risk_reward_ratio=trade_levels.risk_reward,
+            rs_percentile=rs_percentile,
         )
         score_by_bar[len(history_so_far)] = score_result.total_score
         if min_score is not None and score_result.total_score < min_score:
@@ -211,6 +223,7 @@ def backtest_ticker(
     min_score: float | None = None,
     regime_series: pd.Series | None = None,
     rs_rank_series: pd.Series | None = None,
+    earnings_growth: float | None = None,
 ):
     cache = SharedContextCache(ticker)
     attempted_strategy_by_bar: dict[int, str] = {}
@@ -220,6 +233,7 @@ def backtest_ticker(
     signal_fn, stop_fn, target_fn = make_screener_functions(
         cache, config, attempted_strategy_by_bar, score_by_bar, regime_by_bar, rr_by_bar,
         min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
+        earnings_growth=earnings_growth,
     )
 
     result = run_backtest(
@@ -291,6 +305,7 @@ def run_universe_backtest(
     errors = []
 
     histories: dict[str, pd.DataFrame] = {}
+    earnings_growth_by_ticker: dict[str, float | None] = {}
     for ticker in tickers:
         try:
             history = provider.get_history(ticker, period=period)
@@ -301,13 +316,26 @@ def run_universe_backtest(
             errors.append((ticker, f"insufficient history ({len(history)} bars)"))
             continue
         histories[ticker] = history
+        # A single current-snapshot fetch, not a per-bar time series -- yfinance
+        # only exposes the MOST RECENT quarterly earnings growth, so this is
+        # necessarily applied as a static value across the whole backtest
+        # window rather than the (unavailable) value as of each historical
+        # date. Only used when gates.min_earnings_growth is set (see
+        # GatesConfig); harmless fetch otherwise.
+        if config.gates.min_earnings_growth is not None:
+            try:
+                info = provider.get_info(ticker)
+                earnings_growth_by_ticker[ticker] = info.fundamentals.get("earnings_growth")
+            except DataUnavailable:
+                earnings_growth_by_ticker[ticker] = None
 
     regime_series, rs_rank_table = build_gate_tables(provider, config, histories)
 
     for i, (ticker, history) in enumerate(histories.items(), start=1):
         rs_rank_series = rs_rank_table[ticker] if ticker in rs_rank_table.columns else None
         result, trade_strategies, trade_scores, trade_regimes, trade_rrs = backtest_ticker(
-            ticker, history, config, min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series
+            ticker, history, config, min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
+            earnings_growth=earnings_growth_by_ticker.get(ticker),
         )
         all_trades.extend(result.trades)
         all_trade_strategies.extend(trade_strategies)

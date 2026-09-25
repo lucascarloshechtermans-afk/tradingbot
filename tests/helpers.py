@@ -68,6 +68,25 @@ def support_bounce_history() -> pd.DataFrame:
     return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": volume})
 
 
+def episodic_pivot_history(rise_days: int = 220, step: float = 0.1, start: float = 50.0, gap_pct: float = 12.0) -> pd.DataFrame:
+    """A quiet uptrend followed by one large, catalyst-sized gap up on heavy
+    volume that holds (low stays above the pre-gap close) -- for
+    EpisodicPivotStrategy."""
+    rising = start + step * np.arange(rise_days)
+    idx = pd.date_range("2023-01-01", periods=rise_days + 1, freq="D")
+    prev_close = rising[-1]
+    gap_open = prev_close * (1 + gap_pct / 100)
+    gap_close = gap_open * 1.02
+    close = pd.Series(list(rising) + [gap_close], index=idx)
+    open_ = close.shift(1).fillna(close.iloc[0])
+    open_.iloc[-1] = gap_open
+    low = pd.concat([open_, close], axis=1).min(axis=1) - 0.3
+    low.iloc[-1] = gap_open - 0.5
+    high = pd.concat([open_, close], axis=1).max(axis=1) + 0.3
+    volume = pd.Series([1_000_000.0] * rise_days + [4_000_000.0], index=idx)
+    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": volume})
+
+
 def momentum_continuation_history(flat_days: int = 200, accel_days: int = 20, seed: int = 0) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     flat = 50 + np.linspace(0, 2, flat_days) + rng.normal(0, 0.05, flat_days)

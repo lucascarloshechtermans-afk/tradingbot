@@ -33,7 +33,11 @@ class VolatilityContractionStrategy(Strategy):
     """
 
     name = "Volatility Contraction"
-    tradeable = False
+    # TEMPORARILY re-enabled to re-test against the widened 136-ticker universe
+    # (up from 102) -- more tickers means more chances for this rare setup to
+    # fire, which may finally give a large enough sample to trust. Revert to
+    # False if the next backtest still shows a thin/sign-flipping sample.
+    tradeable = True
 
     def evaluate(self, ctx: TickerContext) -> StrategySignal:
         reasons: list[str] = []
