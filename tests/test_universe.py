@@ -93,6 +93,48 @@ def test_sector_filter_excludes_non_matching_sector():
     assert "TECHCO" in result.excluded
 
 
+def _flat_history(price: float, volume: float, days: int = 25):
+    """Zero daily range -> ATR% ~0, for testing the min_atr_pct filter."""
+    idx = pd.date_range("2024-01-01", periods=days, freq="D", tz="UTC")
+    return pd.DataFrame(
+        {
+            "open": [price] * days,
+            "high": [price] * days,
+            "low": [price] * days,
+            "close": [price] * days,
+            "adj_close": [price] * days,
+            "volume": [volume] * days,
+        },
+        index=idx,
+    )
+
+
+def test_filters_reject_low_atr_pct_when_min_atr_pct_set():
+    cfg = UniverseConfig.from_dict({"preset": "BALANCED", "min_atr_pct": 5.0})
+    candidates = {
+        "SLOWMOVER": (
+            TickerInfo(ticker="SLOWMOVER", market_cap=500_000_000_000),
+            _flat_history(price=200.0, volume=10_000_000),
+        )
+    }
+    result = apply_universe_filters(candidates, cfg)
+    assert "SLOWMOVER" in result.excluded
+    assert "ATR%" in result.excluded["SLOWMOVER"]
+
+
+def test_min_atr_pct_zero_disables_the_filter():
+    cfg = UniverseConfig.from_dict({"preset": "BALANCED"})
+    assert cfg.min_atr_pct == 0.0
+    candidates = {
+        "SLOWMOVER": (
+            TickerInfo(ticker="SLOWMOVER", market_cap=500_000_000_000),
+            _flat_history(price=200.0, volume=10_000_000),
+        )
+    }
+    result = apply_universe_filters(candidates, cfg)
+    assert result.included == ["SLOWMOVER"]
+
+
 def test_aggressive_preset_allows_lower_price_and_cap():
     cfg = UniverseConfig.from_dict({"preset": "AGGRESSIVE"})
     candidates = {

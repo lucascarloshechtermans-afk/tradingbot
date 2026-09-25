@@ -7,6 +7,7 @@ import pandas as pd
 
 from config.schema import UniverseConfig
 from data.provider import TickerInfo
+from indicators.volatility import atr_percent
 from liquidity.liquidity import average_dollar_volume, corwin_schultz_spread_estimate
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,15 @@ def apply_universe_filters(
                 result.excluded[ticker] = (
                     f"estimated spread {spread_last:.2f}% > max {config.max_spread_pct_estimate:.2f}% "
                     "(Corwin-Schultz estimate)"
+                )
+                continue
+
+        if config.min_atr_pct > 0 and len(history) >= 15:
+            atr_pct_series = atr_percent(history["high"], history["low"], history["close"])
+            atr_pct_last = atr_pct_series.iloc[-1] if len(atr_pct_series) else float("nan")
+            if pd.notna(atr_pct_last) and atr_pct_last < config.min_atr_pct:
+                result.excluded[ticker] = (
+                    f"ATR% {atr_pct_last:.2f} < min_atr_pct {config.min_atr_pct:.2f} (too low-movement)"
                 )
                 continue
 

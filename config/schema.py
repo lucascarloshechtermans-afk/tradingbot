@@ -28,6 +28,11 @@ class UniverseConfig:
     # higher-beta swing candidates this scanner is meant to surface, while a
     # true illiquidity problem (small/thin names) shows up far above 1.5%.
     max_spread_pct_estimate: float = 1.5
+    # Floor on 14-day ATR% (ATR / close * 100). 0 = no filter. Added on request to
+    # exclude low-movement large caps (e.g. mega-cap "MAG7"-type names) that pass
+    # every liquidity/cap filter but rarely move enough in a 5-day swing to hit a
+    # meaningful target.
+    min_atr_pct: float = 0.0
 
     @classmethod
     def from_dict(cls, raw: dict) -> "UniverseConfig":
@@ -55,6 +60,7 @@ class UniverseConfig:
             max_spread_pct_estimate=float(
                 merged.get("max_spread_pct_estimate", defaults.get("max_spread_pct_estimate", 1.5))
             ),
+            min_atr_pct=float(merged.get("min_atr_pct", defaults.get("min_atr_pct", 0.0))),
         )
 
 
