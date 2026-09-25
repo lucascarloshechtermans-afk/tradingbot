@@ -36,7 +36,7 @@ risk:
 
 gates:                     # hard pass/fail pre-filters, applied BEFORE scoring —
                              # see "Hard entry gates" in README.md
-  min_rs_percentile: 70    # must rank >= this percentile vs. the rest of the
+  min_rs_percentile: 50    # must rank >= this percentile vs. the rest of the
                              # scanned universe on trailing rs_window-day return
   rs_window: 60
   regime_gate_enabled: true

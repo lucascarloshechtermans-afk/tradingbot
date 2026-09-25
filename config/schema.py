@@ -113,7 +113,17 @@ class GatesConfig:
     a strong showing in unrelated categories compensate for a fundamentally weak
     setup (e.g. a laggard stock in a bear market with a pretty chart pattern)."""
 
-    min_rs_percentile: float = 70.0  # ticker must rank >= this percentile vs. the rest of the scanned universe on trailing rs_window-day return
+    # ticker must rank >= this percentile vs. the rest of the scanned universe
+    # on trailing rs_window-day return. Lowered from an initial 70 after a
+    # direct A/B backtest (5y, 103 tickers): 50 produced 22.6% more trades
+    # (5768 -> 7070) at essentially the same profit factor (1.14 -> 1.15) and
+    # expectancy (+0.22% -> +0.20%, within noise), a higher win rate, and
+    # specifically fixed Bullish Breakout (-0.00% -> +0.24% expectancy) —
+    # while the score-bucket monotonicity (higher score = better expectancy)
+    # that originally justified this gate stayed intact. 70 wasn't wrong, just
+    # needlessly strict: it discarded real opportunities without adding
+    # quality.
+    min_rs_percentile: float = 50.0
     rs_window: int = 60
     regime_gate_enabled: bool = True
     blocked_regime_labels: list[str] = field(default_factory=lambda: ["BEARISH", "HIGH_VOLATILITY"])
@@ -125,7 +135,7 @@ class GatesConfig:
     @classmethod
     def from_dict(cls, raw: dict) -> "GatesConfig":
         return cls(
-            min_rs_percentile=float(raw.get("min_rs_percentile", 70.0)),
+            min_rs_percentile=float(raw.get("min_rs_percentile", 50.0)),
             rs_window=int(raw.get("rs_window", 60)),
             regime_gate_enabled=bool(raw.get("regime_gate_enabled", True)),
             blocked_regime_labels=list(raw.get("blocked_regime_labels", ["BEARISH", "HIGH_VOLATILITY"])),

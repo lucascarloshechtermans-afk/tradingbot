@@ -191,6 +191,23 @@ high R:R doesn't automatically mean a better expected outcome once you account
 for how often that far a target is realistically hit; worth keeping in mind
 when reading the R:R number alone as "better."
 
+**Update: the NEUTRAL-regime idea above was checked and rejected, and a
+different gate was loosened instead based on real evidence.** A quick
+significance check on the NEUTRAL finding (~881 trades, -0.09% expectancy)
+gave a t-statistic of ~0.2 — indistinguishable from pure noise (need roughly
+2+ for a credible signal) — so no gate was added on it; that would have been
+exactly the overfitting trap this document warns about elsewhere. Instead, a
+live scan surfaced a real, actionable question: `min_rs_percentile: 70` was
+rejecting the large majority of tickers on a given day (54 of 66 rejections in
+one live run), so it was A/B tested directly — 70 vs. 50, same 5-year,
+103-ticker backtest. Lowering to 50 produced **22.6% more trades** (5768 ->
+7070) at essentially the same profit factor (1.14 -> 1.15) and expectancy
+(+0.22% -> +0.20%, within noise), a *higher* win rate, and specifically fixed
+Bullish Breakout's flat expectancy (-0.00% -> +0.24%) — while the score-bucket
+monotonicity that originally justified the RS gate held up just as well at 50
+as at 70. `min_rs_percentile` is now 50 by default: 70 wasn't wrong, just
+needlessly strict — it discarded real, working setups without adding quality.
+
 ## Hard entry gates (before scoring)
 
 A weighted 0-100 composite score alone lets a setup make up for a real weakness
@@ -203,9 +220,10 @@ sequential pass/fail conditions FIRST, and only scores/ranks what's left.
 applied in both `scanner.py` and `backtest_screener.py` before a ticker is even
 scored:
 
-1. **RS rank vs. the scanned universe** (`min_rs_percentile`, default 70): a
-   ticker's trailing 60-day return must rank in at least the 70th percentile among
-   the OTHER tickers being scanned — an IBD/Minervini-style "RS Rating" pre-filter,
+1. **RS rank vs. the scanned universe** (`min_rs_percentile`, default 50 — see
+   the A/B-tested update below): a ticker's trailing 60-day return must rank in
+   at least this percentile among the OTHER tickers being scanned — an
+   IBD/Minervini-style "RS Rating" pre-filter,
    not a scored input. `relative_strength.compute_universe_rs_ranks` (live) and
    `universe_rs_rank_series` (walk-forward, no look-ahead — every date's rank uses
    only that date's trailing data) implement this.

@@ -34,7 +34,7 @@ def _flat_df(n, level):
 
 def test_gates_config_defaults():
     gates = GatesConfig.from_dict({})
-    assert gates.min_rs_percentile == 70.0
+    assert gates.min_rs_percentile == 50.0
     assert gates.regime_gate_enabled is True
     assert "BEARISH" in gates.blocked_regime_labels
     assert gates.min_risk_reward == 1.2
