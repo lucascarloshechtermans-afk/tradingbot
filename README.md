@@ -157,12 +157,14 @@ surfacing patterns worth fixing, not just a single win-rate number) and a
 market regime active at entry, testing whether the same rule set actually
 performs consistently across regimes rather than assuming it does).
 
-**Latest full validation** (5y, 103 tickers, all current gates/fixes applied):
-6118 trades, 44.8% win rate, profit factor 1.15, expectancy +0.21%/trade, max 13
-consecutive losses — and for the first time, all 6 tradeable strategies are
-individually net positive (Mean Reversion +0.33%, Support Bounce +0.27%,
-Bullish Pullback +0.20%, Trend Continuation +0.12%, Momentum Continuation
-+0.10%, Bullish Breakout +0.09%). This followed several rounds of empirical
+**Latest full validation** (5y, 103 tickers, every gate/fix in this README
+applied, including the NO-TRADE engine and deep-scan additions below): 5768
+trades, 44.7% win rate, profit factor 1.14, expectancy +0.22%/trade, max 14
+consecutive losses, all 6 tradeable strategies individually net positive except
+Bullish Breakout (essentially flat at -0.00%, likely pulled down by the new
+resistance-too-close gate disproportionately filtering breakout setups, which
+by definition often sit near a level — not yet root-caused, noted here rather
+than silently accepted). This followed several rounds of empirical
 back-and-forth, each one only kept after a fresh backtest confirmed it helped:
 the hard gates (RS/regime/min-R:R) initially made things worse for Mean
 Reversion/Support Bounce specifically because those strategies deliberately buy
@@ -170,9 +172,24 @@ weakness, which the counter-trend exemption then fixed; Momentum Continuation
 and Support Bounce needed tighter volume/magnitude conditions after showing up
 as high-trade-count, low-edge outliers; and Volatility Contraction went back to
 `tradeable=False` after three runs showed its win/loss sign flipping on a
-26-31-trade sample. A lower overall win rate (44.8% vs. an earlier 46.5%
+26-31-trade sample. A lower overall win rate (44.7% vs. an earlier 46.5%
 pre-gate baseline) paired with a HIGHER profit factor and expectancy is the
 point, not a regression — see "Hard entry gates" below.
+
+Two findings from the new per-regime and losing-trade reports worth flagging
+rather than silently noting: **trades entered during a NEUTRAL regime show
+slightly negative expectancy (-0.09%)** while BULLISH (+0.21%) and BEARISH —
+counter-trend trades only, since the regime gate blocks everyone else —
+(+0.64%) are both positive; extending the regime gate to also block NEUTRAL
+for trend-following strategies is a plausible next tightening, but per the
+"don't add complexity without proof it helps" rule below, this needs its own
+dedicated before/after backtest before being adopted, not just a plausible
+story. Separately, **losing trades have a HIGHER average R:R at entry than
+winners** (3.33 vs. 2.88) — counter-intuitive at first, but a wider nominal
+target is also a harder one to actually reach within 5 trading days, so a
+high R:R doesn't automatically mean a better expected outcome once you account
+for how often that far a target is realistically hit; worth keeping in mind
+when reading the R:R number alone as "better."
 
 ## Hard entry gates (before scoring)
 
