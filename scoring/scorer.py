@@ -199,6 +199,19 @@ def score_momentum(ctx: TickerContext) -> CategoryScore:
             score -= 5
             risk_notes.append(f"Price is {extension:.1f} ATRs above EMA21 — somewhat extended")
 
+    # Broader than the single EMA21 check above: agreement across MULTIPLE
+    # independent references (EMA8/21/50, VWAP, recent swing low) is a much
+    # stronger overextension signal than any one distance alone — a stock can
+    # look calm relative to EMA21 while still being wildly stretched from its
+    # most recent swing low. Only penalized further when several agree.
+    overext = ctx.overextension
+    if overext is not None and overext.is_severely_overextended:
+        score -= 15
+        risk_notes.append(
+            f"Overextended from {overext.stretched_reference_count} independent references at once "
+            "— a fresh entry here chases a stretched price rather than a fresh setup"
+        )
+
     cat = CategoryScore("momentum", _clamp(score), 0, 0, reasons)
     cat.reasons.extend(risk_notes)
     return cat

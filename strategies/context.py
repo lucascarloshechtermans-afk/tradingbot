@@ -15,7 +15,7 @@ from indicators.momentum import (
     rsi_hidden_bearish_divergence,
     rsi_hidden_bullish_divergence,
 )
-from indicators.trend import crossover, ema, ema_spread_pct, ma_slope, market_structure, sma, trend_alignment
+from indicators.trend import confirmed_swing_lows, crossover, ema, ema_spread_pct, ma_slope, market_structure, sma, trend_alignment
 from indicators.trend_strength import adx, adx_slope
 from indicators.volatility import (
     atr,
@@ -43,6 +43,7 @@ from price_action.patterns import classify_gap
 from price_action.structure import classify_structure_break, detect_liquidity_sweep
 from relative_strength.relative_strength import RelativeStrength, compute_relative_strength
 from risk.gap_risk import analyze_gap_risk
+from risk.overextension import OverextensionProfile, compute_overextension
 from sector.rotation import SectorStrength
 
 FIB_LOOKBACK_BARS = 60
@@ -136,6 +137,7 @@ class TickerContext:
     up_gap_bias: float | None = None
 
     historical_context: HistoricalContext | None = None
+    overextension: OverextensionProfile | None = None
 
     @property
     def free_float_pct(self) -> float | None:
@@ -206,6 +208,7 @@ def build_context(
     last_close = float(close.iloc[-1])
 
     resistance = nearest_level(levels, last_close, kind="resistance")
+    support = nearest_level(levels, last_close, kind="support")
     distance_to_resistance = (
         distance_in_atr(resistance.price, last_close, last_atr) if resistance is not None else None
     )
@@ -232,6 +235,18 @@ def build_context(
     relative_strength = compute_relative_strength(close, benchmark_close) if benchmark_close is not None else None
     gap_risk = analyze_gap_risk(history)
     historical_context = compute_historical_context(close, last_close, levels)
+
+    swing_low_mask = confirmed_swing_lows(low, order=swing_order)
+    recent_swing_low = float(low[swing_low_mask].iloc[-1]) if swing_low_mask.any() else None
+    last_vwap_value = float(last_vwap) if pd.notna(last_vwap) else None
+    overextension = compute_overextension(
+        close, last_close, last_atr,
+        ema8=float(ema8.iloc[-1]) if len(ema8) and pd.notna(ema8.iloc[-1]) else None,
+        ema21=float(ema21.iloc[-1]) if len(ema21) and pd.notna(ema21.iloc[-1]) else None,
+        ema50=float(ema50.iloc[-1]) if len(ema50) and pd.notna(ema50.iloc[-1]) else None,
+        vwap=last_vwap_value,
+        swing_low=recent_swing_low,
+    )
 
     return TickerContext(
         ticker=ticker,
@@ -304,4 +319,5 @@ def build_context(
         large_gap_frequency_pct=gap_risk.large_gap_frequency_pct,
         up_gap_bias=gap_risk.up_gap_bias,
         historical_context=historical_context,
+        overextension=overextension,
     )

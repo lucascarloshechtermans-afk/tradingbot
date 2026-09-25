@@ -154,6 +154,27 @@ def test_score_momentum_penalizes_extension():
     assert stretched_score < calm_score
 
 
+def test_score_momentum_penalizes_severe_multi_reference_overextension():
+    from dataclasses import replace
+
+    from risk.overextension import OverextensionProfile
+
+    ctx = context_from(breakout_history())
+    calm = replace(ctx, overextension=OverextensionProfile(
+        distance_from_ema8_atr=0.5, distance_from_ema21_atr=0.5, distance_from_ema50_atr=0.5,
+        distance_from_vwap_atr=0.5, distance_from_swing_low_atr=0.5,
+        gain_1d_pct=1.0, gain_3d_pct=2.0, gain_5d_pct=3.0, gain_20d_pct=5.0,
+        stretched_reference_count=0, is_severely_overextended=False,
+    ))
+    stretched = replace(ctx, overextension=OverextensionProfile(
+        distance_from_ema8_atr=5.0, distance_from_ema21_atr=5.0, distance_from_ema50_atr=5.0,
+        distance_from_vwap_atr=5.0, distance_from_swing_low_atr=5.0,
+        gain_1d_pct=1.0, gain_3d_pct=2.0, gain_5d_pct=3.0, gain_20d_pct=5.0,
+        stretched_reference_count=5, is_severely_overextended=True,
+    ))
+    assert score_momentum(stretched).score < score_momentum(calm).score
+
+
 def test_score_volume_rewards_bullish_obv_divergence():
     from dataclasses import replace
 

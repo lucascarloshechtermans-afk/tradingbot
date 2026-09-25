@@ -323,6 +323,15 @@ Beyond the headline indicators above, every scan also computes and exposes:
 - **Extension check**: how many ATRs price sits above its own EMA21
   (`distance_in_atr`) — a large value means the move may already be too stretched
   to chase, and penalizes the momentum score accordingly.
+- **Overextension filter** (`risk/overextension.py`): a broader version of the
+  single-EMA21 check above — distance in ATRs from EMA8/21/50, anchored VWAP,
+  AND the most recent confirmed swing low, plus raw 1D/3D/5D/20D % gain. A
+  stock can look calm relative to its EMA21 while still being wildly stretched
+  from its most recent swing low, so an extra momentum-score penalty only
+  applies when **multiple independent references agree** the move is extended
+  (`is_severely_overextended`) — the same confluence principle used everywhere
+  else in this scanner, applied to "is this too far from normal" rather than
+  "is this at a meaningful level."
 - **Distance to resistance in ATRs**: how much room is left before the nearest
   resistance, feeding into the risk/reward score.
 - **Confluence** (`price_action/levels.py:confluence_score`): counts how many
