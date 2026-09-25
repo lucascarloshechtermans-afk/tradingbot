@@ -175,11 +175,21 @@ DEFAULT_SCORING_WEIGHTS = {
     "multi_timeframe": 5,
 }
 
+# Recalibrated against the REAL achievable score distribution (5y, 134-ticker
+# backtest, AFTER fixing the backtest's score-deflation bug -- see
+# backtest_screener.py's score_ticker call): <50: 1485 trades, 50-59: 4077,
+# 60-69: 3357, 70-79: 39, 80+: 0. Composite scoring averages 11 independently-
+# computed categories, so a real setup needs almost every category maxed at
+# once to clear 70, and 80 never happened even once across 8958 trades -- the
+# old 80/90 thresholds were unreachable in practice, not a high bar being
+# cleared rarely. "strong"/"exceptional" are now set where real (if thin —
+# n=39) separation actually exists; revisit as more live data accumulates,
+# since 39 trades is not a lot to calibrate an exact boundary on.
 DEFAULT_SCORE_THRESHOLDS = {
-    "exceptional": 90,
-    "strong": 80,
-    "interesting": 70,
-    "watchlist": 60,
+    "exceptional": 78,
+    "strong": 72,
+    "interesting": 65,
+    "watchlist": 55,
 }
 
 

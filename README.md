@@ -71,7 +71,7 @@ Every trade plan is built for a **5-trading-day hold** by default
 ```bash
 python scanner.py                          # full scan, default config
 python scanner.py --preset AGGRESSIVE       # override the universe preset
-python scanner.py --min-score 70            # only print setups scoring >= 70
+python scanner.py --min-score 65            # only print setups scoring >= 65
 python scanner.py --dry-run                 # synthetic data, no network required
 ```
 
@@ -309,11 +309,28 @@ output:
 | Sector | 5% | Sector ETF's relative-strength rank (1-11) |
 | Multi-Timeframe | 5% | Weekly/Daily trend confluence |
 
-Thresholds (configurable): **90-100 Exceptional · 80-89 Strong · 70-79 Interesting
-· 60-69 Watchlist · <60 Ignore**. `scanner.py`'s CLI output defaults to
-`--min-score 70` (Interesting and above) rather than 60 — the goal here is a
+Thresholds (configurable): **78-100 Exceptional · 72-77 Strong · 65-71 Interesting
+· 55-64 Watchlist · <55 Ignore**. `scanner.py`'s CLI output defaults to
+`--min-score 65` (Interesting and above) rather than 55 — the goal here is a
 short list of high-conviction setups, not maximizing how many tickers get
-printed; pass `--min-score 60` or lower to also see the Watchlist tier.
+printed; pass `--min-score 55` or lower to also see the Watchlist tier.
+
+**These thresholds were recalibrated (originally 90/80/70/60) against the real
+achievable score distribution**, discovered while investigating why a live scan
+could hit 78+ but a 5-year, 8958-trade backtest never once recorded a score
+above 70. Root cause: `backtest_screener.py`'s call to `score_ticker` was
+omitting `market_regime` and `risk_reward_ratio` — two categories worth 20
+weight points combined — so they silently fell back to neutral defaults
+instead of the same real values `scanner.py`'s live score already uses. Fixing
+that (passing the real regime/R:R through, same as live) let the backtest
+score properly: the corrected distribution across 8958 trades was `<50: 1485,
+50-59: 4077, 60-69: 3357, 70-79: 39, 80+: 0`. Even fixed, 80+ never happened
+once — composite-averaging 11 independently-scored categories means a setup
+needs nearly every category maxed simultaneously to clear 70, so the old
+80/90 thresholds were structurally unreachable, not a high bar rarely
+cleared. The new thresholds sit where real (if thin — n=39 for the 70-79
+band) separation actually exists in the data; worth revisiting as more live
+scans accumulate rather than treating n=39 as final.
 
 Every category's contribution and the specific reasons behind it are visible in
 the dashboard's expanded row for each ticker — nothing is a black box.
