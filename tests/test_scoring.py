@@ -2,6 +2,8 @@ from config.schema import ScoringConfig
 from market_regime.regime import MarketRegime
 from strategies.base import StrategySignal
 from scoring.scorer import (
+    CategoryScore,
+    _confluence_bonus,
     score_market_regime,
     score_market_structure,
     score_momentum,
@@ -199,6 +201,23 @@ def test_score_risk_reward_rewards_room_to_resistance():
     assert far_resistance.score > close_resistance.score
 
 
+def test_confluence_bonus_rewards_multiple_strong_categories():
+    none_strong = [CategoryScore("a", 50.0, 10, 5.0, []), CategoryScore("b", 60.0, 10, 6.0, [])]
+    two_strong = [CategoryScore("a", 80.0, 10, 8.0, []), CategoryScore("b", 90.0, 10, 9.0, [])]
+    assert _confluence_bonus(none_strong) == 0.0
+    assert _confluence_bonus(two_strong) == 3.0  # 2 categories * 1.5
+
+
+def test_confluence_bonus_ignores_zero_weight_categories():
+    zero_weighted = [CategoryScore("a", 90.0, 0, 0.0, [])]
+    assert _confluence_bonus(zero_weighted) == 0.0
+
+
+def test_confluence_bonus_is_capped():
+    all_strong = [CategoryScore(str(i), 90.0, 10, 9.0, []) for i in range(11)]
+    assert _confluence_bonus(all_strong) == 12.0  # capped, not 11 * 1.5 = 16.5
+
+
 def test_score_ticker_custom_weights_change_total():
     ctx = context_from(breakout_history())
     config_default = ScoringConfig.from_dict({})
@@ -206,5 +225,9 @@ def test_score_ticker_custom_weights_change_total():
     default_result = score_ticker(ctx, config_default, matched_strategies=[])
     trend_only_result = score_ticker(ctx, config_trend_heavy, matched_strategies=[])
     trend_cat = next(c for c in trend_only_result.categories if c.category == "trend")
-    assert trend_only_result.total_score == round(trend_cat.score, 1)
+    # With only "trend" weighted, the total is that category's raw score plus
+    # the confluence bonus (only one category counts here, so at most one
+    # bonus increment) -- see _confluence_bonus in scoring/scorer.py.
+    expected = min(trend_cat.score + 1.5, 100.0) if trend_cat.score >= 75.0 else trend_cat.score
+    assert trend_only_result.total_score == round(expected, 1)
     assert trend_only_result.total_score != default_result.total_score

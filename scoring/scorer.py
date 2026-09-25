@@ -440,6 +440,30 @@ def score_multi_timeframe(mtf_score: float | None, mtf_reasons: list[str] | None
     return CategoryScore("multi_timeframe", _clamp(mtf_score), 0, 0, list(mtf_reasons or []))
 
 
+CONFLUENCE_STRONG_THRESHOLD = 75.0
+CONFLUENCE_BONUS_PER_CATEGORY = 1.5
+CONFLUENCE_MAX_BONUS = 12.0
+
+
+def _confluence_bonus(categories: list[CategoryScore]) -> float:
+    """A pure weighted average can't distinguish a setup where ONE category
+    dominates from one where MANY independent signal families (trend,
+    momentum, volume, price action, ...) are all strong at once — but the
+    second is a materially higher-conviction setup, which is exactly what
+    "confluence" means in discretionary trading. This structural blind spot is
+    why the composite score never reached 80 even once across 8958 backtested
+    trades after fixing the scoring data-completeness bug (see
+    backtest_screener.py's score_ticker call) — reaching 80+ on a pure average
+    needs nearly every one of 11 categories near-maxed simultaneously, which
+    essentially never happens by chance. Only categories the config actually
+    weights (weight > 0) count, so zeroing out a category via config also
+    removes it from confluence credit."""
+    n_strong = sum(
+        1 for cat in categories if cat.weight > 0 and cat.score >= CONFLUENCE_STRONG_THRESHOLD
+    )
+    return min(n_strong * CONFLUENCE_BONUS_PER_CATEGORY, CONFLUENCE_MAX_BONUS)
+
+
 def score_ticker(
     ctx: TickerContext,
     config: ScoringConfig,
@@ -470,6 +494,8 @@ def score_ticker(
         contribution = cat.score * weight / 100.0
         categories.append(CategoryScore(cat.category, cat.score, weight, contribution, cat.reasons))
         total += contribution
+
+    total = _clamp(total + _confluence_bonus(categories))
 
     thresholds = config.thresholds
     if total >= thresholds["exceptional"]:
