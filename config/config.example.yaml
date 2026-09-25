@@ -13,9 +13,11 @@ universe:
   # max_spread_pct_estimate: 1.5  # Corwin-Schultz spread-schatting; hoger =
                                     # ruimer, want de schatter loopt bij
                                     # volatiele-maar-liquide namen vanzelf op
-  min_atr_pct: 5.0        # sluit low-movement large caps uit (bv. mega-cap namen
+  min_atr_pct: 4.0         # sluit low-movement large caps uit (bv. mega-cap namen
                              # die elke liquiditeitsfilter halen maar te weinig
-                             # bewegen om binnen 5 dagen een target te raken)
+                             # bewegen om binnen 5 dagen een target te raken) --
+                             # verlaagd van 5.0 omdat dat de survivor-pool op een
+                             # AGGRESSIVE-scan tot ~10 tickers had teruggebracht
 
 data:
   period: "1y"             # hoeveel historie opgehaald wordt per ticker

@@ -30,7 +30,7 @@ from data.cache import DiskCache
 from data.provider import DataProvider, DataUnavailable
 from data.universe import DEFAULT_UNIVERSE
 from data.yfinance_provider import YFinanceProvider
-from market_regime.regime import classify_market_regime_series
+from market_regime.regime import MarketRegime, classify_market_regime_series
 from relative_strength.relative_strength import universe_rs_rank_series
 from risk.stops_targets import plan_trade_levels
 from scanner import BENCHMARK_TICKERS, evaluate_strategies
@@ -143,18 +143,31 @@ def make_screener_functions(
 
         # For the loser/regime-performance reports below — the regime label as
         # of the signal bar (same causal lookup _blocked_by_gates already uses).
+        regime_label = None
         if regime_series is not None:
-            label = regime_series.get(history_so_far.index[-1])
-            if label is not None:
-                regime_by_bar[len(history_so_far)] = label
+            regime_label = regime_series.get(history_so_far.index[-1])
+            if regime_label is not None:
+                regime_by_bar[len(history_so_far)] = regime_label
 
-        # score_ticker only needs ctx + the matched strategies here; sector and
-        # multi-timeframe aren't threaded through this per-ticker backtest loop,
-        # so those categories fall back to their neutral baselines — market
-        # regime and relative-strength ARE now available as hard gates above
-        # (not fed into the score itself, to avoid gating and scoring on the
-        # same fact twice).
-        score_result = score_ticker(ctx, config.scoring, matched_strategies=signals)
+        # Sector and multi-timeframe genuinely aren't threaded through this
+        # per-ticker backtest loop (multi-timeframe needs a weekly-resampled
+        # context per bar, which isn't built here for performance), so those
+        # two categories fall back to their neutral baselines. Market regime
+        # and risk/reward ARE already computed right here for the hard gates
+        # above (regime_series lookup, trade_levels.risk_reward) — previously
+        # they were left out of the score too, which silently deflated the
+        # backtest's score by ~4-6 points per trade vs. what scanner.py's live
+        # score computes for the same setup (its score bucket 70-79/80+ was
+        # empty across 6500+ backtested trades despite live scans regularly
+        # landing there) — fixed by passing the same real values scanner.py
+        # already uses. This changes what gets RECORDED/reported per trade,
+        # not which trades are taken (regime/R:R remain separate hard gates,
+        # unaffected by this).
+        regime_obj = MarketRegime(label=regime_label, score=0.0) if regime_label else None
+        score_result = score_ticker(
+            ctx, config.scoring, matched_strategies=signals,
+            market_regime=regime_obj, risk_reward_ratio=trade_levels.risk_reward,
+        )
         score_by_bar[len(history_so_far)] = score_result.total_score
         if min_score is not None and score_result.total_score < min_score:
             return False

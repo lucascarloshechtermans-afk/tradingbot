@@ -34,6 +34,17 @@ DEFAULT_UNIVERSE = [
     "XOM", "CVX", "COP", "SLB", "OXY",
     # High-beta / momentum names frequently traded on swings
     "TSLA", "COIN", "MSTR", "RIVN", "SMCI", "ARM", "DKNG", "ROKU", "RBLX", "MRNA",
+    # Expansion: more liquid, typically higher-ATR% names across the same
+    # sectors, to widen the daily candidate pool beyond the original 103 (a
+    # small survivor pool after the RS/regime/ATR gates mechanically limits how
+    # many high-conviction setups can appear on any given day, independent of
+    # setup quality).
+    "MRVL", "ON", "LRCX", "KLAC", "AMAT",           # semis
+    "MDB", "TEAM", "ZS", "OKTA", "TTD", "CFLT", "GTLB", "PATH", "U",  # software/growth
+    "SOFI", "AFRM", "HOOD", "DASH", "APP",           # fintech/consumer tech
+    "CRSP", "NTLA", "BEAM", "EXAS",                  # biotech
+    "FCX", "AA", "ALB", "CCJ", "VST", "CEG",         # materials/energy, higher-beta
+    "CCL", "RCL", "EXPE", "W",                       # travel/consumer discretionary
 ]
 
 # Sector -> SPDR sector ETF mapping lives in sector/rotation.py (SECTOR_ETF_MAP),
