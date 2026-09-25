@@ -221,7 +221,10 @@ output:
 | Multi-Timeframe | 5% | Weekly/Daily trend confluence |
 
 Thresholds (configurable): **90-100 Exceptional · 80-89 Strong · 70-79 Interesting
-· 60-69 Watchlist · <60 Ignore**.
+· 60-69 Watchlist · <60 Ignore**. `scanner.py`'s CLI output defaults to
+`--min-score 70` (Interesting and above) rather than 60 — the goal here is a
+short list of high-conviction setups, not maximizing how many tickers get
+printed; pass `--min-score 60` or lower to also see the Watchlist tier.
 
 Every category's contribution and the specific reasons behind it are visible in
 the dashboard's expanded row for each ticker — nothing is a black box.

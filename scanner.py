@@ -331,7 +331,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     )
 
 
-def print_scan_results(trade_plans: list[TradePlan], min_score: float = 60.0) -> None:
+def print_scan_results(trade_plans: list[TradePlan], min_score: float = 70.0) -> None:
     shown = [p for p in trade_plans if p.score >= min_score]
     if not shown:
         print("No setups scored above the minimum threshold.")
@@ -435,7 +435,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Swing-trade scanner")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml (default: config.yaml or config/config.example.yaml)")
     parser.add_argument("--preset", type=str, default=None, choices=["CONSERVATIVE", "BALANCED", "AGGRESSIVE"], help="Override universe.preset")
-    parser.add_argument("--min-score", type=float, default=60.0, help="Only print setups scoring at or above this threshold")
+    parser.add_argument(
+        "--min-score", type=float, default=70.0,
+        help="Only print setups scoring at or above this threshold. Defaults to 70 "
+        "(the 'Interesting' tier and above) rather than 60/Watchlist — this scanner "
+        "is built to surface few, high-conviction setups, not maximize signal count; "
+        "pass --min-score 60 or lower to see the full Watchlist tier too.",
+    )
     parser.add_argument("--dashboard", type=str, default="dashboard.html", help="Path to write the HTML dashboard")
     parser.add_argument("--json-output", type=str, default="scan_results.json", help="Path to write raw scan results as JSON")
     parser.add_argument("--dry-run", action="store_true", help="Run the full pipeline on built-in synthetic data (no network needed)")
