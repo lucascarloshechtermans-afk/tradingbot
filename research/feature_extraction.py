@@ -36,7 +36,10 @@ def _bool_to_int(v: bool | None) -> float | None:
     return 1.0 if v else 0.0
 
 
-def extract_features(ctx: TickerContext, *, rs_percentile: float | None = None, regime_label: str | None = None) -> dict[str, float | None]:
+def extract_features(
+    ctx: TickerContext, *, rs_percentile: float | None = None, regime_label: str | None = None,
+    trade_levels=None,
+) -> dict[str, float | None]:
     """One row of features for the bar `ctx` was built from (the signal bar,
     i.e. `history_so_far` in backtest_screener's `signal_fn`)."""
     ema8, ema21, ema50 = _last(ctx.ema8), _last(ctx.ema21), _last(ctx.ema50)
@@ -71,7 +74,44 @@ def extract_features(ctx: TickerContext, *, rs_percentile: float | None = None, 
 
     sector_rank = ctx.sector_strength.rank if ctx.sector_strength is not None else None
 
+    swing_low_mask = None
+    recent_swing_low = None
+    try:
+        from indicators.trend import confirmed_swing_lows
+
+        swing_low_mask = confirmed_swing_lows(ctx.low, order=3)
+        if swing_low_mask.any():
+            recent_swing_low = float(ctx.low[swing_low_mask].iloc[-1])
+    except Exception:
+        pass
+
+    atr_value = _last(ctx.atr14)
+    stop_atr = stop_structure = stop_final = target1 = target2 = None
+    stop_method = None
+    if trade_levels is not None:
+        stop_atr = trade_levels.stop_levels.atr_stop
+        stop_structure = trade_levels.stop_levels.structure_stop
+        stop_final = trade_levels.stop_levels.final_stop
+        stop_method = trade_levels.stop_levels.final_stop_method
+        target1 = trade_levels.target1
+        target2 = trade_levels.target2
+
     return {
+        # raw price levels, kept alongside the ratio-features above so a
+        # research script can reconstruct/compare ALTERNATIVE stop structures
+        # (EMA21, VWAP, swing-low, ATR, structure) against what actually
+        # happened, entirely offline from already-known OHLCV -- see
+        # research/stop_comparison.py.
+        "raw_entry_atr14": atr_value,
+        "raw_ema21_price": ema21,
+        "raw_vwap_price": vwap,
+        "raw_swing_low_price": recent_swing_low,
+        "raw_stop_atr": stop_atr,
+        "raw_stop_structure": stop_structure,
+        "raw_stop_final": stop_final,
+        "raw_stop_method": 1.0 if stop_method == "structure" else (0.0 if stop_method == "atr" else None),
+        "raw_target1": target1,
+        "raw_target2": target2,
         "ema8_21_spread_pct": _last(ctx.ema8_21_spread_pct),
         "ema21_50_spread_pct": _last(ctx.ema21_50_spread_pct),
         "ema8_slope": _last(ctx.ema8_slope),
@@ -132,5 +172,6 @@ def feature_names() -> list[str]:
         "is_idiosyncratic", "structure_ordinal", "structure_break_bullish", "structure_break_bearish",
         "liquidity_sweep_bullish", "distance_to_resistance_atr", "confluence_count", "extension_atr",
         "stretched_reference_count", "sector_rank", "market_regime_ordinal", "avg_dollar_volume_millions",
-        "spread_pct_estimate",
+        "spread_pct_estimate", "raw_entry_atr14", "raw_ema21_price", "raw_vwap_price", "raw_swing_low_price",
+        "raw_stop_atr", "raw_stop_structure", "raw_stop_final", "raw_stop_method", "raw_target1", "raw_target2",
     ]

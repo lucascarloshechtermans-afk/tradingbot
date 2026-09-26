@@ -243,7 +243,7 @@ def make_screener_functions(
             overext_by_bar[len(history_so_far)] = ctx.overextension.stretched_reference_count
         if feature_by_bar is not None:
             feature_by_bar[len(history_so_far)] = extract_features(
-                ctx, rs_percentile=rs_percentile, regime_label=regime_label
+                ctx, rs_percentile=rs_percentile, regime_label=regime_label, trade_levels=trade_levels
             )
         if min_score is not None and score_result.total_score < min_score:
             return False
@@ -454,6 +454,11 @@ def run_universe_backtest(
             sector_close=sector_closes.get(sector_etf) if sector_etf else None,
             sector_rank_df=sector_rank_df, sector_trend_df=sector_trend_df,
         )
+        for trade in result.trades:
+            trade.ticker = ticker  # not a Trade dataclass field -- attached here so
+            # research scripts (exit-day sweep, stop-structure comparison) can
+            # look the underlying OHLCV back up without changing this function's
+            # widely-used return shape.
         all_trades.extend(result.trades)
         all_trade_strategies.extend(trade_strategies)
         all_trade_scores.extend(trade_scores)
