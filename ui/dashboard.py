@@ -341,7 +341,8 @@ def build_dashboard_html(
     alerts_card = (
         "<div class='card'><h3 style='margin-top:0'>Alerts for next week: leaders closest to a dip trigger</h3>"
         "<p style='margin:0 0 8px;color:var(--ink-soft)'>A close at or below the <b>dip trigger</b> makes it a LEADER DIP "
-        "(5-day move &le; -1 ATR); a positive "move to trigger" means it triggers even after a rise that big. At or below the <b>deep-dip</b> price it also gets the 21-EMA confirmation. "
+        "(5-day move &le; -1 ATR); a positive 'move to trigger' means it still triggers after a rise that big. "
+        "At or below the <b>deep-dip</b> price it also gets the 21-EMA confirmation. "
         "The trigger moves daily (it is 1 ATR under the close of 4 sessions earlier) -- re-run the scan each evening.</p>"
         "<table><thead><tr><th>Ticker</th><th>Close</th><th>Dip trigger</th><th>Move to trigger</th><th>Deep-dip price</th>"
         "<th>Momentum</th><th>ATR%</th></tr></thead><tbody>"
