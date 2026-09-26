@@ -99,6 +99,23 @@ Costs (#9/#21): +0.5% extra slippage per side still leaves A+B +0.064R and A
 chance of a losing year, p95 max drawdown 7-10%; A+B ≈ 10-12% and 15-22% (dips
 cluster in sell-offs — respect the 6% portfolio-heat cap).
 
+### Leader Dip grading by regime (update)
+Splitting the confirmations into MARKET (VIX > 20, SPY below its 50-day) and
+STOCK (deep dip under the 21 EMA, ATR% >= 3) showed the stock ones only sort
+the dips in a stressed market:
+
+| | dev/dev | dev/holdout | OOS/dev | OOS/holdout |
+|---|---|---|---|---|
+| stressed, both stock confirmations (A) | +0.216R | +0.335R | +0.407R | +0.256R |
+| stressed, one (B) | +0.282R | +0.070R | +0.144R | +0.098R |
+| stressed, none (C, watch) | −0.029R | −0.327R | +0.129R | +0.011R |
+| calm, every leader dip (R, half size) | +0.071R | +0.110R | +0.023R | +0.026R |
+| calm, both stock confirmations | +0.005R | +0.099R | −0.111R | +0.044R |
+
+So in a calm market (64% of weeks) the old A/B rule threw away every dip
+although calm-market dips were still positive in all four cells; they are
+now grade R, tradeable at half size (0.25% risk) because the edge is thin.
+
 ### Changes
 - ADDED: `analysis/leader_dip.py` (primary, validated setup; top of the terminal
   output and the dashboard; explicit NO TRADE when there is no A/B), the whole

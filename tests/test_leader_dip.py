@@ -40,7 +40,8 @@ def test_leader_in_a_dip_is_found_and_graded_by_confirmations():
     lead_calm = next(s for s in calm if s.ticker == "LEAD")
     lead_fear = next(s for s in fear if s.ticker == "LEAD")
     assert lead_fear.confirmations == lead_calm.confirmations + 2
-    assert lead_fear.grade == "A"
+    assert lead_calm.grade == "R"  # calm market: every leader dip, half size
+    assert lead_fear.grade in ("A", "B")
     assert lead_fear.stop_estimate < lead_fear.close
     assert lead_fear.hold_days == 10
 
@@ -49,3 +50,16 @@ def test_no_dip_or_no_leader_means_no_setup():
     hist = _universe(leader_dip=False)
     assert all(s.ticker != "LEAD" for s in find_leader_dips(hist, None, None))
     assert evaluate("LEAD", _universe()["LEAD"], momentum_rank=50.0, market={}) is None
+
+
+def test_grade_is_regime_dependent():
+    from analysis.leader_dip import grade_for
+
+    calm = {"vix": 14.0, "spy_below_50": False}
+    stressed = {"vix": 26.0, "spy_below_50": False}
+    weak_tape = {"vix": 15.0, "spy_below_50": True}
+    assert grade_for(calm, deep_dip=True, moves=True) == "R"
+    assert grade_for(calm, deep_dip=False, moves=False) == "R"
+    assert grade_for(stressed, deep_dip=True, moves=True) == "A"
+    assert grade_for(weak_tape, deep_dip=False, moves=True) == "B"
+    assert grade_for(stressed, deep_dip=False, moves=False) == "C"

@@ -123,15 +123,19 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
     for d, read in leader_dips:
         why, missing = _dip_why(d)
         why += explain_chart(read, dip_setup=True) + _patterns_nl(d.daily)
+        risk_acct = "0,25% (halve positie: rustige markt, kleine edge)" if d.grade == "R" else "0,5%"
         plan = (f"Koop op de volgende open (~{_eur(d.close)}), stop 2,5 ATR onder je instap (~{_eur(d.stop_estimate)}, "
-                f"{d.risk_pct:.1f}% risico -- positie zo groot dat dit 0,5% van je account is), verkoop op het slot van de "
-                f"10e handelsdag. Geen vast koersdoel.")
+                f"{d.risk_pct:.1f}% koersrisico -- positie zo groot dat dit {risk_acct} van je account is), verkoop op het "
+                f"slot van de 10e handelsdag. Geen vast koersdoel.")
+        if d.grade == "C":
+            plan = "Nog niet traden: onrustige markt maar geen van beide aandeel-bevestigingen -- dat deed het historisch slecht."
         svg = render_chart_svg(d.daily, read, levels={"STOP (est.)": d.stop_estimate})
         summary = (f"{escape(sector_of(d.ticker))} · slot {_eur(d.close)} · dip {d.dip_atr:+.1f} ATR · momentum "
                    f"{d.momentum_rank:.0f} · {d.confirmations}/4 bevestigingen")
-        card = _card(f"ov-{d.ticker}", f"LEADER DIP {d.grade}", "gA" if d.grade == "A" else ("gB" if d.grade == "B" else "gC"),
-                     d.ticker, summary, why, missing, plan, svg)
-        (setups if d.grade in ("A", "B") else possible).append((d.ticker, card))
+        cls = {"A": "gA", "B": "gB", "R": "gR"}.get(d.grade, "gC")
+        label = f"LEADER DIP {d.grade}" + (" (halve positie)" if d.grade == "R" else "")
+        card = _card(f"ov-{d.ticker}", label, cls, d.ticker, summary, why, missing, plan, svg)
+        (setups if d.grade in ("A", "B", "R") else possible).append((d.ticker, card))
     for a, read in dip_alerts:
         why = [f"<b>Momentum-leider</b>: rank {a.momentum_rank:.0f}/100.",
                f"<b>Nog geen dip</b>: wordt een LEADER DIP als hij sluit op of onder <b>{_eur(a.alert_price)}</b> "
@@ -183,18 +187,19 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
     vix, weak = market_state.get("vix"), market_state.get("spy_below_50")
     mkt = (f"VIX {vix:.1f}{' (angst)' if vix and vix > 20 else ' (rustig)'}, SPY {'ONDER' if weak else 'boven'} zijn 50-daags gemiddelde"
            if vix is not None else "marktdata niet beschikbaar")
-    no_trade = ("" if setups else "<p class='nt'><b>NO TRADE vandaag</b> -- geen LEADER DIP graad A of B. Dat is normaal in een "
-                "rustige markt; kijk naar de mogelijke setups hieronder.</p>")
+    no_trade = ("" if setups else "<p class='nt'><b>NO TRADE vandaag</b> -- geen enkele momentum-leider staat in een dip. "
+                "Kijk naar de mogelijke setups hieronder.</p>")
     return (
         "<div class='card'><h3 style='margin-top:0'>Overzicht per sector</h3>"
         f"<p class='sm'>Markt nu: {escape(mkt)}. Klik op een ticker om de setup te openen.</p>"
         "<table><thead><tr><th>#</th><th>Sector</th><th>1M</th><th>3M</th><th>RS vs SPY</th><th>Trend</th>"
         "<th>Setups</th><th>Mogelijke setups</th></tr></thead><tbody>" + rows + "</tbody></table></div>"
         "<div class='card'><h3 style='margin-top:0'>Setups (verhandelbaar)</h3>"
-        "<p class='sm'>Alleen LEADER DIP graad A/B: de enige setup die alle out-of-sample tests doorstond. Klik voor uitleg en chart.</p>"
+        "<p class='sm'>LEADER DIP: de enige setup die alle out-of-sample tests doorstond. Onrustige markt: A (beste) en B; "
+        "rustige markt: R, met een halve positie omdat de edge dan klein is. Klik voor uitleg en chart.</p>"
         + no_trade + "".join(c for _, c in setups) + "</div>"
         "<div class='card'><h3 style='margin-top:0'>Mogelijke setups (nog niet verhandelbaar)</h3>"
-        "<p class='sm'>LEADER DIP graad C (dip zonder genoeg bevestiging), leiders vlak bij hun dip-trigger, en chart-patronen "
+        "<p class='sm'>LEADER DIP graad C (onrustige markt zonder aandeel-bevestiging), leiders vlak bij hun dip-trigger, en chart-patronen "
         "die klaarstaan (alleen info). Klik voor uitleg en chart.</p>"
         + ("".join(c for _, c in possible) or "<p>Geen.</p>") + "</div>"
     )
@@ -210,6 +215,6 @@ OVERVIEW_CSS = (
     ".sm{color:var(--ink-soft);font-size:12.5px}.nt{padding:8px 10px;border-left:3px solid #fab005;background:rgba(250,176,5,0.08)}"
     ".gb{font-size:11px;font-weight:700;padding:2px 7px;border-radius:9px;margin-right:6px}"
     ".gA{background:#2b8a3e;color:#fff}.gB{background:#5c940d;color:#fff}.gC{background:#495057;color:#fff}"
-    ".gW{background:#1971c2;color:#fff}.gP{background:#e8590c;color:#fff}"
+    ".gR{background:#0c8599;color:#fff}.gW{background:#1971c2;color:#fff}.gP{background:#e8590c;color:#fff}"
     "a.tk{color:#74c0fc;margin-right:6px}"
 )

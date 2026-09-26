@@ -674,13 +674,14 @@ def print_leader_dips(leader_dips: list, market: dict) -> None:
     vix, weak = market.get("vix"), market.get("spy_below_50")
     print()
     print("=== LEADER DIP -- validated setup (buy next open, stop 2.5 ATR, exit after 10 sessions) ===")
+    print("    grades: stressed market A/B = trade, C = watch; calm market R = trade at HALF size (0.25% risk)")
     if vix is not None:
         print(f"    market: VIX {vix:.1f}{' (fear)' if vix > 20 else ''}, SPY {'BELOW' if weak else 'above'} its 50-day SMA")
-    tradeable = [(d, r) for d, r in leader_dips if d.grade in ("A", "B")]
+    tradeable = [(d, r) for d, r in leader_dips if d.grade in ("A", "B", "R")]
     if not tradeable:
-        print("    NO TRADE: no grade A/B leader dip today.")
+        print("    NO TRADE: no leader dip today.")
     for d, read in leader_dips:
-        tag = "TRADE" if d.grade in ("A", "B") else "watch"
+        tag = {"A": "TRADE", "B": "TRADE", "R": "HALF"}.get(d.grade, "watch")
         print(f"  [{d.grade}] {d.ticker:<6} {tag:<6} close {d.close:.2f}  stop~{d.stop_estimate:.2f} ({d.risk_pct:.1f}%)  "
               f"dip {d.dip_atr:+.1f} ATR  momentum {d.momentum_rank:.0f}  confirmations {d.confirmations}/4")
         print("        + " + "; ".join(d.reasons[2:]) if len(d.reasons) > 2 else "        + (no confirmations)")

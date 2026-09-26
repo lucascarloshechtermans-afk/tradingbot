@@ -4,14 +4,17 @@ Buy a short-term dip in a cross-sectional momentum leader:
   * composite momentum rank >= 80 among the scanned universe
     (63/126/252-day returns, last 5 days skipped)
   * 5-day move <= -1.0 ATR (the dip)
-Graded by four confirmations, each better in ALL four validation cells
+Four confirmations were each better in ALL four validation cells
 (190-ticker development universe and 163-ticker never-used universe, each
-split into 2022-09/2025 and the Oct 2025 - Sep 2026 holdout year):
+split into 2022-09/2025 and the Oct 2025 - Sep 2026 holdout year) -- but the
+two market ones define the regime, and the two stock ones only help in a
+stressed market, so the grade is regime-dependent (see grade_for()):
   * deep dip: close >= 1 ATR below the daily 21 EMA
   * fear: VIX > 20
   * weak tape: SPY below its 50-day SMA
   * the stock moves: ATR% >= 3
-Grade A = 3-4 confirmations, B = 2, C = 0-1 (watch only).
+Stressed market: A = both stock confirmations, B = one, C = none (watch).
+Calm market: R = every leader dip, half size (thin but consistent edge).
 
 Trade plan (as backtested): buy the next session's open, stop 2.5 ATR below
 the fill (never tighter than 2 ATR -- the audit's minimum-stop rule), no
@@ -73,6 +76,29 @@ def market_state(spy: pd.DataFrame | None, vix: pd.DataFrame | None) -> dict:
     return out
 
 
+def is_calm(market: dict) -> bool:
+    """VIX <= 20 and SPY above its 50-day SMA (unknown counts as calm)."""
+    vix = market.get("vix")
+    return (vix is None or vix <= 20) and not market.get("spy_below_50")
+
+
+def grade_for(market: dict, deep_dip: bool, moves: bool) -> str:
+    """Regime-dependent grade (README, 'Leader Dip grading by regime').
+
+    Stressed market (VIX > 20 or SPY below its 50-day): the stock-level
+    confirmations sort the dips -- A = deep dip AND ATR% >= 3 (+0.22..+0.41R
+    per trade in all four validation cells), B = one of them (+0.07..+0.28R),
+    C = neither (mixed / negative -> watch only).
+    Calm market: the stock-level confirmations add nothing (both together
+    were -0.11R on the out-of-sample stocks), but every leader dip was still
+    positive in all four cells (+0.02..+0.11R) -- grade R, tradeable at half
+    size because the edge is thin."""
+    if is_calm(market):
+        return "R"
+    n = int(deep_dip) + int(moves)
+    return "A" if n == 2 else ("B" if n == 1 else "C")
+
+
 def evaluate(ticker: str, df: pd.DataFrame, momentum_rank: float | None, market: dict) -> LeaderDip | None:
     df = df.dropna(subset=["open", "high", "low", "close"])
     if len(df) < 60 or momentum_rank is None or momentum_rank < MOM_MIN:
@@ -113,7 +139,11 @@ def evaluate(ticker: str, df: pd.DataFrame, momentum_rank: float | None, market:
         reasons.append(f"moves enough: ATR {atr_pct:.1f}%")
     else:
         missing.append(f"ATR {atr_pct:.1f}% (< 3%)")
-    grade = "A" if conf >= 3 else ("B" if conf == 2 else "C")
+    grade = grade_for(market, deep_dip=d21 <= -1.0, moves=atr_pct >= 3)
+    if grade == "R":
+        reasons.append("rustige markt: kleine maar consistente edge -- halve positie (0,25% risico)")
+        missing = ["rustige markt: diepe dip en ATR voegen dan niets toe (getest); de edge is klein "
+                   "(+0,02..+0,11R per trade), daarom een halve positie"]
     return LeaderDip(ticker=ticker, grade=grade, confirmations=conf, close=close, stop_estimate=close - STOP_ATR * a,
                      atr=a, momentum_rank=float(momentum_rank), dip_atr=dip, hold_days=HOLD_DAYS,
                      reasons=reasons, missing=missing, daily=df)
@@ -132,7 +162,7 @@ def find_leader_dips(histories: dict[str, pd.DataFrame], spy: pd.DataFrame | Non
         s = evaluate(t, df, ranks.get(t), mkt)
         if s is not None:
             out.append(s)
-    grade_order = {"A": 0, "B": 1, "C": 2}
+    grade_order = {"A": 0, "B": 1, "R": 2, "C": 3}
     return sorted(out, key=lambda s: (grade_order[s.grade], s.dip_atr))
 
 
