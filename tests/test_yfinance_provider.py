@@ -140,3 +140,16 @@ def test_get_earnings_dates_returns_empty_on_failure(monkeypatch):
     monkeypatch.setattr("yfinance.Ticker", raiser)
     provider = YFinanceProvider(cache=None, max_retries=1)
     assert provider.get_earnings_dates("FAKE") == []
+
+
+def test_daily_cache_missing_last_completed_session_is_stale():
+    import pandas as pd
+
+    from data.yfinance_provider import YFinanceProvider
+
+    old = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex([pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=10)]))
+    assert YFinanceProvider._missing_last_session(old, "1d", age_s=7200) is True
+    assert YFinanceProvider._missing_last_session(old, "1d", age_s=60) is False      # re-checked < 1h ago
+    assert YFinanceProvider._missing_last_session(old, "1h", age_s=7200) is False    # intraday: TTL only
+    fresh = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex([pd.Timestamp.now(tz="UTC")]))
+    assert YFinanceProvider._missing_last_session(fresh, "1d", age_s=7200) is False

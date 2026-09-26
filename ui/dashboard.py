@@ -152,6 +152,17 @@ const EXPLANATION_LABELS = {{
 }};
 const EXPLANATION_ORDER = ['why_it_passed', 'why_it_could_fail', 'structure', 'momentum', 'volume', 'context', 'levels', 'risk'];
 
+function renderChartRead(cr) {{
+  if (!cr || !cr.svg) return '';
+  const esc = (t) => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const heads = (cr.headlines || []).map(h => `<li>${{esc(h)}}</li>`).join('');
+  const plan = cr.plan ? `<div style="margin:4px 0 8px;padding:6px 10px;background:#edf2ff;border-left:3px solid #364fc7;color:#364fc7;font-weight:700">${{esc(cr.plan)}}</div>` : '';
+  const inv = cr.invalidation ? `<div style="font-size:12px;color:var(--ink-soft)">Invalid: ${{esc(cr.invalidation)}}</div>` : '';
+  return `<div style="margin-top:12px"><strong>Chart read (${{esc(cr.bias)}})</strong>
+    <ul style="margin:4px 0;padding-left:18px;color:#364fc7;font-weight:600;font-size:12px">${{heads}}</ul>${{plan}}
+    <div style="max-width:980px">${{cr.svg}}</div>${{inv}}</div>`;
+}}
+
 function renderExplanation(explanation) {{
   if (!explanation) return '';
   return EXPLANATION_ORDER.filter(k => explanation[k] && explanation[k].length).map(k => {{
@@ -213,6 +224,7 @@ SCAN_DATA.forEach((row, idx) => {{
       </div>
       <div class="cat-breakdown"><strong>Score breakdown</strong>${{renderCategoryBreakdown(row.category_breakdown)}}</div>
     </div>
+    ${{renderChartRead(row.chart_read)}}
   </td>`;
 
   tr.addEventListener('click', () => {{ detailTr.classList.toggle('open'); }});
@@ -311,6 +323,7 @@ def trade_plan_to_row(plan) -> dict[str, Any]:
         "max_holding_days": plan.max_holding_days,
         "max_entry": getattr(plan, "max_entry", None),
         "momentum_percentile": getattr(plan, "momentum_percentile", None),
+        "chart_read": getattr(plan, "chart_read", {}),
         "category_breakdown": getattr(plan, "category_breakdown", []),
         "explanation": getattr(plan, "explanation", {}),
     }

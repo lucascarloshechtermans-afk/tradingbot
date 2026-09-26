@@ -79,6 +79,9 @@ class TradePlan:
     # composite-momentum percentile vs. the scanned universe (see
     # gates.min_momentum_percentile); None when unavailable
     momentum_percentile: float | None = None
+    # trader-style chart read (analysis/chart_read.py): headlines, plan,
+    # invalidation, bias and an annotated SVG chart; empty when unavailable
+    chart_read: dict = field(default_factory=dict)
 
 
 def compute_breadth_pct_above_50ma(universe_histories: dict[str, pd.DataFrame]) -> float | None:
@@ -401,6 +404,31 @@ def scan_ticker(
     )
 
 
+def build_chart_read(provider: DataProvider, ticker: str, period: str) -> dict:
+    """Daily + 4h chart read for one setup (see analysis/chart_read.py). Only
+    run for the few tickers that produced a setup: it needs an extra 1h
+    history download per ticker."""
+    from analysis.chart_read import read_chart
+    from ui.chart_svg import render_chart_svg
+
+    try:
+        daily = provider.get_history(ticker, period=period)
+    except DataUnavailable:
+        return {}
+    try:
+        hourly = provider.get_history(ticker, period="730d", interval="1h")
+    except DataUnavailable:
+        hourly = None
+    try:
+        read = read_chart(ticker, daily, hourly)
+        svg = render_chart_svg(daily, read)
+    except Exception as exc:  # noqa: BLE001 - a chart read must never break the scan
+        logger.warning("chart read failed for %s: %s", ticker, exc)
+        return {}
+    return {"headlines": read.headlines, "plan": read.plan, "invalidation": read.invalidation,
+            "bias": read.bias, "ema200_4h": read.ema200_4h, "svg": svg}
+
+
 @dataclass
 class ScanRun:
     trade_plans: list[TradePlan]
@@ -521,6 +549,10 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         )
     else:
         trade_plans.sort(key=lambda p: p.score, reverse=True)
+
+    for plan in trade_plans:
+        if plan.setup != "No confirmed setup":
+            plan.chart_read = build_chart_read(provider, plan.ticker, config.data.period)
     duration = time.time() - started
     logger.info("scan complete: %d tickers scanned, %d setups found in %.1fs", len(filter_result.included), len(trade_plans), duration)
 
@@ -551,6 +583,18 @@ def print_scan_results(trade_plans: list[TradePlan], min_score: float = 65.0) ->
             f"{plan.relative_volume:<7.1f}{plan.rsi:<6.0f}{plan.market_regime:<10}"
         )
     print()
+    for i, plan in enumerate(shown, start=1):
+        cr = plan.chart_read
+        if not cr:
+            continue
+        print(f"{i}. {plan.ticker} chart read ({cr['bias'].upper()}):")
+        for h in cr["headlines"]:
+            print(f"     {h}")
+        if cr.get("plan"):
+            print(f"     PLAN: {cr['plan']}")
+        if cr.get("invalidation"):
+            print(f"     INVALID: {cr['invalidation']}")
+        print()
 
 
 def print_no_trade_summary(no_trade: dict[str, str]) -> None:

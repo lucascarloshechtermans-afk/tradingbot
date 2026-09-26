@@ -106,6 +106,34 @@ net P&L $8,370 (A) → $11,166 (D) despite ~1,000 fewer trades).
 Run long captures in ~34-ticker chunks: this container kills long-lived
 background processes.
 
+## Chart read: EMAs on two timeframes, zones, wedges, the plan
+
+Every setup the scanner lists now also gets a trader-style chart read
+(`analysis/chart_read.py`), shown in the terminal, the JSON and the
+dashboard with an annotated chart (`ui/chart_svg.py`):
+
+- daily EMA 9/21/50/200 and a fresh cross of the **DTF 200 EMA**
+- the **4H 200 EMA** (1h bars resampled to the 09:30/13:30 New York 4h
+  candles, as TradingView draws them)
+- **support/resistance zones** (price bands from clustered swing highs and
+  lows, not single lines) and a breakout out of one
+- **falling wedge / descending channel / descending triangle / bull flag**
+  since the last major peak, and a breakout above the upper line
+- the plan in chart language: `IF IT CAN HOLD <level> AND BREAK THROUGH
+  <4H 200 EMA / zone> @<price> -> NEXT RESISTANCE <zone>`, plus what
+  invalidates it
+
+For any ticker, with an HTML page of annotated charts:
+
+    python -m analysis.chart_read SYNA AMD --html charts.html
+
+It is a READ, not (yet) a filter or score input: whether wedge breakouts or
+4H-200-EMA reclaims add edge on top of the gates still needs a backtest.
+
+Daily history in the cache is now also refreshed when it is missing the
+last completed US session, not only after `cache_ttl_hours`: a scan on
+2026-09-26 had been served Thursday's closes from a Friday-evening cache.
+
 ## Scanner comparison: uploaded "Explosive Breakout" scanner vs this one
 
 `alt_scanners/explosive_breakout_scanner.py` is an externally supplied scanner,
