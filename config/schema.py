@@ -121,9 +121,28 @@ class RiskConfig:
     # ~3.35 ATRs away against a 2-ATR stop, a move that a 5-day swing rarely
     # completes. See README's "Target realism" section for the validated effect.
     target_volatility_multiplier: float = 1.5
+    # Per-strategy override of max_holding_days (horizon for both the forced
+    # time exit and the target cap). Validated on the full 134-ticker/5y
+    # universe (5-day vs 7-day caps, split at the median entry date so each
+    # half is checked separately): the two trend-FOLLOWING strategies improved
+    # with a 7-day hold in BOTH halves (Momentum Continuation +0.23%->+0.77%
+    # early / +0.42%->+0.93% late; Trend Continuation +0.13%->+0.36% /
+    # +0.24%->+0.69%), while Bullish Pullback got worse (-0.03%->-0.38% early)
+    # and the rest were mixed -- momentum persists, pullback/mean-reversion
+    # moves are short-lived. Only the consistent-in-both-halves group is
+    # extended; everything else keeps max_holding_days.
+    holding_days_by_strategy: dict[str, int] = field(
+        default_factory=lambda: {"Momentum Continuation": 7, "Trend Continuation": 7}
+    )
+
+    def holding_days_for(self, strategy: str | None) -> int:
+        if strategy is None:
+            return self.max_holding_days
+        return self.holding_days_by_strategy.get(strategy, self.max_holding_days)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "RiskConfig":
+        by_strategy_raw = raw.get("holding_days_by_strategy")
         cfg = cls(
             account_size=float(raw.get("account_size", 10_000.0)),
             risk_per_trade_pct=float(raw.get("risk_per_trade_pct", 0.5)),
@@ -132,12 +151,16 @@ class RiskConfig:
             max_holding_days=int(raw.get("max_holding_days", 5)),
             target_volatility_multiplier=float(raw.get("target_volatility_multiplier", 1.5)),
         )
+        if by_strategy_raw is not None:
+            cfg.holding_days_by_strategy = {str(k): int(v) for k, v in by_strategy_raw.items()}
         if cfg.account_size <= 0:
             raise ConfigError("risk.account_size must be positive")
         if not (0 < cfg.risk_per_trade_pct <= 100):
             raise ConfigError("risk.risk_per_trade_pct must be between 0 and 100")
         if cfg.max_holding_days <= 0:
             raise ConfigError("risk.max_holding_days must be positive")
+        if any(v <= 0 for v in cfg.holding_days_by_strategy.values()):
+            raise ConfigError("risk.holding_days_by_strategy values must be positive")
         return cfg
 
 

@@ -158,7 +158,7 @@ def build_trade_plan(
     ):
         return _reject(f"resistance_too_close: only {ctx.distance_to_resistance_atr:.2f} ATRs of room")
 
-    max_holding_days = config.risk.max_holding_days
+    max_holding_days = config.risk.holding_days_for(best.strategy if best else None)
 
     trade_levels = plan_trade_levels(
         entry, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0),

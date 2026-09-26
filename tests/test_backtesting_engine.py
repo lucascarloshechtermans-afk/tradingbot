@@ -284,6 +284,44 @@ def test_max_holding_days_forces_exit_after_n_bars():
     assert trade.holding_bars == 5
 
 
+def test_holding_days_fn_overrides_max_holding_days_per_trade():
+    idx = pd.date_range("2024-01-01", periods=12, freq="D")
+    df = pd.DataFrame(
+        {"open": [100] * 12, "high": [101] * 12, "low": [99] * 12, "close": [100] * 12, "volume": [1_000_000] * 12},
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    result = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, max_holding_days=5,
+        holding_days_fn=lambda h: 7,
+    )
+    trade = result.trades[0]
+    assert trade.exit_reason == "time_exit"
+    assert trade.holding_bars == 7
+
+
+def test_holding_days_fn_returning_none_falls_back_to_max_holding_days():
+    idx = pd.date_range("2024-01-01", periods=12, freq="D")
+    df = pd.DataFrame(
+        {"open": [100] * 12, "high": [101] * 12, "low": [99] * 12, "close": [100] * 12, "volume": [1_000_000] * 12},
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    result = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, max_holding_days=5,
+        holding_days_fn=lambda h: None,
+    )
+    assert result.trades[0].holding_bars == 5
+
+
 def test_max_holding_days_none_disables_time_exit():
     idx = pd.date_range("2024-01-01", periods=10, freq="D")
     df = pd.DataFrame(

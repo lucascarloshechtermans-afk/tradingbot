@@ -21,6 +21,7 @@ class Trade:
     pnl_pct: float | None = None
     holding_days: int | None = None
     holding_bars: int | None = None
+    max_holding_bars: int | None = None  # this trade's own time-exit cap (None = no cap)
 
 
 @dataclass
@@ -34,6 +35,7 @@ class BacktestResult:
 SignalFn = Callable[[pd.DataFrame], bool]
 StopFn = Callable[[pd.DataFrame, float], float]
 TargetFn = Callable[[pd.DataFrame, float, float], float]
+HoldingDaysFn = Callable[[pd.DataFrame], "int | None"]
 
 
 def run_backtest(
@@ -47,6 +49,7 @@ def run_backtest(
     slippage_pct: float = 0.05,
     max_position_pct: float = 20.0,
     max_holding_days: int | None = None,
+    holding_days_fn: HoldingDaysFn | None = None,
 ) -> BacktestResult:
     """Event-driven, single-position backtester with no look-ahead bias.
 
@@ -79,6 +82,10 @@ def run_backtest(
        a weekend never counts) without hitting its stop or target — this is what
        actually enforces a "~1 trading week" swing-trade horizon end to end,
        rather than just hoping the target happens to be reached in time.
+    7. `holding_days_fn`, when given, is called once at entry (with the same
+       `history.iloc[:i]` stop_fn/target_fn see) and may return a per-trade cap
+       that overrides `max_holding_days` for that trade only -- e.g. a longer
+       horizon for trend-following setups than for mean-reversion ones.
     """
     n = len(history)
     equity = initial_capital
@@ -117,8 +124,15 @@ def run_backtest(
                 equity_curve_values.append(equity)
                 continue
 
+            trade_cap = holding_days_fn(history_before_entry) if holding_days_fn is not None else None
+            if trade_cap is None:
+                trade_cap = max_holding_days
+
             equity -= commission_per_trade
-            trade = Trade(entry_date=date, entry_price=entry_price, shares=shares, stop=stop, target=target)
+            trade = Trade(
+                entry_date=date, entry_price=entry_price, shares=shares, stop=stop, target=target,
+                max_holding_bars=trade_cap,
+            )
             in_position = True
             entry_bar_index = i
             equity_curve_values.append(equity)
@@ -129,7 +143,7 @@ def run_backtest(
             hit_target = bar["high"] >= trade.target
             is_last_bar = i == n - 1
             bars_held = i - entry_bar_index
-            hit_time_limit = max_holding_days is not None and bars_held >= max_holding_days
+            hit_time_limit = trade.max_holding_bars is not None and bars_held >= trade.max_holding_bars
 
             if hit_stop or hit_target or hit_time_limit or is_last_bar:
                 if hit_stop:

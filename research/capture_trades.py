@@ -42,7 +42,9 @@ def main(argv: list[str] | None = None) -> int:
 
     config = load_config(args.config)
     if args.max_holding_days is not None:
+        # an explicit override means a UNIFORM cap for every strategy
         config.risk.max_holding_days = args.max_holding_days
+        config.risk.holding_days_by_strategy = {}
     if args.min_rr is not None:
         config.gates.min_risk_reward = args.min_rr
     cache = DiskCache(cache_dir=config.data.cache_dir, ttl_hours=config.data.cache_ttl_hours)

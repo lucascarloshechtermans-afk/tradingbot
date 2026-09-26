@@ -131,12 +131,12 @@ def make_screener_functions(
     earnings_growth: float | None = None,
     feature_by_bar: dict[int, dict] | None = None,
 ):
-    max_holding_days = config.risk.max_holding_days
     gates = config.gates
     # populated by stop_fn (which runs first, on the entry bar, with the real
     # entry price) and consumed by target_fn — avoids computing plan_trade_levels
     # twice for the same trade with two different "entry" numbers.
     planned_levels_by_bar: dict[int, object] = {}
+    holding_days_by_bar: dict[int, int] = {}
 
     def _blocked_by_gates(history_so_far: pd.DataFrame) -> bool:
         date = history_so_far.index[-1]
@@ -201,7 +201,8 @@ def make_screener_functions(
         if pd.isna(atr) or atr <= 0:
             return False
         trade_levels = plan_trade_levels(
-            ctx.last_close, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0),
+            ctx.last_close, atr, ctx.levels, config.risk.holding_days_for(best.strategy),
+            direction="long", rr_multiples=(1.5, 3.0),
             target_volatility_multiplier=config.risk.target_volatility_multiplier,
         )
         if trade_levels is None or trade_levels.risk_reward < gates.min_risk_reward:
@@ -258,12 +259,14 @@ def make_screener_functions(
         signals = evaluate_strategies(ctx)
         best = best_tradeable_signal(signals)
         attempted_strategy_by_bar[len(history_before_entry)] = best.strategy if best else "Unknown"
+        holding_days = config.risk.holding_days_for(best.strategy if best else None)
+        holding_days_by_bar[len(history_before_entry)] = holding_days
 
         atr = ctx.atr14.iloc[-1]
         if pd.isna(atr) or atr <= 0:
             return entry * 0.95
         trade_levels = plan_trade_levels(
-            entry, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0),
+            entry, atr, ctx.levels, holding_days, direction="long", rr_multiples=(1.5, 3.0),
             target_volatility_multiplier=config.risk.target_volatility_multiplier,
         )
         if trade_levels is None:
@@ -279,7 +282,10 @@ def make_screener_functions(
         # entry, so this should not normally be reached
         return entry * 1.05
 
-    return signal_fn, stop_fn, target_fn
+    def holding_days_fn(history_before_entry: pd.DataFrame) -> int | None:
+        return holding_days_by_bar.get(len(history_before_entry))
+
+    return signal_fn, stop_fn, target_fn, holding_days_fn
 
 
 def backtest_ticker(
@@ -308,7 +314,7 @@ def backtest_ticker(
     rr_by_bar: dict[int, float] = {}
     overext_by_bar: dict[int, int] = {}
     feature_by_bar: dict[int, dict] | None = {} if capture_features else None
-    signal_fn, stop_fn, target_fn = make_screener_functions(
+    signal_fn, stop_fn, target_fn, holding_days_fn = make_screener_functions(
         cache, config, attempted_strategy_by_bar, score_by_bar, regime_by_bar, rr_by_bar,
         overext_by_bar,
         min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
@@ -323,6 +329,7 @@ def backtest_ticker(
         slippage_pct=config.backtesting.slippage_pct,
         max_position_pct=config.risk.max_position_pct,
         max_holding_days=config.risk.max_holding_days,
+        holding_days_fn=holding_days_fn,
     )
 
     trade_strategies = []
@@ -763,7 +770,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.min_rr is not None:
         config.gates.min_risk_reward = args.min_rr
     if args.max_holding_days is not None:
+        # an explicit override means a UNIFORM cap for every strategy
         config.risk.max_holding_days = args.max_holding_days
+        config.risk.holding_days_by_strategy = {}
 
     if args.dry_run:
         from scanner import SyntheticDataProvider
