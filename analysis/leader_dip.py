@@ -1,31 +1,29 @@
-"""LEADER DIP -- the one setup that survived the optimization-phase audit.
+"""LEADER DIP -- a disciplined entry: buy a short-term dip in a momentum leader.
 
-Buy a short-term dip in a cross-sectional momentum leader:
   * composite momentum rank >= 80 among the scanned universe
     (63/126/252-day returns, last 5 days skipped)
   * 5-day move <= -1.0 ATR (the dip)
-Four confirmations were each better in ALL four validation cells
-(190-ticker development universe and 163-ticker never-used universe, each
-split into 2022-09/2025 and the Oct 2025 - Sep 2026 holdout year) -- but the
-two market ones define the regime, and the two stock ones only help in a
-stressed market, so the grade is regime-dependent (see grade_for()):
-  * deep dip: close >= 1 ATR below the daily 21 EMA
-  * fear: VIX > 20
-  * weak tape: SPY below its 50-day SMA
-  * the stock moves: ATR% >= 3
-Stressed market: A = both stock confirmations, B = one, C = none (watch).
-Calm market: R = every leader dip, half size (thin but consistent edge).
+Trade plan: buy the next session's open, stop 2.5 ATR below the fill, no fixed
+target, exit at the close of the 10th session.
 
-Trade plan (as backtested): buy the next session's open, stop 2.5 ATR below
-the fill (never tighter than 2 ATR -- the audit's minimum-stop rule), no
-fixed target, exit at the close of the 10th session. Backtest (research/
-leader_dip.py + README): grade A +0.19..+0.35R/trade in all four cells,
-grade A+B +0.07..+0.19R, every calendar year positive in both universes.
+What the research says (README, "Research round 4"; 966 S&P 500/400 stocks,
+2008-2026, four validation cells): NO daily price or earnings setup -- this
+one included -- beat a random eligible stock bought on the SAME day. Round 3's
+grades (deep dip + ATR% >= 3 in a stressed market) were +0.16..+0.19R in
+2022-2026 but -0.03R vs random over 2008-2021; the "edge" of dips in earlier
+rounds came from a biased baseline and from market timing that stopped working
+after 2021. So the grade is no longer a claim of edge; it is a RISK DIAL:
 
-Why it works where the old setups didn't: the old breakout / trend-
-continuation / pullback entries bought short-term STRENGTH and did worse
-than random entries in the same stocks; short-term moves tend to reverse,
-and inside a longer-term leader a dip is the side of that reversal to be on.
+  * N (normal): SPY above its 200-day SMA -> normal size (0.5% account risk)
+  * H (half):   SPY below its 200-day SMA -> half size (0.25%)
+The 200-day trend filter is the one rule that held in every period tested
+(1993-2007, 2008-2021, 2022-2026): it cut SPY's max drawdown from 47/52/25%
+to 29/21/21% (at the cost of some return).
+
+The deep-dip / VIX / 50-day / ATR checks are still reported as context only.
+Why keep a dip entry at all: it is not worse than random (breakouts at a new
+high were slightly WORSE than random in 3 of 4 cells), it gives a defined
+stop, and it stops you from chasing extended moves.
 """
 
 from __future__ import annotations
@@ -67,36 +65,26 @@ class LeaderDip:
 
 
 def market_state(spy: pd.DataFrame | None, vix: pd.DataFrame | None) -> dict:
-    out = {"vix": None, "spy_below_50": None}
+    out = {"vix": None, "spy_below_50": None, "spy_below_200": None}
     if vix is not None and len(vix):
         out["vix"] = float(vix["close"].dropna().iloc[-1])
     if spy is not None and len(spy) >= 50:
         c = spy["close"].dropna()
         out["spy_below_50"] = bool(c.iloc[-1] < c.rolling(50).mean().iloc[-1])
+        if len(c) >= 200:
+            out["spy_below_200"] = bool(c.iloc[-1] < c.rolling(200).mean().iloc[-1])
     return out
 
 
-def is_calm(market: dict) -> bool:
-    """VIX <= 20 and SPY above its 50-day SMA (unknown counts as calm)."""
-    vix = market.get("vix")
-    return (vix is None or vix <= 20) and not market.get("spy_below_50")
+def grade_for(market: dict, deep_dip: bool = False, moves: bool = False) -> str:
+    """Risk dial, not an edge claim (module docstring): N = normal size while
+    SPY is above its 200-day SMA (or unknown), H = half size below it.
+    deep_dip / moves are accepted for compatibility and deliberately ignored:
+    they did not beat random entries over 2008-2021."""
+    return "H" if market.get("spy_below_200") else "N"
 
 
-def grade_for(market: dict, deep_dip: bool, moves: bool) -> str:
-    """Regime-dependent grade (README, 'Leader Dip grading by regime').
-
-    Stressed market (VIX > 20 or SPY below its 50-day): the stock-level
-    confirmations sort the dips -- A = deep dip AND ATR% >= 3 (+0.22..+0.41R
-    per trade in all four validation cells), B = one of them (+0.07..+0.28R),
-    C = neither (mixed / negative -> watch only).
-    Calm market: the stock-level confirmations add nothing (both together
-    were -0.11R on the out-of-sample stocks), but every leader dip was still
-    positive in all four cells (+0.02..+0.11R) -- grade R, tradeable at half
-    size because the edge is thin."""
-    if is_calm(market):
-        return "R"
-    n = int(deep_dip) + int(moves)
-    return "A" if n == 2 else ("B" if n == 1 else "C")
+RISK_PCT = {"N": 0.5, "H": 0.25}
 
 
 def evaluate(ticker: str, df: pd.DataFrame, momentum_rank: float | None, market: dict) -> LeaderDip | None:
@@ -139,11 +127,10 @@ def evaluate(ticker: str, df: pd.DataFrame, momentum_rank: float | None, market:
         reasons.append(f"moves enough: ATR {atr_pct:.1f}%")
     else:
         missing.append(f"ATR {atr_pct:.1f}% (< 3%)")
-    grade = grade_for(market, deep_dip=d21 <= -1.0, moves=atr_pct >= 3)
-    if grade == "R":
-        reasons.append("rustige markt: kleine maar consistente edge -- halve positie (0,25% risico)")
-        missing = ["rustige markt: diepe dip en ATR voegen dan niets toe (getest); de edge is klein "
-                   "(+0,02..+0,11R per trade), daarom een halve positie"]
+    grade = grade_for(market)
+    if grade == "H":
+        missing.append("SPY below its 200-day SMA: half size (0.25% risk) -- the trend filter is the one rule "
+                       "that reduced drawdowns in every period tested")
     return LeaderDip(ticker=ticker, grade=grade, confirmations=conf, close=close, stop_estimate=close - STOP_ATR * a,
                      atr=a, momentum_rank=float(momentum_rank), dip_atr=dip, hold_days=HOLD_DAYS,
                      reasons=reasons, missing=missing, daily=df)
@@ -162,8 +149,7 @@ def find_leader_dips(histories: dict[str, pd.DataFrame], spy: pd.DataFrame | Non
         s = evaluate(t, df, ranks.get(t), mkt)
         if s is not None:
             out.append(s)
-    grade_order = {"A": 0, "B": 1, "R": 2, "C": 3}
-    return sorted(out, key=lambda s: (grade_order[s.grade], s.dip_atr))
+    return sorted(out, key=lambda s: s.dip_atr)
 
 
 @dataclass

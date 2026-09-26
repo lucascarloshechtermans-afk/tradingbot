@@ -26,3 +26,10 @@ def test_overview_says_no_trade_without_grade_a_or_b_and_lists_sectors():
     html = build_overview_html([], [], [], SECTORS, {}, {"vix": 14.9, "spy_below_50": False})
     assert "NO TRADE vandaag" in html
     assert "Technology" in html and "Overzicht per sector" in html
+
+
+def test_overview_shows_research_note_and_trend_sizing():
+    html = build_overview_html([], [], [], SECTORS, {}, {"vix": 22.0, "spy_below_50": True, "spy_below_200": True})
+    assert "Wat het onderzoek zegt" in html
+    assert "willekeurig aandeel" in html
+    assert "ONDER zijn 200-daags" in html and "halve posities" in html

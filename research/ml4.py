@@ -20,7 +20,7 @@ DIP_HYPS = ["H01 LEADER_DIP", "H02 LEADER_DIP_DEEP", "H03 IBS_UPTREND", "H04 RSI
 
 
 def feature_panels(p: Panel, I: dict[str, pd.DataFrame]) -> dict[str, np.ndarray]:
-    C, O, H, L, V, A = I["C"], I["O"], I["H"], I["L"], I["V"], I["A"]
+    C, O, V, A = I["C"], I["O"], I["V"], I["A"]  # noqa: E741
     d = C.diff()
     up = d.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
     dn = (-d.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean()

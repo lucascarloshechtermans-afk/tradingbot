@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import sys
 
-import numpy as np
 import pandas as pd
 
 from research.engine2 import SPLIT_DATE, build_panel, simulate_rules

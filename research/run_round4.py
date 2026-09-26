@@ -8,7 +8,6 @@ import argparse
 import sys
 import time
 
-import numpy as np
 import pandas as pd
 
 from research.engine2 import HOLDS, add_context, baseline, build_panel, cell_stats, simulate

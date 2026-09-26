@@ -12,7 +12,143 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
-## Optimization round 3 — "break your own scanner" (LATEST, supersedes everything below)
+## Research round 4 — 966 stocks, 2008–2026, 26 pre-registered hypotheses (LATEST, supersedes round 3's grades)
+
+**Verdict: no daily price or earnings setup we could build — this scanner's, the
+uploaded breakout scanner's, the classic swing setups, or a machine-learned
+ranking — beat a random eligible stock bought on the same day. The earlier
+"edges" came from a biased baseline and from market timing that stopped
+working after 2021. The scanner is now honest about that: LEADER DIP stays as a
+disciplined entry, and its grade is a risk dial driven by the one rule that
+held in every period — SPY's 200-day trend.**
+
+Protocol (`research/HYPOTHESES.md`, committed before any result was seen):
+S&P 500 + S&P 400 + scanner lists = 966 stocks, split+dividend adjusted daily
+bars from 2007 (`research/bigdata.py`); tickers split once (seeded, by sector)
+into RESEARCH/HOLDOUT; time split at 2022-01-01. Cells: DEV (research ≤2021,
+all exploration), VAL-T (research ≥2022), VAL-U (holdout ≤2021), FINAL
+(holdout ≥2022, looked at once). Signal at the close, entry next open +0.05%
+slippage, 2.5 ATR stop checked from the entry bar (gap-through fills at the
+open), time exits 5/10/20/40 sessions, one open trade per ticker.
+
+### FINAL VERSION
+- `analysis/leader_dip.py`: momentum rank ≥ 80 and a 5-day move ≤ −1 ATR; buy
+  the next open, stop 2.5 ATR, exit after 10 sessions. Grade **N** = normal
+  size (0.5% account risk) while SPY is above its 200-day SMA, **H** = half
+  size (0.25%) below it. Deep dip / VIX / 50-day / ATR% are shown as context only.
+- Dashboard: a "Wat het onderzoek zegt" card above the setups; the market line
+  shows SPY vs its 200-day and the resulting position size.
+
+### WHAT CHANGED
+1. **Our own metric was biased.** "Excess R vs the same stock in the same
+   month" contains the event's own move: a dip lowers that month's mean (dips
+   look better), a breakout raises it (breakouts look worse). Re-scored
+   against a same-day cross-sectional baseline (`engine2.day_baseline`, mean R
+   of every eligible stock entering that day) the dip edge disappears.
+2. The absolute edge of dips was **market timing**: they fire after market
+   selloffs. A random stock bought when SPY > SMA200, VIX ≥ 15 and SPY is down
+   over 5 days earned R20 +0.26 in 2008–2021 — as much as the best dip setup.
+3. Grades A/B/C/R (round 3) were validated on 2022–2026 only; on the long
+   history grade A was −0.03R vs random (table below). Replaced by the trend risk dial.
+
+### FEATURES REMOVED
+- Regime/stock-confirmation grading A/B/C/R and every "+0.2..0.4R edge" claim
+  in the terminal output and dashboard; grade C "watch" (every leader dip is
+  now listed under Setups, sized by the trend).
+
+### FEATURES ADDED
+- `market_state()` reports `spy_below_200`; `grade_for()` → N/H; `RISK_PCT`.
+- Research tooling: `engine2.py` (vectorised event engine, both baselines),
+  `hypotheses4.py`, `run_round4.py`, `rebase4.py`, `earnings_data.py` +
+  `earnings4.py` (Yahoo earnings dates and EPS surprise, 63,809 reports),
+  `xsection4.py` (same-day quintile study), `ml4.py`/`run_ml4.py` (LightGBM
+  walk-forward), `portfolio4.py` (one-account simulation + selection-luck
+  Monte Carlo), `port_round4.py`, `port_regime4.py`, `exit_round4.py`.
+
+### BEST PERFORMING SETUPS
+None beats a random same-day stock in all cells. In absolute terms the best
+was *any* long entry after a market pullback in a bull market with VIX ≥ 15 —
+but only until 2021 (see out-of-sample). Within one day, which stock you pick
+moved the result by ±0.01–0.07R per 20 days, and no characteristic
+(extension, RSI, ATR%, beta, momentum, 52-week-high distance, earnings
+surprise, sector rank, volume) kept its sign across the four cells.
+
+### WORST FAILURE MODES
+- Buying strength: 20-day breakout on volume −0.030R vs random (DEV, t −4.1);
+  52-week closing high negative in DEV, VAL-T and VAL-U (t ≈ −2 each).
+- Buying dips when VIX < 15: 0.00R (30% of years positive), 30% of all dip signals.
+- Earnings-gap chasing (E01/E03/E06) and fading earnings flushes (E04): ≈ random or worse.
+- Portfolio level: the dip book was mostly market beta — max drawdown 40–47%
+  without a trend filter (2008).
+
+### OUT-OF-SAMPLE RESULTS
+Excess R per trade vs a random stock bought the same day (same half), 20-session hold:
+
+| setup | DEV | VAL-T | VAL-U | FINAL |
+|---|---|---|---|---|
+| H01 leader dip | −0.013 | +0.011 | −0.019 | +0.020 |
+| H02 leader dip, deep | −0.013 | +0.021 | −0.023 | +0.029 |
+| H04 RSI(2) < 10 in uptrend | +0.009 | +0.018 | +0.002 | +0.023 |
+| H14 sector-leader dip | +0.013 | −0.027 | +0.007 | −0.011 |
+| H08 20-day breakout on volume | −0.030 | −0.004 | −0.018 | +0.024 |
+| H07 52-week high | −0.012 | −0.016 | −0.018 | +0.016 |
+
+Market-state rule M1 (random stock, R20, GO days vs other days): DEV +0.255 vs
++0.087, VAL-U +0.264 vs +0.094, but VAL-T +0.029 vs +0.086 and FINAL +0.031 vs
++0.084 → **failed after 2021**. On SPY itself 1993–2007 (never looked at): +1.10%
+vs +0.71% per 20 days, better in 60% of years; 2022–2026: +0.97% vs +1.09%.
+
+Round-3 grades on the 966-stock data (R10 absolute / vs random):
+
+| grade | DEV | VAL-U | VAL-T | FINAL |
+|---|---|---|---|---|
+| A | +0.05 / −0.03 | +0.04 / −0.03 | +0.19 / +0.10 | +0.16 / +0.07 |
+| B | +0.08 / −0.02 | +0.11 / 0.00 | +0.09 / +0.05 | +0.10 / +0.03 |
+| R (calm) | +0.02 / 0.00 | +0.02 / 0.00 | +0.02 / +0.01 | +0.01 / +0.02 |
+
+### WALK-FORWARD RESULTS
+LightGBM ranking model over 67k dip candidates (35 features: stock, sector,
+earnings and market state), trained on years < Y and tested on Y, 2012–2021:
+rank correlation with the outcome −0.01 (R10) / −0.03 (R20); outcome by
+predicted decile U-shaped (lowest decile best); the top half no better than
+all in 50%/40% of years. Rejected.
+
+### ROBUSTNESS RESULTS
+- VIX gate neighbourhood (DEV): VIX ≥ 13…20 all gave +0.08…+0.10R10 and 86%
+  of years positive — smooth, yet it still failed after 2021, so a smooth
+  neighbourhood in one era is not enough.
+- Selection-luck Monte Carlo (same candidates, random daily priority, 1% risk,
+  10 positions, DEV): CAGR 10th–90th percentile 5–11%; best variant (VIX ≥ 15
+  & bull, 20-session hold) median CAGR 9.1%, max DD 28%, Sharpe 0.70, vs SPY
+  buy-and-hold 11.0% / 52% / 0.61.
+- SPY 200-day trend filter, all three periods: max DD 47→29% (1993–2007),
+  52→21% (2008–2021), 25→21% (2022–2026); CAGR 10.3→6.7%, 11.0→9.7%,
+  12.3→8.6%. It is a drawdown tool, not a return booster — and it is why the
+  grade now halves size below the 200-day.
+
+### REMAINING WEAKNESSES
+- Survivorship: the universe is today's index members; names that were
+  delisted or dropped out are missing (this flatters every long rule equally).
+- Earnings dates/surprises come from Yahoo (≈2% missing surprise; timing
+  inferred from the report hour, ambiguous hours resolved by the larger gap).
+- Not tested for lack of data: analyst revisions, insider buying, short
+  interest, options flow, intraday entries. The FMP / Alpha Vantage keys of
+  this environment could not be used from plain HTTP scripts here.
+- Only daily bars; costs are slippage + $1 commission; no taxes, no borrow.
+- The chart read (EMAs, 4H 200 EMA, zones, wedges) and patterns remain
+  discretionary tools — they were never shown to add an edge.
+
+### HOW TO RUN
+    python scanner.py --dashboard dashboard.html            # LEADER DIP (N/H) + research card + info lists
+    python -m research.bigdata --members index_members.json --extra <tickers> --out big.pkl   # 966-stock dataset
+    python -m research.run_round4 --big big.pkl --out round4.pkl
+    python -m research.earnings_data big.pkl earnings.pkl && python -m research.earnings4 big.pkl earnings.pkl earn4.pkl
+    python -m research.rebase4 big.pkl round4.pkl earn4.pkl DEV,VAL-T,VAL-U,FINAL   # same-day baseline
+    python -m research.xsection4 big.pkl earnings.pkl xs4.pkl                        # which stock traits matter
+    python -m research.run_ml4 big.pkl cand4.pkl                                     # walk-forward ranking model
+    python -m research.port_regime4 big.pkl cand4.pkl DEV                            # one-account simulation
+
+## Optimization round 3 — "break your own scanner" (superseded by round 4 above)
 
 **Verdict: the original scanner had no edge on data it was not built on, and
 its entries were worse than random entry days in the same stocks. It was

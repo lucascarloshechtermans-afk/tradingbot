@@ -206,7 +206,6 @@ def simulate_rules(p: Panel, signal: np.ndarray, *, stop_atr: float = 2.5, max_h
     idx = te[:, None] + np.arange(max_hold)[None, :]
     lows, highs, opens, closes = (a[idx, js[:, None]] for a in (p.l, p.h, p.o, p.c))
     hit_stop = np.where(np.isfinite(lows), lows <= stop[:, None], False)
-    events = [hit_stop]
     if target_atr is not None:
         tgt = entry + target_atr * p.atr[ts, js]
         hit_tgt = np.where(np.isfinite(highs), highs >= tgt[:, None], False) & ~hit_stop

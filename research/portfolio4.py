@@ -33,7 +33,6 @@ def run_portfolio(p: Panel, trades: pd.DataFrame, *, stop_atr: float, risk_pct: 
         tr["risk_mult"] = 1.0
     tr = tr[tr["risk_mult"] > 0]
     by_day = {t: g.sort_values("prio", ascending=False) for t, g in tr.groupby("te")}
-    T = len(p.dates)
     first = int(tr["te"].min()) if len(tr) else 0
     last = int(tr["exit_t"].max()) if len(tr) else 0
     equity = start_equity

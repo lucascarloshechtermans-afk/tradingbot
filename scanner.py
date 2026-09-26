@@ -671,20 +671,21 @@ def print_scan_results(trade_plans: list[TradePlan], min_score: float = 65.0) ->
 
 
 def print_leader_dips(leader_dips: list, market: dict) -> None:
-    vix, weak = market.get("vix"), market.get("spy_below_50")
+    vix, weak, bear = market.get("vix"), market.get("spy_below_50"), market.get("spy_below_200")
     print()
-    print("=== LEADER DIP -- validated setup (buy next open, stop 2.5 ATR, exit after 10 sessions) ===")
-    print("    grades: stressed market A/B = trade, C = watch; calm market R = trade at HALF size (0.25% risk)")
+    print("=== LEADER DIP -- disciplined dip entry (buy next open, stop 2.5 ATR, exit after 10 sessions) ===")
+    print("    research round 4: no setup beat a random stock bought the same day (2008-2026) -- the grade is a")
+    print("    RISK DIAL: N = normal size (0.5% risk), H = half size (0.25%) while SPY is below its 200-day SMA")
     if vix is not None:
-        print(f"    market: VIX {vix:.1f}{' (fear)' if vix > 20 else ''}, SPY {'BELOW' if weak else 'above'} its 50-day SMA")
-    tradeable = [(d, r) for d, r in leader_dips if d.grade in ("A", "B", "R")]
-    if not tradeable:
+        print(f"    market: VIX {vix:.1f}, SPY {'BELOW' if weak else 'above'} its 50-day"
+              f"{'' if bear is None else (', BELOW its 200-day' if bear else ', above its 200-day')}")
+    if not leader_dips:
         print("    NO TRADE: no leader dip today.")
     for d, read in leader_dips:
-        tag = {"A": "TRADE", "B": "TRADE", "R": "HALF"}.get(d.grade, "watch")
+        tag = {"N": "TRADE", "H": "HALF"}.get(d.grade, "watch")
         print(f"  [{d.grade}] {d.ticker:<6} {tag:<6} close {d.close:.2f}  stop~{d.stop_estimate:.2f} ({d.risk_pct:.1f}%)  "
-              f"dip {d.dip_atr:+.1f} ATR  momentum {d.momentum_rank:.0f}  confirmations {d.confirmations}/4")
-        print("        + " + "; ".join(d.reasons[2:]) if len(d.reasons) > 2 else "        + (no confirmations)")
+              f"dip {d.dip_atr:+.1f} ATR  momentum {d.momentum_rank:.0f}")
+        print("        + " + "; ".join(d.reasons[2:]) if len(d.reasons) > 2 else "        + (no context notes)")
         if d.missing:
             print("        - " + "; ".join(d.missing))
     print()
