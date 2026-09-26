@@ -72,6 +72,9 @@ class TradePlan:
     max_holding_days: int = 5
     category_breakdown: list[dict] = field(default_factory=list)
     explanation: dict = field(default_factory=dict)
+    # buy-limit for the next session (signal close + gates.max_entry_gap_atr
+    # ATRs); None when the no-chase rule is disabled
+    max_entry: float | None = None
 
 
 def compute_breadth_pct_above_50ma(universe_histories: dict[str, pd.DataFrame]) -> float | None:
@@ -190,6 +193,10 @@ def build_trade_plan(
         rs_percentile=rs_rank,
     )
 
+    max_entry = None
+    if config.gates.max_entry_gap_atr is not None:
+        max_entry = entry + config.gates.max_entry_gap_atr * float(atr)
+
     reasons = list(best.reasons) if best else []
     reasons.append(f"Doel is berekend om binnen ~{max_holding_days} handelsdagen haalbaar te zijn (op basis van ATR)")
     risks = list(best.risks) if best else []
@@ -259,6 +266,7 @@ def build_trade_plan(
         ),
         "levels": [
             f"Entry: {entry:.2f}",
+            *([f"Max entry (buy-limit, skip if it opens above): {max_entry:.2f}"] if max_entry is not None else []),
             f"Stop: {stop_levels.final_stop:.2f} ({stop_levels.final_stop_method}-based)",
             f"Target: {target2:.2f}",
             f"Risk/reward: {rr:.1f}:1",
@@ -294,6 +302,7 @@ def build_trade_plan(
         max_holding_days=max_holding_days,
         category_breakdown=category_breakdown,
         explanation=explanation,
+        max_entry=round(max_entry, 2) if max_entry is not None else None,
     )
 
 

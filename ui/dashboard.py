@@ -208,6 +208,7 @@ SCAN_DATA.forEach((row, idx) => {{
         <strong>ATR%</strong><div>${{row.atr_pct.toFixed(1)}}%</div>
         <strong>Sector</strong><div>${{row.sector || 'n/a'}}</div>
         <strong>Max holding period</strong><div>${{row.max_holding_days}} trading days</div>
+        ${{row.max_entry != null ? `<strong>Max entry (buy-limit)</strong><div>${{row.max_entry.toFixed(2)}}</div>` : ''}}
       </div>
       <div class="cat-breakdown"><strong>Score breakdown</strong>${{renderCategoryBreakdown(row.category_breakdown)}}</div>
     </div>
@@ -307,6 +308,7 @@ def trade_plan_to_row(plan) -> dict[str, Any]:
         "risks": plan.risks,
         "recent_closes": plan.recent_closes,
         "max_holding_days": plan.max_holding_days,
+        "max_entry": getattr(plan, "max_entry", None),
         "category_breakdown": getattr(plan, "category_breakdown", []),
         "explanation": getattr(plan, "explanation", {}),
     }
