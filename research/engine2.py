@@ -274,3 +274,38 @@ def add_day_excess(trades: pd.DataFrame, dbase: dict[int, np.ndarray]) -> pd.Dat
         if f"r{H}" in trades:
             trades[f"x{H}"] = trades[f"r{H}"] - b[trades["t"].to_numpy()]
     return trades
+
+
+def day_baseline_halves(p: Panel, stop_atr: float = 2.5, holds=HOLDS) -> dict[int, dict[int, np.ndarray]]:
+    """day_baseline() computed separately for each ticker half (1 = research,
+    0 = holdout), so a cell is only compared with stocks of its own half."""
+    T, N = p.c.shape
+    out = {}
+    for half in (1, 0):
+        sums = {H: np.zeros(T) for H in holds}
+        cnt = {H: np.zeros(T) for H in holds}
+        for j0 in range(0, N, 120):
+            cols = np.zeros(N, dtype=bool)
+            cols[j0:j0 + 120] = True
+            cols &= p.half == half
+            if not cols.any():
+                continue
+            tr = _simulate_all(p, np.ones_like(p.eligible) & cols[None, :], stop_atr, holds)
+            t = tr["t"].to_numpy()
+            for H in holds:
+                r = tr[f"r{H}"].to_numpy()
+                ok = np.isfinite(r)
+                np.add.at(sums[H], t[ok], r[ok])
+                np.add.at(cnt[H], t[ok], 1)
+        out[half] = {H: np.where(cnt[H] >= 20, sums[H] / np.maximum(cnt[H], 1), np.nan) for H in holds}
+    return out
+
+
+def add_half_day_excess(trades: pd.DataFrame, dbh: dict[int, dict[int, np.ndarray]]) -> pd.DataFrame:
+    trades = trades.copy()
+    t = trades["t"].to_numpy()
+    res = trades["research"].to_numpy()
+    for H in dbh[1]:
+        if f"r{H}" in trades:
+            trades[f"x{H}"] = trades[f"r{H}"] - np.where(res, dbh[1][H][t], dbh[0][H][t])
+    return trades

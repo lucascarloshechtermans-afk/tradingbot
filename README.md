@@ -12,6 +12,32 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 5 — technicals only: small caps, longer holds, the 4H/daily 200 EMA style
+
+Same strict scoring as round 4 (pre-registered in `research/HYPOTHESES.md`;
+excess R vs a random stock of the same half bought the same day; pass =
+t ≥ 3 and ≥ 70% of development years positive, then validation cells).
+
+**Result: nothing passed.** Technical setups on daily or 4H bars did not beat a
+same-day random stock — not on small caps, not with longer holds, not in the
+multi-timeframe EMA style.
+
+| angle | best | worst |
+|---|---|---|
+| S&P 600 small caps, H01–H19 + L01–L06, DEV, holds 5–60 (`run_round5.py`, 593 stocks) | gap-down reversal +0.05R (t ≤ 2.2), leader dip +0.01..+0.04R (t ≤ 1.7) | EMA200 reclaim −0.10R at 40–60 bars (t −2.5), 20-day breakout −0.04R, 26-week breakout −0.04R |
+| longer holds 20/40/60, S&P 500+400, DEV | golden cross +0.03R at 60 bars (t 0.0) | Minervini trend template −0.06R at 60 bars (t −4.6), weekly 26-week breakout −0.05R (t −3.8), momentum top decile −0.07R (t −2.9) |
+| 4H 200 EMA break while holding the daily 200 EMA (`mtf5.py`, 1.5k stocks, 2024-03 → 2026-09) | small caps, research half: +0.06R at 20 bars (t 0.8) — holdout −0.02R | large caps: −0.02..+0.01R, t ≈ −2..0; breaking the 4H 200 while BELOW the daily 200 ≈ −0.03R |
+
+What this does and does not mean: the daily/4H 200 EMA and zones are fine for
+*where to put a stop and how to plan a trade*, but on their own they do not
+select stocks that go up more than a random stock over the next 1–12 weeks.
+Chasing strength (breakouts, trend templates, new highs) was the one thing
+that was consistently worse than random, in both universes and at every horizon.
+
+    python -m research.run_round5 small.pkl r5_small.pkl DEV        # small caps
+    python -m research.run_round5 big.pkl r5_big.pkl DEV "H07,H09,H13,L0"
+    python -m research.hourly_data h4.pkl big.pkl small.pkl && python -m research.mtf5 big.pkl h4.pkl mtf.pkl
+
 ## Research round 4 — 966 stocks, 2008–2026, 26 pre-registered hypotheses (LATEST, supersedes round 3's grades)
 
 **Verdict: no daily price or earnings setup we could build — this scanner's, the
