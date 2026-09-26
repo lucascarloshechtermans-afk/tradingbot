@@ -176,9 +176,17 @@ class GatesConfig:
     # free-data earnings-growth coverage is patchy (ETFs, some foreign filers,
     # recent IPOs) and blanket-rejecting missing data here would silently wipe
     # out an unpredictable chunk of the universe rather than apply a real
-    # quality bar. Validated: a 5y/134-ticker backtest at 0.15 cut trades ~17%
-    # (8958 -> 7491) while profit factor rose 1.17 -> 1.21 and expectancy
-    # +0.28% -> +0.33% -- see config.example.yaml's comment for the full A/B.
+    # quality bar. A 5y/134-ticker backtest at 0.15 reported trades ~17% fewer
+    # (8958 -> 7491), profit factor 1.17 -> 1.21, expectancy +0.28% -> +0.33% --
+    # but that number is CONTAMINATED by look-ahead (found during a later
+    # audit): backtest_screener.py has no point-in-time historical EPS growth,
+    # so it applies each ticker's CURRENT growth statically across the whole
+    # window, letting 2026 fundamentals filter 2021-era trades. Since today's
+    # growers are disproportionately past winners, this can look like a
+    # validated edge while partly just rewarding hindsight. Treat the number
+    # above as directional at best, not clean evidence, until this is rebuilt
+    # on point-in-time EPS-growth-by-report-date data -- see
+    # config.example.yaml's comment for the full caveat.
     min_earnings_growth: float | None = None
 
     @classmethod

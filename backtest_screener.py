@@ -411,6 +411,17 @@ def run_universe_backtest(
     per_ticker_summaries = []
     errors = []
 
+    if config.gates.min_earnings_growth is not None:
+        logger.warning(
+            "gates.min_earnings_growth=%.2f is enabled: this filter uses each ticker's TODAY's EPS-growth "
+            "snapshot applied statically across the whole backtest window (2021-2026 trades filtered by "
+            "2026 fundamentals) -- that is look-ahead, not just staleness. A company still showing strong "
+            "growth today plausibly also turned out to be a long-term winner, so any backtest improvement "
+            "from this gate should be treated as partly hindsight, not clean validated edge, until it's "
+            "rebuilt on point-in-time historical EPS-growth-by-report-date data.",
+            config.gates.min_earnings_growth,
+        )
+
     histories: dict[str, pd.DataFrame] = {}
     earnings_growth_by_ticker: dict[str, float | None] = {}
     sector_by_ticker: dict[str, str | None] = {}
@@ -425,11 +436,18 @@ def run_universe_backtest(
             continue
         histories[ticker] = history
         # A single current-snapshot fetch, not a per-bar time series -- yfinance
-        # only exposes the ticker's CURRENT sector/earnings-growth, so both are
-        # necessarily applied as static values across the whole backtest window
-        # rather than the (unavailable) value as of each historical date. A
-        # sector reclassification or an earnings-growth swing mid-window is a
-        # known, accepted limitation of this free data source, not a bug.
+        # only exposes the ticker's CURRENT sector/earnings-growth. Sector is a
+        # minor, accepted staleness (a sector reclassification mid-window is
+        # rare and low-impact). Earnings growth is NOT the same kind of
+        # limitation: applying TODAY's EPS growth as a static filter across
+        # trades taken in 2021-2026 is genuine look-ahead -- a company that
+        # happens to still show strong growth today plausibly ALSO turned out
+        # to be a long-term winner, so this gate can look validated by partly
+        # rewarding hindsight rather than a signal actually available at trade
+        # time. Any backtest comparison with this gate enabled (see
+        # config.example.yaml) should be read with that caveat, not treated as
+        # clean evidence -- a real fix needs point-in-time historical EPS growth
+        # (by report date, not by fiscal date) from a provider that has it.
         try:
             info = provider.get_info(ticker)
             sector_by_ticker[ticker] = info.sector

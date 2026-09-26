@@ -58,12 +58,24 @@ gates:                     # hard pass/fail pre-filters, applied BEFORE scoring 
   block_extreme_overextension: true    # reject when ALL distance references agree price is stretched
   min_earnings_growth: 0.15  # Minervini/CANSLIM-style quality gate, reject
                                # below 15% YoY quarterly EPS growth when known
-                               # (missing data does NOT reject). Validated: a 5y/
-                               # 134-ticker A/B (isolating this + 3 other new
-                               # options together) cut trades ~17% (8958->7491)
-                               # while profit factor rose 1.17->1.21 and
-                               # expectancy +0.28%->+0.33% -- see GatesConfig's
-                               # comment in config/schema.py
+                               # (missing data does NOT reject). CAVEAT (found
+                               # during the optimization-phase audit, not
+                               # present when this was first added): the
+                               # backtest applies each ticker's CURRENT EPS
+                               # growth statically across the whole window --
+                               # 2021-era trades get filtered by 2026
+                               # fundamentals. That's look-ahead, not just
+                               # staleness, and correlates with survivorship
+                               # (today's growers are disproportionately past
+                               # winners). The previously-reported "cut trades
+                               # ~17%, profit factor 1.17->1.21" backtest
+                               # improvement (see GatesConfig's comment in
+                               # config/schema.py) should be read as PARTLY
+                               # hindsight until this is rebuilt on point-in-
+                               # time EPS-growth-by-report-date data -- not
+                               # clean validated edge. Enabling this in
+                               # backtest_screener.py now logs a warning to
+                               # this effect.
 
 scoring:
   weights:                 # moet optellen tot ~100
