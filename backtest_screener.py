@@ -35,8 +35,10 @@ from relative_strength.relative_strength import universe_rs_rank_series
 from risk.stops_targets import plan_trade_levels
 from scanner import BENCHMARK_TICKERS, evaluate_strategies
 from scoring.scorer import score_ticker
+from sector.rotation import SECTOR_ETF_MAP, SECTOR_ETFS, SectorStrength, sector_rank_series
 from strategies import COUNTER_TREND_STRATEGY_NAMES, best_tradeable_signal
 from strategies.context import TickerContext, build_context
+from research.feature_extraction import extract_features
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("backtest_screener")
@@ -44,17 +46,71 @@ logger = logging.getLogger("backtest_screener")
 
 class SharedContextCache:
     """Builds each bar's TickerContext at most once, keyed by history length —
-    signal_fn, stop_fn and target_fn all hit this same cache for the same bar."""
+    signal_fn, stop_fn and target_fn all hit this same cache for the same bar.
 
-    def __init__(self, ticker: str):
+    Also responsible for feeding `build_context` the same benchmark/sector data
+    the live scanner passes (see scanner.py's own `build_context` call) — an
+    earlier version of this cache called `build_context(ticker, history_slice)`
+    with nothing else, which silently pinned `score_relative_strength` (weight
+    10) and `score_sector` (weight 5) at their flat neutral fallback for every
+    single backtested trade, 15% of the score computed from data that was never
+    actually there. Every benchmark/sector series handed to `build_context` here
+    is first truncated to `.loc[:date]` (the bar's own date) — passing the full,
+    untruncated series would let e.g. `compute_relative_strength`'s `.iloc[-1]`
+    read the BENCHMARK's future return on every bar, a look-ahead leak the
+    truncation exists specifically to prevent.
+    """
+
+    def __init__(
+        self,
+        ticker: str,
+        spy_close: pd.Series | None = None,
+        qqq_close: pd.Series | None = None,
+        sector_name: str | None = None,
+        sector_close: pd.Series | None = None,
+        sector_rank_df: pd.DataFrame | None = None,
+        sector_trend_df: pd.DataFrame | None = None,
+    ):
         self.ticker = ticker
+        self.spy_close = spy_close
+        self.qqq_close = qqq_close
+        self.sector_name = sector_name
+        self.sector_etf = SECTOR_ETF_MAP.get(sector_name) if sector_name else None
+        self.sector_close = sector_close
+        self.sector_rank_df = sector_rank_df
+        self.sector_trend_df = sector_trend_df
         self._contexts: dict[int, TickerContext] = {}
+
+    def _sector_strength_asof(self, date: pd.Timestamp) -> SectorStrength | None:
+        if self.sector_etf is None or self.sector_rank_df is None or self.sector_etf not in self.sector_rank_df.columns:
+            return None
+        try:
+            rank = self.sector_rank_df.loc[date, self.sector_etf]
+            trend = self.sector_trend_df.loc[date, self.sector_etf]
+        except KeyError:
+            return None
+        if pd.isna(rank):
+            return None
+        return SectorStrength(
+            etf=self.sector_etf, performance_5d=float("nan"), performance_1m=float("nan"),
+            performance_3m=float("nan"), relative_strength_vs_spy=float("nan"), volatility_pct=float("nan"),
+            rank=int(rank), trend=str(trend),
+        )
 
     def get(self, history_slice: pd.DataFrame) -> TickerContext:
         key = len(history_slice)
         ctx = self._contexts.get(key)
         if ctx is None:
-            ctx = build_context(self.ticker, history_slice)
+            date = history_slice.index[-1]
+            spy_trunc = self.spy_close.loc[:date] if self.spy_close is not None else None
+            qqq_trunc = self.qqq_close.loc[:date] if self.qqq_close is not None else None
+            sector_trunc = self.sector_close.loc[:date] if self.sector_close is not None else None
+            ctx = build_context(
+                self.ticker, history_slice,
+                benchmark_close=spy_trunc, qqq_close=qqq_trunc,
+                sector_name=self.sector_name, sector_close=sector_trunc,
+                sector_strength=self._sector_strength_asof(date),
+            )
             self._contexts[key] = ctx
         return ctx
 
@@ -71,6 +127,7 @@ def make_screener_functions(
     regime_series: pd.Series | None = None,
     rs_rank_series: pd.Series | None = None,
     earnings_growth: float | None = None,
+    feature_by_bar: dict[int, dict] | None = None,
 ):
     max_holding_days = config.risk.max_holding_days
     gates = config.gates
@@ -184,6 +241,10 @@ def make_screener_functions(
         score_by_bar[len(history_so_far)] = score_result.total_score
         if ctx.overextension is not None:
             overext_by_bar[len(history_so_far)] = ctx.overextension.stretched_reference_count
+        if feature_by_bar is not None:
+            feature_by_bar[len(history_so_far)] = extract_features(
+                ctx, rs_percentile=rs_percentile, regime_label=regime_label
+            )
         if min_score is not None and score_result.total_score < min_score:
             return False
         return True
@@ -227,18 +288,29 @@ def backtest_ticker(
     regime_series: pd.Series | None = None,
     rs_rank_series: pd.Series | None = None,
     earnings_growth: float | None = None,
+    capture_features: bool = False,
+    spy_close: pd.Series | None = None,
+    qqq_close: pd.Series | None = None,
+    sector_name: str | None = None,
+    sector_close: pd.Series | None = None,
+    sector_rank_df: pd.DataFrame | None = None,
+    sector_trend_df: pd.DataFrame | None = None,
 ):
-    cache = SharedContextCache(ticker)
+    cache = SharedContextCache(
+        ticker, spy_close=spy_close, qqq_close=qqq_close, sector_name=sector_name, sector_close=sector_close,
+        sector_rank_df=sector_rank_df, sector_trend_df=sector_trend_df,
+    )
     attempted_strategy_by_bar: dict[int, str] = {}
     score_by_bar: dict[int, float] = {}
     regime_by_bar: dict[int, str] = {}
     rr_by_bar: dict[int, float] = {}
     overext_by_bar: dict[int, int] = {}
+    feature_by_bar: dict[int, dict] | None = {} if capture_features else None
     signal_fn, stop_fn, target_fn = make_screener_functions(
         cache, config, attempted_strategy_by_bar, score_by_bar, regime_by_bar, rr_by_bar,
         overext_by_bar,
         min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
-        earnings_growth=earnings_growth,
+        earnings_growth=earnings_growth, feature_by_bar=feature_by_bar,
     )
 
     result = run_backtest(
@@ -256,6 +328,7 @@ def backtest_ticker(
     trade_regimes = []
     trade_rrs = []
     trade_overexts = []
+    trade_features = []
     for trade in result.trades:
         try:
             bar_index = history.index.get_loc(trade.entry_date)
@@ -266,42 +339,67 @@ def backtest_ticker(
         trade_regimes.append(regime_by_bar.get(bar_index))
         trade_rrs.append(rr_by_bar.get(bar_index))
         trade_overexts.append(overext_by_bar.get(bar_index))
+        if feature_by_bar is not None:
+            trade_features.append(feature_by_bar.get(bar_index))
 
-    return result, trade_strategies, trade_scores, trade_regimes, trade_rrs, trade_overexts
+    return result, trade_strategies, trade_scores, trade_regimes, trade_rrs, trade_overexts, trade_features
 
 
-def build_gate_tables(provider: DataProvider, config: AppConfig, histories: dict[str, pd.DataFrame]):
-    """Two walk-forward, no-look-ahead gate tables shared by every ticker in the
-    backtest:
+def build_gate_tables(provider: DataProvider, config: AppConfig, histories: dict[str, pd.DataFrame], period: str = "5y"):
+    """Walk-forward, no-look-ahead tables shared by every ticker in the backtest:
     - `regime_series`: the market regime label at every historical date (one
       series, market-wide — doesn't depend on which ticker is being evaluated).
     - `rs_rank_table`: for every date, each ticker's percentile rank vs. every
       OTHER ticker in this same backtest universe on trailing return — the
-      walk-forward equivalent of an RS Rating. Built once from all tickers
-      together (not per-ticker) since a percentile rank is inherently relative
-      to the whole group.
-    Both are computed once, up front, and then looked up (not recomputed) inside
-    each ticker's per-bar walk-forward loop.
+      walk-forward equivalent of an RS Rating.
+    - `spy_close`/`qqq_close`: benchmark close series, truncated per-bar by the
+      caller (`SharedContextCache`) before being handed to `build_context` — this
+      is what restores `score_relative_strength` (see that class's docstring).
+    - `sector_rank_df`/`sector_trend_df`/`sector_closes`: the walk-forward
+      equivalent for `score_sector`.
+    All computed once, up front, and then looked up (not recomputed) inside each
+    ticker's per-bar walk-forward loop.
     """
     gates = config.gates
+    benchmarks: dict[str, pd.DataFrame] = {}
+    try:
+        benchmarks = {key: provider.get_history(ticker, period=period) for key, ticker in BENCHMARK_TICKERS.items()}
+    except DataUnavailable as exc:
+        logger.warning("could not fetch benchmark data (SPY/QQQ/IWM/VIX) — regime gate and relative-strength "
+                        "scoring will stay neutral for this run: %s", exc)
+
+    spy_close = benchmarks.get("spy", {}).get("close") if benchmarks.get("spy") is not None else None
+    qqq_close = benchmarks.get("qqq", {}).get("close") if benchmarks.get("qqq") is not None else None
+
     regime_series = None
-    if gates.regime_gate_enabled:
+    if gates.regime_gate_enabled and benchmarks:
         try:
-            benchmarks = {key: provider.get_history(ticker, period="5y") for key, ticker in BENCHMARK_TICKERS.items()}
             regime_series = classify_market_regime_series(benchmarks["spy"], benchmarks["qqq"], benchmarks["iwm"], benchmarks["vix"])
             logger.info("computed market regime series: %d dates", len(regime_series))
-        except DataUnavailable as exc:
-            logger.warning("could not fetch benchmark data for the regime gate, disabling it: %s", exc)
+        except (DataUnavailable, KeyError) as exc:
+            logger.warning("could not compute the market regime series, disabling that gate: %s", exc)
 
     closes = {ticker: history["close"] for ticker, history in histories.items()}
     rs_rank_table = universe_rs_rank_series(closes, window=gates.rs_window)
     logger.info("computed RS rank table: %d dates x %d tickers", *rs_rank_table.shape)
 
-    return regime_series, rs_rank_table
+    sector_closes: dict[str, pd.Series] = {}
+    sector_rank_df = sector_trend_df = None
+    if "spy" in benchmarks:
+        try:
+            sector_histories = {etf: provider.get_history(etf, period=period) for etf in SECTOR_ETFS}
+            sector_closes = {etf: df["close"] for etf, df in sector_histories.items()}
+            sector_rank_df, sector_trend_df = sector_rank_series(sector_histories, benchmarks["spy"])
+            logger.info("computed sector rank table: %d dates x %d sectors", *sector_rank_df.shape)
+        except DataUnavailable as exc:
+            logger.warning("could not fetch sector ETF data, sector scoring will stay neutral: %s", exc)
+
+    return regime_series, rs_rank_table, spy_close, qqq_close, sector_closes, sector_rank_df, sector_trend_df
 
 
 def run_universe_backtest(
-    provider: DataProvider, config: AppConfig, tickers: list[str], period: str, min_score: float | None = None
+    provider: DataProvider, config: AppConfig, tickers: list[str], period: str, min_score: float | None = None,
+    capture_features: bool = False,
 ):
     all_trades = []
     all_trade_strategies = []
@@ -309,11 +407,13 @@ def run_universe_backtest(
     all_trade_regimes = []
     all_trade_rrs = []
     all_trade_overexts = []
+    all_trade_features = []
     per_ticker_summaries = []
     errors = []
 
     histories: dict[str, pd.DataFrame] = {}
     earnings_growth_by_ticker: dict[str, float | None] = {}
+    sector_by_ticker: dict[str, str | None] = {}
     for ticker in tickers:
         try:
             history = provider.get_history(ticker, period=period)
@@ -325,25 +425,34 @@ def run_universe_backtest(
             continue
         histories[ticker] = history
         # A single current-snapshot fetch, not a per-bar time series -- yfinance
-        # only exposes the MOST RECENT quarterly earnings growth, so this is
-        # necessarily applied as a static value across the whole backtest
-        # window rather than the (unavailable) value as of each historical
-        # date. Only used when gates.min_earnings_growth is set (see
-        # GatesConfig); harmless fetch otherwise.
-        if config.gates.min_earnings_growth is not None:
-            try:
-                info = provider.get_info(ticker)
+        # only exposes the ticker's CURRENT sector/earnings-growth, so both are
+        # necessarily applied as static values across the whole backtest window
+        # rather than the (unavailable) value as of each historical date. A
+        # sector reclassification or an earnings-growth swing mid-window is a
+        # known, accepted limitation of this free data source, not a bug.
+        try:
+            info = provider.get_info(ticker)
+            sector_by_ticker[ticker] = info.sector
+            if config.gates.min_earnings_growth is not None:
                 earnings_growth_by_ticker[ticker] = info.fundamentals.get("earnings_growth")
-            except DataUnavailable:
-                earnings_growth_by_ticker[ticker] = None
+        except DataUnavailable:
+            sector_by_ticker[ticker] = None
+            earnings_growth_by_ticker[ticker] = None
 
-    regime_series, rs_rank_table = build_gate_tables(provider, config, histories)
+    regime_series, rs_rank_table, spy_close, qqq_close, sector_closes, sector_rank_df, sector_trend_df = build_gate_tables(
+        provider, config, histories, period=period
+    )
 
     for i, (ticker, history) in enumerate(histories.items(), start=1):
         rs_rank_series = rs_rank_table[ticker] if ticker in rs_rank_table.columns else None
-        result, trade_strategies, trade_scores, trade_regimes, trade_rrs, trade_overexts = backtest_ticker(
+        sector_name = sector_by_ticker.get(ticker)
+        sector_etf = SECTOR_ETF_MAP.get(sector_name) if sector_name else None
+        result, trade_strategies, trade_scores, trade_regimes, trade_rrs, trade_overexts, trade_features = backtest_ticker(
             ticker, history, config, min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
-            earnings_growth=earnings_growth_by_ticker.get(ticker),
+            earnings_growth=earnings_growth_by_ticker.get(ticker), capture_features=capture_features,
+            spy_close=spy_close, qqq_close=qqq_close, sector_name=sector_name,
+            sector_close=sector_closes.get(sector_etf) if sector_etf else None,
+            sector_rank_df=sector_rank_df, sector_trend_df=sector_trend_df,
         )
         all_trades.extend(result.trades)
         all_trade_strategies.extend(trade_strategies)
@@ -351,6 +460,7 @@ def run_universe_backtest(
         all_trade_regimes.extend(trade_regimes)
         all_trade_rrs.extend(trade_rrs)
         all_trade_overexts.extend(trade_overexts)
+        all_trade_features.extend(trade_features)
 
         closed = [t for t in result.trades if t.pnl is not None]
         wins = sum(1 for t in closed if t.pnl > 0)
@@ -360,7 +470,10 @@ def run_universe_backtest(
         )
         logger.info("[%d/%d] %s: %d trades, %d wins", i, len(histories), ticker, len(closed), wins)
 
-    return all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, all_trade_overexts, per_ticker_summaries, errors
+    return (
+        all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, all_trade_overexts,
+        per_ticker_summaries, errors, all_trade_features,
+    )
 
 
 def print_score_bucket_report(all_trades, all_trade_scores):
@@ -607,7 +720,7 @@ def main(argv: list[str] | None = None) -> int:
         tickers = args.tickers.split(",") if args.tickers else DEFAULT_UNIVERSE
 
     started = time.time()
-    all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, all_trade_overexts, per_ticker_summaries, errors = run_universe_backtest(
+    all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, all_trade_overexts, per_ticker_summaries, errors, _all_trade_features = run_universe_backtest(
         provider, config, tickers, args.period, min_score=args.min_score
     )
     logger.info("done in %.1fs", time.time() - started)
