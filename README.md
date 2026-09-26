@@ -106,6 +106,61 @@ net P&L $8,370 (A) → $11,166 (D) despite ~1,000 fewer trades).
 Run long captures in ~34-ticker chunks: this container kills long-lived
 background processes.
 
+## Scanner comparison: uploaded "Explosive Breakout" scanner vs this one
+
+`alt_scanners/explosive_breakout_scanner.py` is an externally supplied scanner,
+kept verbatim (cross-sectional composite momentum 63/126/252d, top 10%,
+EMA9>EMA21 + EMA300 trend filter, 30-day efficiency ratio >= 0.35, VIX
+16–25, 1.5-ATR stop capped at 8%, 50% off at 1R + breakeven + 1.5-ATR
+trail, max 5 days). `research/compare_scanners.py` runs its own signal
+code on our price data and replays it under a ladder of rule sets, one
+assumption changed per step, then under **exactly our engine's rules**
+(next-open entry, gap-through fills, one position per ticker, same costs
+and sizing). Window 2023-01-04 → 2026-09-23 (their scanner needs 320 bars
+of history), 5y data, same window for both.
+
+**Their published numbers reproduce** on their own watchlist (99 of 102
+tickers still have data — ZI and CYBR are gone): 899 trades, +1.28%/trade,
+54.5% win vs. their stated +1.43%, 55.5%, 853 trades.
+
+| Universe | Scanner (engine rules) | trades | win % | mean R | PF (R) | H1 / H2 mean R | 1 account CAGR / max DD |
+|---|---|---|---|---|---|---|---|
+| ours (134) | theirs | 387 | 56.6 | **+0.167** | **1.42** | +0.175 / +0.163 | 8.6% / 13.3% |
+| ours (134) | ours | 5,874 | 51.4 | +0.052 | 1.15 | +0.065 / +0.036 | **14.9% / 20.1%** |
+| theirs (99) | theirs | 253 | 52.2 | **+0.176** | **1.37** | **+0.002** / +0.254 | 5.9% / 8.4% |
+| theirs (99) | ours | 4,070 | 49.2 | +0.060 | 1.17 | +0.077 / +0.040 | **17.7% / 21.9%** |
+
+"1 account" replays each trade list through one $10k account (0.5% risk,
+20% max position, 6% max heat, same-day candidates by our score / their
+momentum rank). Reading it:
+
+- **Per trade theirs is ~3× better** (+0.17R vs +0.05–0.06R), but it
+  fires ~70–100×/yr vs ~1,100–1,600×/yr, so in one account it leaves
+  capital idle and makes less money; risk-adjusted (CAGR/maxDD) the two are
+  close (theirs 0.64–0.70, ours 0.74–0.81).
+- **Theirs is less stable**: 2023 was −0.31R on their watchlist, the whole
+  first half ~0R; t-stat 2.7 vs 4.4 for ours; APP alone is 12 of its 65 R on
+  our universe. Their "walk-forward" fits nothing per window, and top-10%/
+  VIX 16–25 are the peak of a narrow ridge: top 5% +0.10R, top 15% +0.07R,
+  no VIX filter +0.09R, VIX 14–27 +0.11R (our universe, engine rules).
+- **Their robust ingredient is the efficiency ratio**: rises steadily with
+  the threshold (none +0.09R → 0.25 +0.13 → 0.35 +0.17 → 0.45 +0.22R) and
+  every threshold is positive in both halves. EMA300 and
+  the EMA9/21 trend filter add nothing (±0.01R).
+- Of their gap-through assumptions, "stop fills at the stop" hides 17–28%
+  of stop-outs that gapped through (worst trade −8.5% on paper, −47.8% real).
+
+**Hybrid, not yet adopted:** gating OUR trades on their efficiency ratio
+(>= 0.25, previous bar) raised mean R 0.068→0.096 (our universe) and
+0.076→0.134 (theirs) and one-account MAR 0.74→1.09 / 0.81→1.17, but on
+their universe the first half's CAGR fell (27.5%→19.5%) — post-hoc on the
+same trades, not a clean win across all four half/universe cells. It needs
+a real gated re-run before it goes into the defaults.
+
+    python -m research.capture_trades --period 5y --tickers <their watchlist> --out ours_on_theirs.pkl
+    python -m research.compare_scanners --universe theirs --ours-pickle ours_on_theirs.pkl
+    python -m research.compare_scanners --universe ours --ours-pickle ours_default.pkl
+
 ## Overnight session summary (autonomous build) — earlier, superseded numbers
 
 This section is the executive summary requested at the end of an unattended,
