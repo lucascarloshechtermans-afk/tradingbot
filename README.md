@@ -189,6 +189,14 @@ Bullish Pullback and Support Bounce contribute little inside the gated set
 scan needs `data.period` >= 2y for the 252-day horizon (now the default)
 and, with the gate on, lists setups by momentum rank first.
 
+The backtest has no universe filter, the live scan does. Inside the gated
+set the `min_atr_pct: 3` part of it helps, checked point-in-time on ATR% at
+entry: our universe ATR% < 3 −0.005R (339 trades) vs >= 3 +0.202R (538);
+theirs +0.15R (64) vs +0.19R (584). With it, expect ~3 setups/week from the
+134-ticker list, fewer when the mega-cap cap (> $200B, a today-only
+snapshot that can't be backtested) also bites — the first live scan
+(2026-09-26) had 45/134 tickers pass the universe filter and 1 setup.
+
     # our scanner on their watchlist (gates off = the "before" rows), then the comparison
     python -m research.capture_trades --period 5y --tickers <their watchlist> --min-momentum-pct -1 --min-efficiency -1 --out ours_on_theirs.pkl
     python -m research.compare_scanners --universe theirs --ours-pickle ours_on_theirs.pkl
