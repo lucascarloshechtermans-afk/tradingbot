@@ -148,6 +148,42 @@ efficiency, tight coil, room to the next resistance zone) and writes an
 annotated chart per setup with trigger (buy-stop), stop and target.
 Channel up bounce never makes the list.
 
+### Second round: out-of-sample, entries, exits, the 4H 200 EMA
+
+`research/pattern_research.py` re-ran every pattern walk-forward on the 190
+scanner tickers AND on 163 other liquid US stocks that were never used to
+build or tune anything (out-of-sample), 2021-2026:
+
+- **Most of the in-sample pattern edge did not survive.** Pooled breakouts:
+  +0.095R in-sample vs +0.026R out-of-sample (PF 1.09, second half
+  negative). The first round's numbers were flattered by a universe picked
+  with hindsight (2023-26 growth leaders).
+- **Held up in both samples and all four halves**: descending channel
+  (+0.124 / +0.117R), bull flag (+0.118 / +0.116R), channel up strong
+  breakout (+0.146 / +0.096R). Positive in both but weaker: inverse H&S,
+  double bottom, ascending triangle, falling wedge (+0.03..+0.07R out).
+- **Failed out-of-sample**: VCP (−0.04R), cup & handle (0.00), descending
+  triangle (−0.04), flat base (0.00), horizontal range (−0.04), symmetric
+  triangle (−0.02). They no longer appear in the ready-to-boom list.
+- **The first score did not rank**: higher score buckets were not better,
+  in or out of sample. Its above-200/stacked/coil/room/multi-pattern
+  points helped in-sample only (or not at all) and were dropped.
+- **4H 200 EMA** (in-sample, last 2y where 1h data exists): breakouts
+  above it +0.095R (n=4,204), below it −0.055R (n=648, PF 0.86). Now
+  +15 / −20 points.
+- **Held up in both samples**: breakout volume > 1.5x (+0.10/+0.06R vs
+  +0.09/+0.02R), ATR% >= 3 (+0.10/+0.06 vs +0.09/+0.01).
+- **Hold longer**: 20-day holds beat 10 and 5 in both samples (+0.145 vs
+  +0.095R in, +0.053 vs +0.026R out); target choice (2R/3R/measured) barely
+  matters.
+- **Entry**: buying on a close above the trigger (next open) was a bit
+  better than a buy-stop at the trigger in-sample (+0.095 vs +0.076R),
+  equal out-of-sample.
+
+The re-weighted score is built from these results and has not itself been
+tested on data it wasn't derived from yet -- forward-test it before
+sizing up.
+
 ## Chart read: EMAs on two timeframes, zones, wedges, the plan
 
 Every setup the scanner lists now also gets a trader-style chart read

@@ -33,10 +33,21 @@ def test_no_breakout_when_the_last_close_stays_inside():
     assert hits and not any(h.broke_out_today for h in hits)
 
 
-def test_setup_finder_ranks_a_fresh_breakout():
+def test_setup_finder_skips_patterns_that_failed_out_of_sample():
+    # flat base / horizontal range broke out here, but both failed the
+    # out-of-sample test, so the finder must not list them
+    assert evaluate_ticker("TEST", _range_then(103.0), momentum_rank=90.0) is None
+
+
+def test_score_rewards_4h_200_ema_and_penalises_below_it():
+    from analysis.setup_finder import score_setup
+
     df = _range_then(103.0)
-    df.loc[df.index[-1], "volume"] = 3e6
-    s = evaluate_ticker("TEST", df, momentum_rank=90.0)
-    assert s is not None and s.status == "BREAKOUT TODAY"
-    assert s.stop < s.trigger < s.target and s.rr >= 1.99
-    assert any("momentum rank" in r for r in s.reasons)
+    hit = next(h for h in detect_patterns(df) if h.broke_out_today)
+    hit.name = "bull flag"  # score it as a pattern that held up out-of-sample
+    above = score_setup(df, "BREAKOUT TODAY", hit, [hit], None, 1.5, ema200_4h=95.0)
+    below = score_setup(df, "BREAKOUT TODAY", hit, [hit], None, 1.5, ema200_4h=110.0)
+    none = score_setup(df, "BREAKOUT TODAY", hit, [hit], None, 1.5, ema200_4h=None)
+    assert above[0] > none[0] > below[0]
+    stop, target, rr = above[2], above[3], above[4]
+    assert stop < hit.trigger < target and rr >= 1.99
