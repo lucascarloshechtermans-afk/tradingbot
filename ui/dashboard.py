@@ -26,6 +26,7 @@ PAGE_TEMPLATE = """<!doctype html>
   .badge.neutral {{ background: rgba(210,153,34,.15); color: var(--amber); }}
   .badge.high_volatility {{ background: rgba(248,81,73,.25); color: var(--red); }}
   {setup_css}
+  {overview_css}
   .tabs {{ display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }}
   .tab {{ padding: 8px 16px; cursor: pointer; color: var(--ink-soft); border-bottom: 2px solid transparent; font-size: 14px; }}
   .tab.active {{ color: var(--ink); border-bottom-color: var(--blue); }}
@@ -77,14 +78,12 @@ PAGE_TEMPLATE = """<!doctype html>
   </div>
 
   <div id="dashboard" class="panel active">
-    {leader_card}
-    {alerts_card}
-    {leader_charts}
+    {overview_html}
     <div class="card">
       <div class="grid">
         <div class="stat"><div class="label">Market Regime</div><div class="value"><span class="badge {regime_class}">{regime_label}</span></div></div>
         <div class="stat"><div class="label">Regime Score</div><div class="value">{regime_score}</div></div>
-        <div class="stat"><div class="label">Setups Found</div><div class="value">{setup_count}</div></div>
+        <div class="stat"><div class="label">Oude strategie-setups (info)</div><div class="value">{setup_count}</div></div>
         <div class="stat"><div class="label">Universe Scanned</div><div class="value">{universe_size}</div></div>
       </div>
     </div>
@@ -138,6 +137,13 @@ PAGE_TEMPLATE = """<!doctype html>
   </div>
 
 <script>
+function openCard(t) {{
+  document.querySelector('[data-tab=dashboard]').click();
+  for (const id of ['ov-' + t, 'ov-alert-' + t, 'ov-pat-' + t]) {{
+    const el = document.getElementById(id);
+    if (el) {{ el.open = true; el.scrollIntoView({{behavior: 'smooth', block: 'start'}}); return; }}
+  }}
+}}
 const SCAN_DATA = {scan_data_json};
 const WATCHLIST_DATA = {watchlist_data_json};
 
@@ -285,12 +291,14 @@ def build_dashboard_html(
     leader_dips: list | None = None,
     market_state: dict | None = None,
     dip_alerts: list | None = None,
+    sector_by_ticker: dict | None = None,
 ) -> str:
     """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
     'Ready to boom' tab."""
     from html import escape
 
     from ui.chart_svg import SETUP_CSS, render_setup_cards
+    from ui.overview import OVERVIEW_CSS, build_overview_html
     generated_at = generated_at or datetime.now()
     setup_count = len(scan_rows)
 
@@ -310,55 +318,7 @@ def build_dashboard_html(
     )
     pattern_setups = pattern_setups or []
     leader_dips = leader_dips or []
-    ms = market_state or {}
-    vix_txt = f"VIX {ms['vix']:.1f}" if ms.get("vix") is not None else "VIX n/a"
-    tape_txt = "SPY below 50-day" if ms.get("spy_below_50") else "SPY above 50-day"
-    dip_rows = "".join(
-        f"<tr><td><span class='badge'>{escape(d.grade)}</span></td><td><strong>{escape(d.ticker)}</strong></td>"
-        f"<td>{'TRADE' if d.grade in ('A', 'B') else 'watch'}</td><td>{d.close:.2f}</td><td>{d.stop_estimate:.2f} ({d.risk_pct:.1f}%)</td>"
-        f"<td>{d.dip_atr:+.1f} ATR</td><td>{d.momentum_rank:.0f}</td><td>{d.confirmations}/4</td>"
-        f"<td style='font-size:12px'>{escape('; '.join(d.reasons[2:]))}</td></tr>"
-        for d, _r in leader_dips
-    )
-    has_trade = any(d.grade in ("A", "B") for d, _r in leader_dips)
-    leader_card = (
-        "<div class='card'><h3 style='margin-top:0'>LEADER DIP -- validated setup</h3>"
-        f"<p style='margin:0 0 8px;color:var(--ink-soft)'>Buy next open, stop 2.5 ATR below the fill, exit at the close of the 10th session. "
-        f"Grade A = 3-4 confirmations, B = 2, C = watch only. Market now: {escape(vix_txt)}, {escape(tape_txt)}.</p>"
-        + ("" if has_trade else "<p style='margin:0 0 8px'><strong>NO TRADE today:</strong> no grade A/B leader dip.</p>")
-        + "<table><thead><tr><th>Grade</th><th>Ticker</th><th>Action</th><th>Close</th><th>Stop (est.)</th><th>Dip</th>"
-          "<th>Momentum</th><th>Conf.</th><th>Confirmations</th></tr></thead><tbody>"
-        + (dip_rows or "<tr><td colspan=9>No momentum leader is in a dip today.</td></tr>") + "</tbody></table></div>"
-    )
-    from ui.chart_svg import render_chart_svg
-
     dip_alerts = dip_alerts or []
-    alert_rows = "".join(
-        f"<tr><td><strong>{escape(a.ticker)}</strong></td><td>{a.close:.2f}</td><td>{a.alert_price:.2f}</td>"
-        f"<td>{-a.distance_pct:+.1f}%</td><td>{a.deep_dip_price:.2f}</td><td>{a.momentum_rank:.0f}</td><td>{a.atr_pct:.1f}%</td></tr>"
-        for a, _r in dip_alerts
-    )
-    alerts_card = (
-        "<div class='card'><h3 style='margin-top:0'>Alerts for next week: leaders closest to a dip trigger</h3>"
-        "<p style='margin:0 0 8px;color:var(--ink-soft)'>A close at or below the <b>dip trigger</b> makes it a LEADER DIP "
-        "(5-day move &le; -1 ATR); a positive 'move to trigger' means it still triggers after a rise that big. "
-        "At or below the <b>deep-dip</b> price it also gets the 21-EMA confirmation. "
-        "The trigger moves daily (it is 1 ATR under the close of 4 sessions earlier) -- re-run the scan each evening.</p>"
-        "<table><thead><tr><th>Ticker</th><th>Close</th><th>Dip trigger</th><th>Move to trigger</th><th>Deep-dip price</th>"
-        "<th>Momentum</th><th>ATR%</th></tr></thead><tbody>"
-        + (alert_rows or "<tr><td colspan=7>No leaders to watch.</td></tr>") + "</tbody></table></div>"
-    )
-    chart_cards = []
-    for d, read in leader_dips:
-        lv = {"STOP (est.)": d.stop_estimate}
-        chart_cards.append(f"<section><h2>{escape(d.ticker)} <span class='st'>LEADER DIP grade {escape(d.grade)}</span></h2>"
-                           f"<p class='lv'>{escape('; '.join(d.reasons))}</p>{render_chart_svg(d.daily, read, levels=lv)}</section>")
-    for a, read in dip_alerts[:6]:
-        lv = {"TRIGGER dip": a.alert_price, "TARGET deep-dip": a.deep_dip_price}
-        chart_cards.append(f"<section><h2>{escape(a.ticker)} <span class='st'>ALERT {-a.distance_pct:+.1f}% to trigger</span></h2>"
-                           f"<p class='lv'>momentum {a.momentum_rank:.0f}/100 · close {a.close:.2f} · dip trigger {a.alert_price:.2f} · "
-                           f"deep-dip {a.deep_dip_price:.2f} · ATR {a.atr_pct:.1f}%</p>{render_chart_svg(a.daily, read, levels=lv)}</section>")
-    leader_charts = ("<div class='card'><h3 style='margin-top:0'>Leader Dip charts</h3><div class='bm'>" + "".join(chart_cards) + "</div></div>") if chart_cards else ""
     boom_rows_html = "".join(
         f"<tr><td>{i}</td><td><a style='color:#74c0fc' href='#setup-{escape(s.ticker)}' onclick=\"document.querySelector('[data-tab=boom]').click()\">"
         f"<strong>{escape(s.ticker)}</strong></a></td><td>{s.score:.0f}</td><td>{escape(s.status)}</td><td>{escape(s.names)}</td>"
@@ -380,9 +340,9 @@ def build_dashboard_html(
         boom_rows_html=boom_rows_html or "<tr><td colspan=9>No pattern setups</td></tr>",
         boom_cards_html=render_setup_cards(pattern_setups) if pattern_setups else "",
         setup_css=SETUP_CSS,
-        leader_card=leader_card,
-        alerts_card=alerts_card,
-        leader_charts=leader_charts,
+        overview_html=build_overview_html(leader_dips, dip_alerts, pattern_setups, sector_ranked,
+                                          sector_by_ticker or {}, market_state or {}),
+        overview_css=OVERVIEW_CSS,
         scan_data_json=json.dumps(scan_rows),
         watchlist_data_json=json.dumps(watchlist_entries),
     )

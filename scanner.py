@@ -505,6 +505,7 @@ class ScanRun:
     market_state: dict = field(default_factory=dict)
     # [(analysis.leader_dip.DipAlert, ChartRead)] -- leaders closest to a dip trigger
     dip_alerts: list = field(default_factory=list)
+    sector_by_ticker: dict = field(default_factory=dict)
 
 
 def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | None = None, max_workers: int = 8) -> ScanRun:
@@ -630,6 +631,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
         pattern_setups=pattern_setups, leader_dips=leader_dips, market_state=mstate, dip_alerts=alerts,
+        sector_by_ticker={t: c[0].sector for t, c in candidates.items()},
     )
 
 
@@ -863,6 +865,7 @@ def main(argv: list[str] | None = None) -> int:
         leader_dips=scan_run.leader_dips,
         market_state=scan_run.market_state,
         dip_alerts=scan_run.dip_alerts,
+        sector_by_ticker=scan_run.sector_by_ticker,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)
