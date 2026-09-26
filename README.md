@@ -12,6 +12,44 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 6 — complete trading systems (options for the user)
+
+Whole systems, next-open execution, 10 bp per side, idle cash earns T-bills
+(`research/systems6.py`, `etf_systems6.py`, `stock_systems6.py`,
+`trend_systems6.py`, `combo6.py`; pre-registered in `research/HYPOTHESES.md`).
+
+**Survivorship warning, measured:** equal-weighting today's S&P 500+400 members
+gave ~15%/yr (2008–2021) and ~12.7% (2022–2026), while the real equal-weight
+ETF RSP made 11.6% and 7.5%. Every stock-level backtest here is therefore
+roughly **4–5%/yr too optimistic**; ETF results are not affected.
+
+| system | 2008–2021 CAGR / maxDD / Sharpe | 2022–2026 CAGR / maxDD / Sharpe | activity |
+|---|---|---|---|
+| SPY buy & hold | 11.5% / 51% / 0.63 | 12.4% / 25% / 0.76 | none |
+| SPY only above its 200d | 8.5% / 25% / 0.75 | 9.3% / 19% / 0.84 | ~1 switch/yr |
+| A. Momentum: month-end top 20 by 12-1 return, SPY>200d (research / holdout stocks) | 21.0 / 34 / 0.93 · 20.1 / 35 / 0.90 | 13.0 / 35 / 0.53 · 25.4 / 38 / 0.82 | ~5–10 trades/month |
+| B. Current dip scanner, 1% risk, N/H sizing (research / holdout) | 7.6 / 36 / 0.49 · 11.6 / 27 / 0.67 | 15.5 / 21 / 0.83 · 13.5 / 20 / 0.73 | ~5 trades/week |
+| A + B 50/50 (research / holdout) | 14.5 / 29 / 0.79 · 16.1 / 28 / 0.85 | 15.2 / 23 / 0.70 · 20.3 / 24 / 0.85 | both |
+| C. Index RSI(2) on SPY/QQQ/IWM/DIA, 25% each | 2.0 / 16 / 0.33 | 6.4 / 4 / 1.38 | ~30 trades/yr, ~10% time in market |
+| 40% A / 40% B / 20% C (research / holdout) | 11.8 / 25 / 0.75 · 13.2 / 24 / 0.82 | 13.7 / 19 / 0.73 · 17.8 / 20 / 0.87 | all |
+| Sector rotation, top 3 of 9 SPDRs | 7.4 / 23 / 0.55 | 11.5 / 19 / 0.80 | monthly — not better than equal-weight sectors |
+| 50-day breakout + 20-day-low trailing exit, 0.5% risk | 8.1 / 26 / 0.60 · 8.5 / 23 / 0.64 | 2.7 / 27 / 0.24 · 6.2 / 21 / 0.46 | ~2/week — ≈ random entries with the same exit |
+
+Findings:
+- **Momentum portfolio** is the strongest stock system in both halves and both
+  periods (and survivorship-free evidence agrees: the MTUM ETF beat SPY 2013–2021
+  and 13.9% vs 12.2% in 2022–2026). Per unit of risk it is similar to holding
+  all stocks with the same filter — it is a higher-return, higher-drawdown
+  version, not a free lunch. Without the SPY filter: bigger 2022–2026 returns
+  but a 59–65% drawdown in 2008. Small caps (S&P 600): failed in 2022–2026.
+- **Index RSI(2)** (buy an index ETF above its 200d after RSI(2) < 10, sell
+  after a close above the 5-day SMA) is the one technical rule positive in
+  every period and every ETF tested: +0.2…+0.6% per trade in ~3.5 days,
+  64–79% winners, 1999–2007 / 2008–2021 / 2022–2026. Small absolute
+  contribution because it is rarely in the market.
+- The dip book and the momentum book are 0.7 correlated; combining them mainly
+  lowers the drawdown of momentum and raises the return of the dip book.
+
 ## Research round 5 — technicals only: small caps, longer holds, the 4H/daily 200 EMA style
 
 Same strict scoring as round 4 (pre-registered in `research/HYPOTHESES.md`;
