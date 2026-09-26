@@ -12,6 +12,7 @@ See README.md for the full option list and an explanation of every output column
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
 import sys
@@ -31,7 +32,7 @@ from data.yfinance_provider import YFinanceProvider
 from events.earnings import EarningsWarning, check_earnings_proximity
 from indicators.trend import sma
 from market_regime.regime import MarketRegime, classify_market_regime
-from relative_strength.relative_strength import compute_universe_rs_ranks
+from relative_strength.relative_strength import compute_universe_momentum_ranks, compute_universe_rs_ranks, efficiency_ratio
 from risk.gap_risk import earnings_gap_fraction
 from risk.stops_targets import plan_trade_levels
 from scoring.multi_timeframe import multi_timeframe_confluence, resample_weekly
@@ -75,6 +76,9 @@ class TradePlan:
     # buy-limit for the next session (signal close + gates.max_entry_gap_atr
     # ATRs); None when the no-chase rule is disabled
     max_entry: float | None = None
+    # composite-momentum percentile vs. the scanned universe (see
+    # gates.min_momentum_percentile); None when unavailable
+    momentum_percentile: float | None = None
 
 
 def compute_breadth_pct_above_50ma(universe_histories: dict[str, pd.DataFrame]) -> float | None:
@@ -107,6 +111,7 @@ def build_trade_plan(
     earnings_gap_frac: float | None = None,
     no_trade_log: dict[str, str] | None = None,
     earnings_growth: float | None = None,
+    momentum_rank: float | None = None,
 ) -> TradePlan | None:
     """Returns None when the setup is rejected outright by a hard gate — the
     NO-TRADE engine. A high composite score must never override one of these:
@@ -129,6 +134,21 @@ def build_trade_plan(
     best = best_tradeable_signal(matched_strategies)
 
     gates = config.gates
+    # Momentum-rank and efficiency gates apply to EVERY strategy (unlike the
+    # RS/regime gates below): that is how they were validated -- see
+    # GatesConfig and the README's scanner-comparison section.
+    if gates.min_momentum_percentile is not None:
+        if momentum_rank is None:
+            return _reject("momentum_rank_unavailable: needs ~258 bars of history (data.period >= 2y) "
+                           "and >= 10 ranked tickers")
+        if momentum_rank < gates.min_momentum_percentile:
+            return _reject(f"weak_momentum_rank: {momentum_rank:.0f} < {gates.min_momentum_percentile:.0f}")
+    if gates.min_efficiency_ratio is not None:
+        er = efficiency_ratio(ctx.close)
+        if er is None or er < gates.min_efficiency_ratio:
+            shown = "unavailable" if er is None else f"{er:.2f}"
+            return _reject(f"choppy_price_action: efficiency ratio {shown} < {gates.min_efficiency_ratio:.2f}")
+
     # Mean Reversion / Support Bounce buy weakness by design, so the RS/regime
     # gates (which require the stock/market to already be STRONG) are exempted
     # for them — see Strategy.counter_trend. A ticker with no confirmed setup at
@@ -198,6 +218,8 @@ def build_trade_plan(
         max_entry = entry + config.gates.max_entry_gap_atr * float(atr)
 
     reasons = list(best.reasons) if best else []
+    if momentum_rank is not None:
+        reasons.append(f"Momentum-rank: top {max(1.0, 100 - momentum_rank):.0f}% van het gescande universum (3/6/12 maanden)")
     reasons.append(f"Doel is berekend om binnen ~{max_holding_days} handelsdagen haalbaar te zijn (op basis van ATR)")
     risks = list(best.risks) if best else []
     if earnings_warning and earnings_warning.message:
@@ -303,6 +325,7 @@ def build_trade_plan(
         category_breakdown=category_breakdown,
         explanation=explanation,
         max_entry=round(max_entry, 2) if max_entry is not None else None,
+        momentum_percentile=round(momentum_rank, 1) if momentum_rank is not None else None,
     )
 
 
@@ -317,6 +340,7 @@ def scan_ticker(
     qqq_close: pd.Series | None = None,
     sector_histories: dict[str, pd.DataFrame] | None = None,
     no_trade_log: dict[str, str] | None = None,
+    momentum_rank: float | None = None,
 ) -> TradePlan | None:
     try:
         history = provider.get_history(ticker, period=config.data.period)
@@ -373,7 +397,7 @@ def scan_ticker(
 
     return build_trade_plan(
         ticker, ctx, weekly_ctx, config, market_regime, earnings_warning, rs_rank, earnings_gap_frac, no_trade_log,
-        earnings_growth=earnings_growth,
+        earnings_growth=earnings_growth, momentum_rank=momentum_rank,
     )
 
 
@@ -445,6 +469,18 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     )
     logger.info("computed RS rank for %d/%d tickers (min_rs_percentile=%.0f)", len(rs_ranks), len(filter_result.included), config.gates.min_rs_percentile)
 
+    # Composite-momentum rank vs. EVERY fetched candidate, not just the
+    # universe-filter survivors: the backtest that validated this gate ranked
+    # against the full universe list (it has no market-cap/ATR filter).
+    momentum_ranks: dict[str, float] = {}
+    if config.gates.min_momentum_percentile is not None:
+        momentum_ranks = compute_universe_momentum_ranks({t: c[1]["close"] for t, c in candidates.items()})
+        logger.info("computed momentum rank for %d/%d tickers (min_momentum_percentile=%.0f)",
+                    len(momentum_ranks), len(candidates), config.gates.min_momentum_percentile)
+        if not momentum_ranks:
+            logger.warning("no momentum ranks: the momentum gate needs >= 10 tickers with ~258 bars each "
+                           "(data.period is %r; use 2y or more) -- every setup will be rejected", config.data.period)
+
     # The NO-TRADE engine: every ticker that build_trade_plan/scan_ticker rejects
     # gets a specific, named reason recorded here instead of silently vanishing —
     # see ScanRun.no_trade and print_no_trade_summary. A single dict written by
@@ -459,7 +495,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         futures = {
             pool.submit(
                 scan_ticker, ticker, provider, config, spy_close, sector_ranked, market_regime, rs_ranks.get(ticker),
-                qqq_close, sector_histories, no_trade_log,
+                qqq_close, sector_histories, no_trade_log, momentum_ranks.get(ticker),
             ): ticker
             for ticker in filter_result.included
         }
@@ -475,7 +511,13 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
                 trade_plans.append(plan)
                 no_trade_log.pop(ticker, None)
 
-    trade_plans.sort(key=lambda p: p.score, reverse=True)
+    # With the momentum gate on, list the strongest momentum first: in the
+    # comparison backtest, picking ~4 setups/week by momentum rank gave
+    # +0.14R/trade vs +0.06R picking by composite score.
+    if config.gates.min_momentum_percentile is not None:
+        trade_plans.sort(key=lambda p: (p.momentum_percentile or 0.0, p.score), reverse=True)
+    else:
+        trade_plans.sort(key=lambda p: p.score, reverse=True)
     duration = time.time() - started
     logger.info("scan complete: %d tickers scanned, %d setups found in %.1fs", len(filter_result.included), len(trade_plans), duration)
 
@@ -598,7 +640,10 @@ class SyntheticDataProvider(DataProvider):
 def run_dry_run(config: AppConfig) -> ScanRun:
     provider = SyntheticDataProvider()
     tiny_universe = ["SYNA", "SYNB", "SYNC", "SYND", "SYNE", "SYNF", "SYNG", "SYNH"]
-    return run_scan(provider, config, universe=tiny_universe, max_workers=4)
+    # a cross-sectional percentile over 8 random walks means nothing (and needs
+    # >= 10 tickers), so the dry run shows the pipeline without those gates
+    gates = dataclasses.replace(config.gates, min_momentum_percentile=None, min_efficiency_ratio=None)
+    return run_scan(provider, dataclasses.replace(config, gates=gates), universe=tiny_universe, max_workers=4)
 
 
 # --------------------------------------------------------------------------- #

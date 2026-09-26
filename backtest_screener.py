@@ -33,7 +33,7 @@ from data.provider import DataProvider, DataUnavailable
 from data.universe import DEFAULT_UNIVERSE
 from data.yfinance_provider import YFinanceProvider
 from market_regime.regime import MarketRegime, classify_market_regime_series
-from relative_strength.relative_strength import universe_rs_rank_series
+from relative_strength.relative_strength import efficiency_ratio, universe_momentum_rank_series, universe_rs_rank_series
 from risk.stops_targets import plan_trade_levels
 from scanner import BENCHMARK_TICKERS, evaluate_strategies
 from scoring.scorer import score_ticker
@@ -130,6 +130,7 @@ def make_screener_functions(
     rs_rank_series: pd.Series | None = None,
     earnings_growth: float | None = None,
     feature_by_bar: dict[int, dict] | None = None,
+    momentum_rank_series: pd.Series | None = None,
 ):
     gates = config.gates
     # populated by stop_fn (which runs first, on the entry bar, with the real
@@ -159,6 +160,18 @@ def make_screener_functions(
     def signal_fn(history_so_far: pd.DataFrame) -> bool:
         if len(history_so_far) < MIN_WARMUP_BARS:
             return False
+
+        # Cheap, strategy-independent gates first, before the expensive
+        # per-bar context build. A missing momentum rank (not enough history
+        # for the 252-day horizon) rejects, matching the live scanner.
+        if gates.min_momentum_percentile is not None:
+            rank = momentum_rank_series.get(history_so_far.index[-1]) if momentum_rank_series is not None else None
+            if rank is None or pd.isna(rank) or rank < gates.min_momentum_percentile:
+                return False
+        if gates.min_efficiency_ratio is not None:
+            er = efficiency_ratio(history_so_far["close"])
+            if er is None or er < gates.min_efficiency_ratio:
+                return False
 
         ctx = cache.get(history_so_far)
         signals = evaluate_strategies(ctx)
@@ -314,6 +327,7 @@ def backtest_ticker(
     sector_close: pd.Series | None = None,
     sector_rank_df: pd.DataFrame | None = None,
     sector_trend_df: pd.DataFrame | None = None,
+    momentum_rank_series: pd.Series | None = None,
 ):
     cache = SharedContextCache(
         ticker, spy_close=spy_close, qqq_close=qqq_close, sector_name=sector_name, sector_close=sector_close,
@@ -330,6 +344,7 @@ def backtest_ticker(
         overext_by_bar,
         min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
         earnings_growth=earnings_growth, feature_by_bar=feature_by_bar,
+        momentum_rank_series=momentum_rank_series,
     )
 
     result = run_backtest(
@@ -424,8 +439,12 @@ def _backtest_ticker_job(job: dict):
 
 def run_universe_backtest(
     provider: DataProvider, config: AppConfig, tickers: list[str], period: str, min_score: float | None = None,
-    capture_features: bool = False, workers: int = 1,
+    capture_features: bool = False, workers: int = 1, rank_tickers: list[str] | None = None,
 ):
+    """`rank_tickers`, when given, is the universe the composite-momentum
+    percentile (gates.min_momentum_percentile) is ranked against -- lets a
+    chunked run rank each chunk against the FULL universe, as the live scan
+    does, instead of against just its own ~30 tickers. Defaults to `tickers`."""
     all_trades = []
     all_trade_strategies = []
     all_trade_scores = []
@@ -486,6 +505,20 @@ def run_universe_backtest(
         provider, config, histories, period=period
     )
 
+    momentum_rank_table = None
+    if config.gates.min_momentum_percentile is not None:
+        rank_closes = {t: h["close"] for t, h in histories.items()}
+        for t in rank_tickers or []:
+            if t in rank_closes:
+                continue
+            try:
+                rank_closes[t] = provider.get_history(t, period=period)["close"]
+            except DataUnavailable:
+                continue
+        momentum_rank_table = universe_momentum_rank_series(rank_closes)
+        logger.info("computed momentum rank table: %d dates x %d tickers (min_momentum_percentile=%.0f)",
+                    *momentum_rank_table.shape, config.gates.min_momentum_percentile)
+
     jobs = []
     for ticker, history in histories.items():
         sector_name = sector_by_ticker.get(ticker)
@@ -497,6 +530,10 @@ def run_universe_backtest(
             spy_close=spy_close, qqq_close=qqq_close, sector_name=sector_name,
             sector_close=sector_closes.get(sector_etf) if sector_etf else None,
             sector_rank_df=sector_rank_df, sector_trend_df=sector_trend_df,
+            momentum_rank_series=(
+                momentum_rank_table[ticker]
+                if momentum_rank_table is not None and ticker in momentum_rank_table.columns else None
+            ),
         ))
 
     # Each ticker's walk-forward loop is independent once the shared gate

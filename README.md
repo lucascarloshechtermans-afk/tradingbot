@@ -150,16 +150,50 @@ momentum rank). Reading it:
 - Of their gap-through assumptions, "stop fills at the stop" hides 17–28%
   of stop-outs that gapped through (worst trade −8.5% on paper, −47.8% real).
 
-**Hybrid, not yet adopted:** gating OUR trades on their efficiency ratio
-(>= 0.25, previous bar) raised mean R 0.068→0.096 (our universe) and
-0.076→0.134 (theirs) and one-account MAR 0.74→1.09 / 0.81→1.17, but on
-their universe the first half's CAGR fell (27.5%→19.5%) — post-hoc on the
-same trades, not a clean win across all four half/universe cells. It needs
-a real gated re-run before it goes into the defaults.
+Their exit (50% at 1R + breakeven + 1.5-ATR trail) replayed on our own
+entries is worse (+0.052R → −0.001R), so it was not taken over.
 
-    python -m research.capture_trades --period 5y --tickers <their watchlist> --out ours_on_theirs.pkl
+### Adopted: their momentum rank + efficiency ratio as gates on our scanner
+
+`gates.min_momentum_percentile` (composite 63/126/252-day momentum,
+last 5 days skipped, percentile vs. the whole scanned universe) and
+`gates.min_efficiency_ratio` (30-day Kaufman ER) now run before scoring,
+for every strategy. Real gated backtests (not post-hoc filtering; each
+chunk ranked against the full universe via `capture_trades
+--rank-tickers`), same window and rules as above:
+
+| Universe | Variant | trades/wk | win % | mean R | PF (R) | H1 / H2 mean R | mean R 2023 / 24 / 25 / 26 | 1 account CAGR / max DD |
+|---|---|---|---|---|---|---|---|---|
+| ours | before (no gates) | 30.4 | 51.4 | +0.052 | 1.15 | +0.065 / +0.036 | +0.04 / +0.07 / +0.08 / +0.00 | 14.9% / 20.1% |
+| ours | momentum 90 only | 4.5 | 52.4 | +0.097 | 1.27 | +0.059 / +0.138 | −0.00 / +0.13 / +0.14 / +0.14 | 11.3% / 13.1% |
+| ours | **momentum 80 + ER 0.25 (default)** | 4.5 | 52.8 | **+0.122** | 1.35 | +0.139 / +0.105 | +0.09 / +0.18 / +0.09 / +0.12 | 14.8% / **9.7%** |
+| ours | momentum 90 + ER 0.25 | 2.5 | 55.1 | +0.185 | 1.51 | +0.208 / +0.159 | +0.13 / +0.31 / +0.11 / +0.19 | 12.3% / 5.6% |
+| ours | momentum 90 + ER 0.35 | 1.6 | 56.6 | +0.207 | 1.56 | +0.171 / +0.246 | +0.01 / +0.36 / +0.25 / +0.19 | 8.7% / 4.3% |
+| theirs | before (no gates) | 21.0 | 49.2 | +0.060 | 1.17 | +0.077 / +0.040 | +0.09 / +0.06 / +0.07 / −0.01 | 17.7% / 21.9% |
+| theirs | momentum 90 only | 3.3 | 50.7 | +0.147 | 1.43 | +0.081 / +0.221 | −0.00 / +0.21 / +0.30 / +0.03 | 12.8% / 14.3% |
+| theirs | **momentum 80 + ER 0.25 (default)** | 3.3 | 54.5 | **+0.189** | 1.52 | +0.214 / +0.163 | +0.28 / +0.21 / +0.12 / +0.13 | 16.9% / **7.1%** |
+| theirs | momentum 90 + ER 0.25 | 1.9 | 53.6 | +0.244 | 1.69 | +0.166 / +0.326 | +0.20 / +0.24 / +0.36 / +0.10 | 12.0% / 5.8% |
+| theirs | momentum 90 + ER 0.35 | 1.2 | 51.7 | +0.249 | 1.65 | +0.184 / +0.315 | +0.04 / +0.43 / +0.29 / +0.12 | 8.7% / 5.5% |
+| theirs | *their own scanner (engine rules)* | 1.3 | 52.2 | +0.176 | 1.37 | +0.002 / +0.254 | −0.31 / +0.27 / +0.23 / +0.35 | 5.9% / 8.4% |
+
+Every variant with the efficiency gate beats both "before" and their own
+scanner in both halves on both universes, and the neighbourhood is smooth
+(80/90, 0.25/0.35), so the gain isn't one lucky threshold. Momentum alone is
+weaker (flat 2023 on both universes). The default, 80 + 0.25, was picked
+from that neighbourhood for the ~3–4.5 setups/week a person can actually
+follow: about the same one-account return as before at half the drawdown.
+Caveats: the thresholds were compared on this same 2023–2026 window;
+Bullish Pullback and Support Bounce contribute little inside the gated set
+(Support Bounce almost never qualifies); the single worst trade is still a
+~−43% gap, so earnings avoidance and small sizing still matter. The live
+scan needs `data.period` >= 2y for the 252-day horizon (now the default)
+and, with the gate on, lists setups by momentum rank first.
+
+    # our scanner on their watchlist (gates off = the "before" rows), then the comparison
+    python -m research.capture_trades --period 5y --tickers <their watchlist> --min-momentum-pct -1 --min-efficiency -1 --out ours_on_theirs.pkl
     python -m research.compare_scanners --universe theirs --ours-pickle ours_on_theirs.pkl
-    python -m research.compare_scanners --universe ours --ours-pickle ours_default.pkl
+    # a gated chunk, ranked against the full universe (repeat per chunk, then merge_captures)
+    python -m research.capture_trades --period 5y --tickers <chunk> --rank-tickers default --out chunk1.pkl
 
 ## Overnight session summary (autonomous build) — earlier, superseded numbers
 

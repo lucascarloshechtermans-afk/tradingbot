@@ -26,7 +26,9 @@ universe:
                              # die inmiddels los is uitgeschakeld)
 
 data:
-  period: "1y"             # hoeveel historie opgehaald wordt per ticker
+  period: "2y"             # hoeveel historie opgehaald wordt per ticker -- minstens
+                           # 2y: de momentum-rank (gates.min_momentum_percentile)
+                           # heeft ~258 handelsdagen nodig, 1y is net te kort
   cache_dir: ".cache"
   cache_ttl_hours: 20
   max_retries: 3
@@ -62,6 +64,18 @@ gates:                     # hard pass/fail pre-filters, applied BEFORE scoring 
   block_extreme_overextension: true    # reject when ALL distance references agree price is stretched
   max_entry_gap_atr: 0.5    # no-chase rule: buy-limit at signal close + 0.5 ATR; skip the
                              # trade if the next session opens above it (null disables)
+  min_momentum_percentile: 80  # overgenomen uit de vergeleken "Explosive Breakout"-scanner
+                             # (alt_scanners/): alleen aandelen in de top 20% van het
+                             # universum op samengesteld momentum (gem. rendement 3/6/12
+                             # maanden, laatste week overgeslagen). Geldt voor ALLE setups.
+  min_efficiency_ratio: 0.25 # idem: koers moet over 30 dagen minstens 25% "rechtdoor"
+                             # bewegen (Kaufman efficiency ratio; 0 = pure chop, 1 = rechte
+                             # lijn). Samen, echte backtest 2023-2026: +0.122R/trade (onze
+                             # 134) en +0.189R (hun 99) vs +0.052/+0.060R zonder, elk jaar
+                             # positief, ~3-4.5 setups/week, max account-daling ~10% i.p.v.
+                             # ~20%. 90 i.p.v. 80: +0.185/+0.244R maar ~2 setups/week.
+                             # Zie README "Scanner comparison".
+                             # null schakelt elk van beide uit.
   min_earnings_growth: 0.15  # Minervini/CANSLIM-style quality gate, reject
                                # below 15% YoY quarterly EPS growth when known
                                # (missing data does NOT reject). CAVEAT (found

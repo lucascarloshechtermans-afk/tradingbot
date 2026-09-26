@@ -40,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-rr", type=float, default=None, help="Override config.gates.min_risk_reward")
     parser.add_argument("--legacy-stops", action="store_true", help="Allow structure stops tighter than the ATR stop (pre-audit behavior), for A/B comparison")
     parser.add_argument("--max-entry-gap-atr", type=float, default=None, help="Override config.gates.max_entry_gap_atr (no-chase buy-limit); use -1 to disable")
+    parser.add_argument("--min-momentum-pct", type=float, default=None, help="Override config.gates.min_momentum_percentile; use -1 to disable")
+    parser.add_argument("--min-efficiency", type=float, default=None, help="Override config.gates.min_efficiency_ratio; use -1 to disable")
+    parser.add_argument("--rank-tickers", type=str, default=None, help="Comma list (or 'default' for DEFAULT_UNIVERSE) to rank composite momentum against; defaults to --tickers")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -53,15 +56,24 @@ def main(argv: list[str] | None = None) -> int:
         config.risk.allow_tight_structure_stop = True
     if args.max_entry_gap_atr is not None:
         config.gates.max_entry_gap_atr = None if args.max_entry_gap_atr < 0 else args.max_entry_gap_atr
+    if args.min_momentum_pct is not None:
+        config.gates.min_momentum_percentile = None if args.min_momentum_pct < 0 else args.min_momentum_pct
+    if args.min_efficiency is not None:
+        config.gates.min_efficiency_ratio = None if args.min_efficiency < 0 else args.min_efficiency
     cache = DiskCache(cache_dir=config.data.cache_dir, ttl_hours=config.data.cache_ttl_hours)
     provider: DataProvider = YFinanceProvider(cache=cache, max_retries=config.data.max_retries, retry_backoff_seconds=config.data.retry_backoff_seconds)
     tickers = args.tickers.split(",") if args.tickers else DEFAULT_UNIVERSE
+    if args.rank_tickers == "default":
+        rank_tickers = list(DEFAULT_UNIVERSE)
+    else:
+        rank_tickers = args.rank_tickers.split(",") if args.rank_tickers else None
 
     started = time.time()
     (
         all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs,
         all_trade_overexts, per_ticker_summaries, errors, all_trade_features,
-    ) = run_universe_backtest(provider, config, tickers, args.period, min_score=None, capture_features=True, workers=args.workers)
+    ) = run_universe_backtest(provider, config, tickers, args.period, min_score=None, capture_features=True, workers=args.workers,
+                              rank_tickers=rank_tickers)
     logger.info("done in %.1fs — %d trades, %d errors", time.time() - started, len(all_trades), len(errors))
 
     payload = {

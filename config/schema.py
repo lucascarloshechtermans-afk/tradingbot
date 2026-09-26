@@ -223,13 +223,28 @@ class GatesConfig:
     # of the sample on win rate, mean R, profit factor and net $ -- early
     # +0.027R -> +0.034R, late +0.035R -> +0.042R; overall PF 1.09 -> 1.11.
     max_entry_gap_atr: float | None = 0.5
+    # Cross-sectional composite momentum (mean of the 63/126/252-day return,
+    # skipping the last 5 days), ranked 0-100 against every ticker being
+    # scanned; reject below this percentile. Taken from the externally
+    # supplied "Explosive Breakout" scanner (alt_scanners/), where it is the
+    # core of the ranking. Applies to EVERY strategy, counter-trend included,
+    # and a ticker without the ~258 bars of history it needs is rejected (so
+    # data.period must be >= 2y). None disables.
+    min_momentum_percentile: float | None = None
+    # Kaufman efficiency ratio over 30 days (|net move| / sum of |daily moves|,
+    # 1.0 = straight line) must be >= this. Same source. None disables.
+    min_efficiency_ratio: float | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "GatesConfig":
         meg = raw.get("min_earnings_growth", None)
         mega = raw.get("max_entry_gap_atr", 0.5)
+        mmp = raw.get("min_momentum_percentile", None)
+        mer = raw.get("min_efficiency_ratio", None)
         return cls(
             max_entry_gap_atr=float(mega) if mega is not None else None,
+            min_momentum_percentile=float(mmp) if mmp is not None else None,
+            min_efficiency_ratio=float(mer) if mer is not None else None,
             min_rs_percentile=float(raw.get("min_rs_percentile", 50.0)),
             rs_window=int(raw.get("rs_window", 60)),
             regime_gate_enabled=bool(raw.get("regime_gate_enabled", True)),
