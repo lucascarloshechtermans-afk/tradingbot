@@ -50,6 +50,21 @@ Findings:
 - The dip book and the momentum book are 0.7 correlated; combining them mainly
   lowers the drawdown of momentum and raises the return of the dip book.
 
+### Built into the scanner (all three systems, price data only)
+`python scanner.py --dashboard dashboard.html` now prints and shows:
+- **Vandaag te doen** (Dashboard tab) and a **Portefeuille** tab with the plan
+  from `portfolio:` in config.yaml (default 40/40/20; option 1 = 100/0/0,
+  2 = 0/100/0, 3 = 50/50/0, 4 = 0/0/100, 5 = 40/40/20).
+- **MOMENTUM TOP 20** (`analysis/momentum_portfolio.py`): the official list of the
+  last month-end close (NIEUW / BLIJFT / to sell), a preview "if the month
+  ended today", cash when SPY closed below its 200-day at month-end. Universe:
+  S&P 500 + 400 (`data/sp1000_members.json`) + the scanner list, bulk-downloaded
+  and cached; identical ranking to the backtest (checked 20/20 on three month-ends).
+- **INDEX RSI(2)** (`analysis/index_rsi2.py`): KOOP / HOUDEN / VERKOOP / GEEN for
+  SPY, QQQ, IWM, DIA plus tomorrow's trigger close (buy below / sell above).
+- **LEADER DIP** risk now follows the plan: dip_pct × dip_risk_pct_of_sleeve
+  (0.4% of the account by default, halved below SPY's 200-day).
+
 ## Research round 5 — technicals only: small caps, longer holds, the 4H/daily 200 EMA style
 
 Same strict scoring as round 4 (pre-registered in `research/HYPOTHESES.md`;

@@ -363,6 +363,40 @@ class AlertsConfig:
 
 
 @dataclass
+class PortfolioConfig:
+    """How the account is split between the three price-only systems of
+    README 'Research round 6'. Percent of the account; 0 switches a system
+    off (100/0/0 = momentum only, 0/100/0 = dip swings only, ...)."""
+    momentum_pct: float = 40.0
+    dip_pct: float = 40.0
+    index_rsi2_pct: float = 20.0
+    momentum_top_n: int = 20
+    dip_risk_pct_of_sleeve: float = 1.0   # risk per dip trade, % of the dip sleeve (halved below SPY's 200-day)
+    dip_max_positions: int = 10
+
+    @classmethod
+    def from_dict(cls, raw: dict) -> "PortfolioConfig":
+        cfg = cls(
+            momentum_pct=float(raw.get("momentum_pct", 40.0)),
+            dip_pct=float(raw.get("dip_pct", 40.0)),
+            index_rsi2_pct=float(raw.get("index_rsi2_pct", 20.0)),
+            momentum_top_n=int(raw.get("momentum_top_n", 20)),
+            dip_risk_pct_of_sleeve=float(raw.get("dip_risk_pct_of_sleeve", 1.0)),
+            dip_max_positions=int(raw.get("dip_max_positions", 10)),
+        )
+        weights = (cfg.momentum_pct, cfg.dip_pct, cfg.index_rsi2_pct)
+        if min(weights) < 0 or sum(weights) > 100.0001:
+            raise ConfigError(f"portfolio weights must be >= 0 and sum to at most 100 (got {weights})")
+        if cfg.momentum_top_n < 1 or cfg.dip_max_positions < 1:
+            raise ConfigError("portfolio.momentum_top_n and dip_max_positions must be >= 1")
+        return cfg
+
+    @property
+    def dip_risk_pct_of_account(self) -> float:
+        return self.dip_pct / 100 * self.dip_risk_pct_of_sleeve
+
+
+@dataclass
 class AppConfig:
     universe: UniverseConfig = field(default_factory=UniverseConfig)
     data: DataConfig = field(default_factory=DataConfig)
@@ -372,6 +406,7 @@ class AppConfig:
     earnings: EarningsConfig = field(default_factory=EarningsConfig)
     backtesting: BacktestConfig = field(default_factory=BacktestConfig)
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
+    portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "AppConfig":
@@ -384,6 +419,7 @@ class AppConfig:
             earnings=EarningsConfig.from_dict(raw.get("earnings", {})),
             backtesting=BacktestConfig.from_dict(raw.get("backtesting", {})),
             alerts=AlertsConfig.from_dict(raw.get("alerts", {})),
+            portfolio=PortfolioConfig.from_dict(raw.get("portfolio", {})),
         )
 
 

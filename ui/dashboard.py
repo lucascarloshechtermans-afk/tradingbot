@@ -72,6 +72,7 @@ PAGE_TEMPLATE = """<!doctype html>
 
   <div class="tabs">
     <div class="tab active" data-tab="dashboard">Dashboard</div>
+    <div class="tab" data-tab="portfolio">Portefeuille</div>
     <div class="tab" data-tab="scanner">Scanner</div>
     <div class="tab" data-tab="boom">Ready to boom</div>
     <div class="tab" data-tab="watchlist">Watchlist</div>
@@ -106,6 +107,10 @@ PAGE_TEMPLATE = """<!doctype html>
       <table><thead><tr><th>#</th><th>Ticker</th><th>Score</th><th>Status</th><th>Pattern</th><th>Trigger</th><th>Stop</th><th>Target</th><th>R:R</th></tr></thead>
       <tbody>{boom_rows_html}</tbody></table>
     </div>
+  </div>
+
+  <div id="portfolio" class="panel">
+    {portfolio_html}
   </div>
 
   <div id="boom" class="panel">
@@ -292,14 +297,24 @@ def build_dashboard_html(
     market_state: dict | None = None,
     dip_alerts: list | None = None,
     sector_by_ticker: dict | None = None,
+    portfolio_cfg=None,
+    account_size: float = 10_000.0,
+    momentum_book=None,
+    index_signals: list | None = None,
+    momentum_closes=None,
 ) -> str:
     """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
     'Ready to boom' tab."""
     from html import escape
 
     from ui.chart_svg import SETUP_CSS, render_setup_cards
+    from config.schema import PortfolioConfig
     from ui.overview import OVERVIEW_CSS, build_overview_html
+    from ui.portfolio import build_portfolio_tab_html, build_todo_html
     generated_at = generated_at or datetime.now()
+    portfolio_cfg = portfolio_cfg or PortfolioConfig()
+    index_signals = index_signals or []
+    bear = (market_state or {}).get("spy_below_200")
     setup_count = len(scan_rows)
 
     regime_factors_html = "".join(
@@ -340,8 +355,12 @@ def build_dashboard_html(
         boom_rows_html=boom_rows_html or "<tr><td colspan=9>No pattern setups</td></tr>",
         boom_cards_html=render_setup_cards(pattern_setups) if pattern_setups else "",
         setup_css=SETUP_CSS,
-        overview_html=build_overview_html(leader_dips, dip_alerts, pattern_setups, sector_ranked,
-                                          sector_by_ticker or {}, market_state or {}),
+        overview_html=build_todo_html(portfolio_cfg, momentum_book, index_signals, len(leader_dips), bear)
+        + build_overview_html(leader_dips, dip_alerts, pattern_setups, sector_ranked,
+                              sector_by_ticker or {}, market_state or {},
+                              dip_risk_pct=portfolio_cfg.dip_risk_pct_of_account),
+        portfolio_html=build_portfolio_tab_html(portfolio_cfg, account_size, momentum_book, index_signals, bear,
+                                                momentum_closes),
         overview_css=OVERVIEW_CSS,
         scan_data_json=json.dumps(scan_rows),
         watchlist_data_json=json.dumps(watchlist_entries),

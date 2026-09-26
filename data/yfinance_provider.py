@@ -52,6 +52,11 @@ class YFinanceProvider(DataProvider):
                     time.sleep(self.retry_backoff_seconds * attempt)
         raise DataUnavailable(f"{description} failed after {self.max_retries} attempts: {last_exc}")
 
+    def get_universe_closes(self, tickers: list[str], latest_session=None) -> tuple[pd.DataFrame, pd.DataFrame]:
+        from analysis.momentum_portfolio import fetch_universe
+
+        return fetch_universe(tickers, cache=self.cache, latest_session=latest_session)
+
     def get_history(self, ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
         cache_key = f"hist_{ticker}_{period}_{interval}"
         if self.cache is not None:

@@ -117,6 +117,15 @@ scoring:
     interesting: 70
     watchlist: 60
 
+portfolio:                   # README "Research round 6": three price-only systems in one account
+  momentum_pct: 40             # MOMENTUM TOP 20 -- month-end, top 20 by 12-1 month return, SPY > 200d
+  dip_pct: 40                  # LEADER DIP swings -- the daily scanner
+  index_rsi2_pct: 20           # INDEX RSI(2) -- SPY/QQQ/IWM/DIA, a quarter each when triggered
+  momentum_top_n: 20
+  dip_risk_pct_of_sleeve: 1.0  # 1% of the 40% sleeve = 0.4% of the account per dip trade (halved below SPY 200d)
+  dip_max_positions: 10
+  # presets: option 1 = 100/0/0, option 2 = 0/100/0, option 3 = 50/50/0, option 4 = 0/0/100, option 5 = 40/40/20
+
 earnings:
   avoid_earnings: true
   buffer_days: 5

@@ -506,6 +506,63 @@ class ScanRun:
     # [(analysis.leader_dip.DipAlert, ChartRead)] -- leaders closest to a dip trigger
     dip_alerts: list = field(default_factory=list)
     sector_by_ticker: dict = field(default_factory=dict)
+    # round-6 portfolio plan (price-only): analysis.momentum_portfolio.MomentumBook,
+    # [analysis.index_rsi2.IndexSignal], and the universe closes for sparklines
+    momentum_book: object | None = None
+    index_signals: list = field(default_factory=list)
+    momentum_closes: pd.DataFrame | None = None
+
+
+def _naive_close(df: pd.DataFrame) -> pd.Series:
+    """Close series with a tz-naive New York calendar-date index."""
+    c = df["close"].copy()
+    if c.index.tz is not None:
+        c.index = c.index.tz_convert("America/New_York").tz_localize(None).normalize()
+    return c
+
+
+def find_index_signals(provider: DataProvider) -> list:
+    """INDEX RSI(2) state for SPY/QQQ/IWM/DIA (analysis/index_rsi2.py)."""
+    from analysis.index_rsi2 import ETFS, index_signals
+
+    hist = {}
+    for etf in ETFS:
+        try:
+            hist[etf] = provider.get_history(etf, period="2y")
+        except DataUnavailable as exc:
+            logger.warning("index RSI(2): no data for %s: %s", etf, exc)
+    try:
+        return index_signals(hist)
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("index RSI(2) failed: %s", exc)
+        return []
+
+
+def find_momentum_book(provider: DataProvider, config: AppConfig, spy: pd.DataFrame | None,
+                       extra_sectors: dict[str, str | None] | None = None):
+    """MOMENTUM TOP 20 over the S&P 500 + 400 plus the scanner's own universe
+    -- the same 966-name universe the research backtest ranked
+    (analysis/momentum_portfolio.py). Returns (book, closes) or (None, None)."""
+    if config.portfolio.momentum_pct <= 0 or spy is None or spy.empty:
+        return None, None
+    from analysis.momentum_portfolio import build_book, load_universe
+
+    try:
+        sectors = load_universe()
+        for t in DEFAULT_UNIVERSE:
+            sectors.setdefault(t, (extra_sectors or {}).get(t))
+        spy_close = _naive_close(spy)
+        closes, volumes = provider.get_universe_closes(sorted(sectors), latest_session=spy_close.index[-1])
+        if closes.empty:
+            return None, None
+        book = build_book(closes, volumes, spy_close, sectors, top_n=config.portfolio.momentum_top_n)
+        return book, closes
+    except NotImplementedError:
+        logger.info("momentum book skipped: this data provider has no bulk universe download")
+        return None, None
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("momentum book failed: %s", exc)
+        return None, None
 
 
 def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | None = None, max_workers: int = 8) -> ScanRun:
@@ -627,11 +684,16 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
 
     pattern_setups = find_pattern_setups(provider, {t: c[1] for t, c in candidates.items()})
     leader_dips, mstate, alerts = find_validated_leader_dips(provider, {t: c[1] for t, c in candidates.items()}, benchmarks)
+    logger.info("building the portfolio plan: index RSI(2) + momentum top %d", config.portfolio.momentum_top_n)
+    signals = find_index_signals(provider)
+    book, mom_closes = find_momentum_book(provider, config, benchmarks.get("spy"),
+                                          {t: c[0].sector for t, c in candidates.items()})
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
         pattern_setups=pattern_setups, leader_dips=leader_dips, market_state=mstate, dip_alerts=alerts,
         sector_by_ticker={t: c[0].sector for t, c in candidates.items()},
+        momentum_book=book, index_signals=signals, momentum_closes=mom_closes,
     )
 
 
@@ -670,12 +732,12 @@ def print_scan_results(trade_plans: list[TradePlan], min_score: float = 65.0) ->
         print()
 
 
-def print_leader_dips(leader_dips: list, market: dict) -> None:
+def print_leader_dips(leader_dips: list, market: dict, risk_pct: float = 0.5) -> None:
     vix, weak, bear = market.get("vix"), market.get("spy_below_50"), market.get("spy_below_200")
     print()
     print("=== LEADER DIP -- disciplined dip entry (buy next open, stop 2.5 ATR, exit after 10 sessions) ===")
     print("    research round 4: no setup beat a random stock bought the same day (2008-2026) -- the grade is a")
-    print("    RISK DIAL: N = normal size (0.5% risk), H = half size (0.25%) while SPY is below its 200-day SMA")
+    print(f"    RISK DIAL: N = normal size ({risk_pct:.2f}% of the account at risk), H = half ({risk_pct / 2:.2f}%) while SPY < 200d")
     if vix is not None:
         print(f"    market: VIX {vix:.1f}, SPY {'BELOW' if weak else 'above'} its 50-day"
               f"{'' if bear is None else (', BELOW its 200-day' if bear else ', above its 200-day')}")
@@ -688,6 +750,43 @@ def print_leader_dips(leader_dips: list, market: dict) -> None:
         print("        + " + "; ".join(d.reasons[2:]) if len(d.reasons) > 2 else "        + (no context notes)")
         if d.missing:
             print("        - " + "; ".join(d.missing))
+    print()
+
+
+def print_portfolio_plan(scan_run: ScanRun, config: AppConfig) -> None:
+    """Terminal version of the dashboard's 'Vandaag te doen' + Portefeuille tab."""
+    from ui.portfolio import allocation_rows
+
+    pc = config.portfolio
+    bear = scan_run.market_state.get("spy_below_200")
+    print()
+    print(f"=== PORTFOLIO PLAN {pc.momentum_pct:.0f}/{pc.dip_pct:.0f}/{pc.index_rsi2_pct:.0f} (momentum / dip / index RSI2) -- price data only ===")
+    for name, pct, amount, rule in allocation_rows(pc, config.risk.account_size, bear):
+        print(f"  {name:<22}{pct:>5}  {amount:>10}  {rule}")
+    book = scan_run.momentum_book
+    if pc.momentum_pct > 0:
+        print()
+        if book is None or book.as_of is None:
+            print("--- MOMENTUM TOP 20: not available (no universe data)")
+        else:
+            state = "INVESTED" if book.invested else "CASH (SPY closed below its 200-day at month-end)"
+            print(f"--- MOMENTUM TOP {len(book.picks)}: month-end list of {book.as_of.date()} -- {state}; "
+                  f"next rebalance at the close of {book.next_rebalance.date() if book.next_rebalance is not None else '?'}")
+            for p in book.picks:
+                print(f"  {p.rank:>2}. {p.ticker:<6} {p.status:<7} 12-1m {p.mom_12_1:+6.0f}%  last month {p.ret_1m:+6.1f}%  month-end close {p.close:>9.2f}  {p.sector or ''}")
+            if book.exits:
+                print(f"  sell (left the list): {', '.join(book.exits)}")
+            if book.preview:
+                print(f"  preview if the month ended today ({book.preview_date.date()}): in {', '.join(book.preview_in) or '-'}; "
+                      f"out {', '.join(book.preview_out) or '-'}")
+    if pc.index_rsi2_pct > 0 and scan_run.index_signals:
+        print()
+        print("--- INDEX RSI(2): buy next open after close > SMA200 and RSI(2) < 10; sell next open after close > SMA5")
+        for sig in scan_run.index_signals:
+            trig = (f"sell if close > {sig.sell_above:.2f}" if sig.sell_above is not None else
+                    f"buy if close <= {sig.buy_below:.2f}" if sig.buy_below is not None and sig.above_200 else "below 200d: no trade")
+            print(f"  {sig.etf:<4} {sig.state:<8} close {sig.close:>8.2f}  RSI2 {sig.rsi2:5.1f}  SMA5 {sig.sma5:>8.2f}  "
+                  f"SMA200 {sig.sma200:>8.2f}  tomorrow: {trig}")
     print()
 
 
@@ -825,7 +924,8 @@ def main(argv: list[str] | None = None) -> int:
         provider = YFinanceProvider(cache=cache, max_retries=config.data.max_retries, retry_backoff_seconds=config.data.retry_backoff_seconds)
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
-    print_leader_dips(scan_run.leader_dips, scan_run.market_state)
+    print_portfolio_plan(scan_run, config)
+    print_leader_dips(scan_run.leader_dips, scan_run.market_state, config.portfolio.dip_risk_pct_of_account)
     if scan_run.dip_alerts:
         print("--- Next-session alerts: momentum leaders closest to a LEADER DIP trigger ---")
         for a, _r in scan_run.dip_alerts:
@@ -868,6 +968,11 @@ def main(argv: list[str] | None = None) -> int:
         market_state=scan_run.market_state,
         dip_alerts=scan_run.dip_alerts,
         sector_by_ticker=scan_run.sector_by_ticker,
+        portfolio_cfg=config.portfolio,
+        account_size=config.risk.account_size,
+        momentum_book=scan_run.momentum_book,
+        index_signals=scan_run.index_signals,
+        momentum_closes=scan_run.momentum_closes,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

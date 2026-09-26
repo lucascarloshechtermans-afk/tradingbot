@@ -109,7 +109,7 @@ def _dip_why(d) -> tuple[list[str], list[str]]:
     missing = []
     for m in d.missing:
         if m.startswith("SPY below its 200-day"):
-            missing.append("Let op: SPY staat onder zijn 200-daags gemiddelde -- halve positie (0,25% risico). "
+            missing.append("Let op: SPY staat onder zijn 200-daags gemiddelde -- halve positie. "
                            "Die trendfilter is de enige regel die in elke geteste periode de drawdowns verkleinde.")
         else:
             missing.append("Context: " + escape(m))
@@ -126,14 +126,19 @@ def _card(anchor: str, badge: str, badge_cls: str, title: str, summary: str, why
             f"<h4>Plan</h4><p>{plan}</p></div></div>{svg}</div></details>")
 
 
+def _pct(x: float) -> str:
+    return f"{x:.2f}".rstrip("0").rstrip(".").replace(".", ",") + "%"
+
+
 def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: list, sector_ranked: list[dict],
-                        sector_by_ticker: dict[str, str | None], market_state: dict) -> str:
+                        sector_by_ticker: dict[str, str | None], market_state: dict, dip_risk_pct: float = 0.5) -> str:
     sector_of = lambda t: sector_by_ticker.get(t) or "Onbekend"  # noqa: E731
     setups, possible = [], []
     for d, read in leader_dips:
         why, missing = _dip_why(d)
         why += explain_chart(read, dip_setup=True) + _patterns_nl(d.daily)
-        risk_acct = "0,25% (halve positie: SPY onder zijn 200-daags)" if d.grade == "H" else "0,5%"
+        risk_acct = (f"{_pct(dip_risk_pct / 2)} (halve positie: SPY onder zijn 200-daags)" if d.grade == "H"
+                     else _pct(dip_risk_pct))
         plan = (f"Koop op de volgende open (~{_eur(d.close)}), stop 2,5 ATR onder je instap (~{_eur(d.stop_estimate)}, "
                 f"{d.risk_pct:.1f}% koersrisico -- positie zo groot dat dit {risk_acct} van je account is), verkoop op het "
                 f"slot van de 10e handelsdag. Geen vast koersdoel.")
@@ -206,8 +211,9 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
         "<th>Setups</th><th>Mogelijke setups</th></tr></thead><tbody>" + rows + "</tbody></table></div>"
         + RESEARCH_NOTE_HTML +
         "<div class='card'><h3 style='margin-top:0'>Setups (verhandelbaar)</h3>"
-        "<p class='sm'>LEADER DIP: een gedisciplineerde dip-instap in een momentum-leider. Positiegrootte volgt de markttrend: "
-        "normaal (0,5% risico) als SPY boven zijn 200-daags staat, half (0,25%) eronder. Klik voor uitleg en chart.</p>"
+        f"<p class='sm'>LEADER DIP: een gedisciplineerde dip-instap in een momentum-leider. Positiegrootte volgt de markttrend: "
+        f"normaal ({_pct(dip_risk_pct)} van je account als risico) als SPY boven zijn 200-daags staat, half "
+        f"({_pct(dip_risk_pct / 2)}) eronder. Klik voor uitleg en chart.</p>"
         + no_trade + "".join(c for _, c in setups) + "</div>"
         "<div class='card'><h3 style='margin-top:0'>Mogelijke setups (nog niet verhandelbaar)</h3>"
         "<p class='sm'>Leiders vlak bij hun dip-trigger, en chart-patronen die klaarstaan (alleen info). "
