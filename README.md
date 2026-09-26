@@ -12,11 +12,669 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
-## Overnight session summary (autonomous build)
+## Research round 6 — complete trading systems (options for the user)
+
+Whole systems, next-open execution, 10 bp per side, idle cash earns T-bills
+(`research/systems6.py`, `etf_systems6.py`, `stock_systems6.py`,
+`trend_systems6.py`, `combo6.py`; pre-registered in `research/HYPOTHESES.md`).
+
+**Survivorship warning, measured:** equal-weighting today's S&P 500+400 members
+gave ~15%/yr (2008–2021) and ~12.7% (2022–2026), while the real equal-weight
+ETF RSP made 11.6% and 7.5%. Every stock-level backtest here is therefore
+roughly **4–5%/yr too optimistic**; ETF results are not affected.
+
+| system | 2008–2021 CAGR / maxDD / Sharpe | 2022–2026 CAGR / maxDD / Sharpe | activity |
+|---|---|---|---|
+| SPY buy & hold | 11.5% / 51% / 0.63 | 12.4% / 25% / 0.76 | none |
+| SPY only above its 200d | 8.5% / 25% / 0.75 | 9.3% / 19% / 0.84 | ~1 switch/yr |
+| A. Momentum: month-end top 20 by 12-1 return, SPY>200d (research / holdout stocks) | 21.0 / 34 / 0.93 · 20.1 / 35 / 0.90 | 13.0 / 35 / 0.53 · 25.4 / 38 / 0.82 | ~5–10 trades/month |
+| B. Current dip scanner, 1% risk, N/H sizing (research / holdout) | 7.6 / 36 / 0.49 · 11.6 / 27 / 0.67 | 15.5 / 21 / 0.83 · 13.5 / 20 / 0.73 | ~5 trades/week |
+| A + B 50/50 (research / holdout) | 14.5 / 29 / 0.79 · 16.1 / 28 / 0.85 | 15.2 / 23 / 0.70 · 20.3 / 24 / 0.85 | both |
+| C. Index RSI(2) on SPY/QQQ/IWM/DIA, 25% each | 2.0 / 16 / 0.33 | 6.4 / 4 / 1.38 | ~30 trades/yr, ~10% time in market |
+| 40% A / 40% B / 20% C (research / holdout) | 11.8 / 25 / 0.75 · 13.2 / 24 / 0.82 | 13.7 / 19 / 0.73 · 17.8 / 20 / 0.87 | all |
+| Sector rotation, top 3 of 9 SPDRs | 7.4 / 23 / 0.55 | 11.5 / 19 / 0.80 | monthly — not better than equal-weight sectors |
+| 50-day breakout + 20-day-low trailing exit, 0.5% risk | 8.1 / 26 / 0.60 · 8.5 / 23 / 0.64 | 2.7 / 27 / 0.24 · 6.2 / 21 / 0.46 | ~2/week — ≈ random entries with the same exit |
+
+Findings:
+- **Momentum portfolio** is the strongest stock system in both halves and both
+  periods (and survivorship-free evidence agrees: the MTUM ETF beat SPY 2013–2021
+  and 13.9% vs 12.2% in 2022–2026). Per unit of risk it is similar to holding
+  all stocks with the same filter — it is a higher-return, higher-drawdown
+  version, not a free lunch. Without the SPY filter: bigger 2022–2026 returns
+  but a 59–65% drawdown in 2008. Small caps (S&P 600): failed in 2022–2026.
+- **Index RSI(2)** (buy an index ETF above its 200d after RSI(2) < 10, sell
+  after a close above the 5-day SMA) is the one technical rule positive in
+  every period and every ETF tested: +0.2…+0.6% per trade in ~3.5 days,
+  64–79% winners, 1999–2007 / 2008–2021 / 2022–2026. Small absolute
+  contribution because it is rarely in the market.
+- The dip book and the momentum book are 0.7 correlated; combining them mainly
+  lowers the drawdown of momentum and raises the return of the dip book.
+
+### Built into the scanner (all three systems, price data only)
+`python scanner.py --dashboard dashboard.html` now prints and shows:
+- **Vandaag te doen** (Dashboard tab) and a **Portefeuille** tab with the plan
+  from `portfolio:` in config.yaml (default 40/40/20; option 1 = 100/0/0,
+  2 = 0/100/0, 3 = 50/50/0, 4 = 0/0/100, 5 = 40/40/20).
+- **MOMENTUM TOP 20** (`analysis/momentum_portfolio.py`): the official list of the
+  last month-end close (NIEUW / BLIJFT / to sell), a preview "if the month
+  ended today", cash when SPY closed below its 200-day at month-end. Universe:
+  S&P 500 + 400 (`data/sp1000_members.json`) + the scanner list, bulk-downloaded
+  and cached; identical ranking to the backtest (checked 20/20 on three month-ends).
+- **INDEX RSI(2)** (`analysis/index_rsi2.py`): KOOP / HOUDEN / VERKOOP / GEEN for
+  SPY, QQQ, IWM, DIA plus tomorrow's trigger close (buy below / sell above).
+- **LEADER DIP** risk now follows the plan: dip_pct × dip_risk_pct_of_sleeve
+  (0.4% of the account by default, halved below SPY's 200-day).
+
+## Research round 5 — technicals only: small caps, longer holds, the 4H/daily 200 EMA style
+
+Same strict scoring as round 4 (pre-registered in `research/HYPOTHESES.md`;
+excess R vs a random stock of the same half bought the same day; pass =
+t ≥ 3 and ≥ 70% of development years positive, then validation cells).
+
+**Result: nothing passed.** Technical setups on daily or 4H bars did not beat a
+same-day random stock — not on small caps, not with longer holds, not in the
+multi-timeframe EMA style.
+
+| angle | best | worst |
+|---|---|---|
+| S&P 600 small caps, H01–H19 + L01–L06, DEV, holds 5–60 (`run_round5.py`, 593 stocks) | gap-down reversal +0.05R (t ≤ 2.2), leader dip +0.01..+0.04R (t ≤ 1.7) | EMA200 reclaim −0.10R at 40–60 bars (t −2.5), 20-day breakout −0.04R, 26-week breakout −0.04R |
+| longer holds 20/40/60, S&P 500+400, DEV | golden cross +0.03R at 60 bars (t 0.0) | Minervini trend template −0.06R at 60 bars (t −4.6), weekly 26-week breakout −0.05R (t −3.8), momentum top decile −0.07R (t −2.9) |
+| 4H 200 EMA break while holding the daily 200 EMA (`mtf5.py`, 1.5k stocks, 2024-03 → 2026-09) | small caps, research half: +0.06R at 20 bars (t 0.8) — holdout −0.02R | large caps: −0.02..+0.01R, t ≈ −2..0; breaking the 4H 200 while BELOW the daily 200 ≈ −0.03R |
+
+What this does and does not mean: the daily/4H 200 EMA and zones are fine for
+*where to put a stop and how to plan a trade*, but on their own they do not
+select stocks that go up more than a random stock over the next 1–12 weeks.
+Chasing strength (breakouts, trend templates, new highs) was the one thing
+that was consistently worse than random, in both universes and at every horizon.
+
+    python -m research.run_round5 small.pkl r5_small.pkl DEV        # small caps
+    python -m research.run_round5 big.pkl r5_big.pkl DEV "H07,H09,H13,L0"
+    python -m research.hourly_data h4.pkl big.pkl small.pkl && python -m research.mtf5 big.pkl h4.pkl mtf.pkl
+
+## Research round 4 — 966 stocks, 2008–2026, 26 pre-registered hypotheses (LATEST, supersedes round 3's grades)
+
+**Verdict: no daily price or earnings setup we could build — this scanner's, the
+uploaded breakout scanner's, the classic swing setups, or a machine-learned
+ranking — beat a random eligible stock bought on the same day. The earlier
+"edges" came from a biased baseline and from market timing that stopped
+working after 2021. The scanner is now honest about that: LEADER DIP stays as a
+disciplined entry, and its grade is a risk dial driven by the one rule that
+held in every period — SPY's 200-day trend.**
+
+Protocol (`research/HYPOTHESES.md`, committed before any result was seen):
+S&P 500 + S&P 400 + scanner lists = 966 stocks, split+dividend adjusted daily
+bars from 2007 (`research/bigdata.py`); tickers split once (seeded, by sector)
+into RESEARCH/HOLDOUT; time split at 2022-01-01. Cells: DEV (research ≤2021,
+all exploration), VAL-T (research ≥2022), VAL-U (holdout ≤2021), FINAL
+(holdout ≥2022, looked at once). Signal at the close, entry next open +0.05%
+slippage, 2.5 ATR stop checked from the entry bar (gap-through fills at the
+open), time exits 5/10/20/40 sessions, one open trade per ticker.
+
+### FINAL VERSION
+- `analysis/leader_dip.py`: momentum rank ≥ 80 and a 5-day move ≤ −1 ATR; buy
+  the next open, stop 2.5 ATR, exit after 10 sessions. Grade **N** = normal
+  size (0.5% account risk) while SPY is above its 200-day SMA, **H** = half
+  size (0.25%) below it. Deep dip / VIX / 50-day / ATR% are shown as context only.
+- Dashboard: a "Wat het onderzoek zegt" card above the setups; the market line
+  shows SPY vs its 200-day and the resulting position size.
+
+### WHAT CHANGED
+1. **Our own metric was biased.** "Excess R vs the same stock in the same
+   month" contains the event's own move: a dip lowers that month's mean (dips
+   look better), a breakout raises it (breakouts look worse). Re-scored
+   against a same-day cross-sectional baseline (`engine2.day_baseline`, mean R
+   of every eligible stock entering that day) the dip edge disappears.
+2. The absolute edge of dips was **market timing**: they fire after market
+   selloffs. A random stock bought when SPY > SMA200, VIX ≥ 15 and SPY is down
+   over 5 days earned R20 +0.26 in 2008–2021 — as much as the best dip setup.
+3. Grades A/B/C/R (round 3) were validated on 2022–2026 only; on the long
+   history grade A was −0.03R vs random (table below). Replaced by the trend risk dial.
+
+### FEATURES REMOVED
+- Regime/stock-confirmation grading A/B/C/R and every "+0.2..0.4R edge" claim
+  in the terminal output and dashboard; grade C "watch" (every leader dip is
+  now listed under Setups, sized by the trend).
+
+### FEATURES ADDED
+- `market_state()` reports `spy_below_200`; `grade_for()` → N/H; `RISK_PCT`.
+- Research tooling: `engine2.py` (vectorised event engine, both baselines),
+  `hypotheses4.py`, `run_round4.py`, `rebase4.py`, `earnings_data.py` +
+  `earnings4.py` (Yahoo earnings dates and EPS surprise, 63,809 reports),
+  `xsection4.py` (same-day quintile study), `ml4.py`/`run_ml4.py` (LightGBM
+  walk-forward), `portfolio4.py` (one-account simulation + selection-luck
+  Monte Carlo), `port_round4.py`, `port_regime4.py`, `exit_round4.py`.
+
+### BEST PERFORMING SETUPS
+None beats a random same-day stock in all cells. In absolute terms the best
+was *any* long entry after a market pullback in a bull market with VIX ≥ 15 —
+but only until 2021 (see out-of-sample). Within one day, which stock you pick
+moved the result by ±0.01–0.07R per 20 days, and no characteristic
+(extension, RSI, ATR%, beta, momentum, 52-week-high distance, earnings
+surprise, sector rank, volume) kept its sign across the four cells.
+
+### WORST FAILURE MODES
+- Buying strength: 20-day breakout on volume −0.030R vs random (DEV, t −4.1);
+  52-week closing high negative in DEV, VAL-T and VAL-U (t ≈ −2 each).
+- Buying dips when VIX < 15: 0.00R (30% of years positive), 30% of all dip signals.
+- Earnings-gap chasing (E01/E03/E06) and fading earnings flushes (E04): ≈ random or worse.
+- Portfolio level: the dip book was mostly market beta — max drawdown 40–47%
+  without a trend filter (2008).
+
+### OUT-OF-SAMPLE RESULTS
+Excess R per trade vs a random stock bought the same day (same half), 20-session hold:
+
+| setup | DEV | VAL-T | VAL-U | FINAL |
+|---|---|---|---|---|
+| H01 leader dip | −0.013 | +0.011 | −0.019 | +0.020 |
+| H02 leader dip, deep | −0.013 | +0.021 | −0.023 | +0.029 |
+| H04 RSI(2) < 10 in uptrend | +0.009 | +0.018 | +0.002 | +0.023 |
+| H14 sector-leader dip | +0.013 | −0.027 | +0.007 | −0.011 |
+| H08 20-day breakout on volume | −0.030 | −0.004 | −0.018 | +0.024 |
+| H07 52-week high | −0.012 | −0.016 | −0.018 | +0.016 |
+
+Market-state rule M1 (random stock, R20, GO days vs other days): DEV +0.255 vs
++0.087, VAL-U +0.264 vs +0.094, but VAL-T +0.029 vs +0.086 and FINAL +0.031 vs
++0.084 → **failed after 2021**. On SPY itself 1993–2007 (never looked at): +1.10%
+vs +0.71% per 20 days, better in 60% of years; 2022–2026: +0.97% vs +1.09%.
+
+Round-3 grades on the 966-stock data (R10 absolute / vs random):
+
+| grade | DEV | VAL-U | VAL-T | FINAL |
+|---|---|---|---|---|
+| A | +0.05 / −0.03 | +0.04 / −0.03 | +0.19 / +0.10 | +0.16 / +0.07 |
+| B | +0.08 / −0.02 | +0.11 / 0.00 | +0.09 / +0.05 | +0.10 / +0.03 |
+| R (calm) | +0.02 / 0.00 | +0.02 / 0.00 | +0.02 / +0.01 | +0.01 / +0.02 |
+
+### WALK-FORWARD RESULTS
+LightGBM ranking model over 67k dip candidates (35 features: stock, sector,
+earnings and market state), trained on years < Y and tested on Y, 2012–2021:
+rank correlation with the outcome −0.01 (R10) / −0.03 (R20); outcome by
+predicted decile U-shaped (lowest decile best); the top half no better than
+all in 50%/40% of years. Rejected.
+
+### ROBUSTNESS RESULTS
+- VIX gate neighbourhood (DEV): VIX ≥ 13…20 all gave +0.08…+0.10R10 and 86%
+  of years positive — smooth, yet it still failed after 2021, so a smooth
+  neighbourhood in one era is not enough.
+- Selection-luck Monte Carlo (same candidates, random daily priority, 1% risk,
+  10 positions, DEV): CAGR 10th–90th percentile 5–11%; best variant (VIX ≥ 15
+  & bull, 20-session hold) median CAGR 9.1%, max DD 28%, Sharpe 0.70, vs SPY
+  buy-and-hold 11.0% / 52% / 0.61.
+- SPY 200-day trend filter, all three periods: max DD 47→29% (1993–2007),
+  52→21% (2008–2021), 25→21% (2022–2026); CAGR 10.3→6.7%, 11.0→9.7%,
+  12.3→8.6%. It is a drawdown tool, not a return booster — and it is why the
+  grade now halves size below the 200-day.
+
+### REMAINING WEAKNESSES
+- Survivorship: the universe is today's index members; names that were
+  delisted or dropped out are missing (this flatters every long rule equally).
+- Earnings dates/surprises come from Yahoo (≈2% missing surprise; timing
+  inferred from the report hour, ambiguous hours resolved by the larger gap).
+- Not tested for lack of data: analyst revisions, insider buying, short
+  interest, options flow, intraday entries. The FMP / Alpha Vantage keys of
+  this environment could not be used from plain HTTP scripts here.
+- Only daily bars; costs are slippage + $1 commission; no taxes, no borrow.
+- The chart read (EMAs, 4H 200 EMA, zones, wedges) and patterns remain
+  discretionary tools — they were never shown to add an edge.
+
+### HOW TO RUN
+    python scanner.py --dashboard dashboard.html            # LEADER DIP (N/H) + research card + info lists
+    python -m research.bigdata --members index_members.json --extra <tickers> --out big.pkl   # 966-stock dataset
+    python -m research.run_round4 --big big.pkl --out round4.pkl
+    python -m research.earnings_data big.pkl earnings.pkl && python -m research.earnings4 big.pkl earnings.pkl earn4.pkl
+    python -m research.rebase4 big.pkl round4.pkl earn4.pkl DEV,VAL-T,VAL-U,FINAL   # same-day baseline
+    python -m research.xsection4 big.pkl earnings.pkl xs4.pkl                        # which stock traits matter
+    python -m research.run_ml4 big.pkl cand4.pkl                                     # walk-forward ranking model
+    python -m research.port_regime4 big.pkl cand4.pkl DEV                            # one-account simulation
+
+## Optimization round 3 — "break your own scanner" (superseded by round 4 above)
+
+**Verdict: the original scanner had no edge on data it was not built on, and
+its entries were worse than random entry days in the same stocks. It was
+rebuilt around the one setup that survived every test: LEADER DIP.**
+
+### How it was tested (research/opt_*.py, research/drawing_board.py, research/leader_dip.py)
+- Research dataset: every candidate trade the scanner's strategies produce
+  (all gates off) with ~90 point-in-time features on the signal bar
+  (`research/opt_dataset.py`): EMA alignment/slopes, RSI and divergences,
+  MACD, ADX, RVOL, OBV/A-D, VWAP, ATR, Bollinger squeeze, relative strength,
+  composite momentum rank, efficiency, market structure, support/resistance
+  ZONES with rejections and failed breakouts, 52-week-high distance, candle
+  and run-up (late entry) measures, SPY/VIX context, sector, liquidity,
+  overextension, the 4H 200 EMA, chart-pattern confirmation.
+- Four cells never mixed: the 190-ticker DEVELOPMENT universe and 163 other
+  liquid US stocks never used for anything (OUT-OF-SAMPLE), each split into
+  2022-09 → 2025-09 and a HOLDOUT year 2025-10 → 2026-09 that no decision
+  was based on until the end.
+- Walk-forward (train on everything before T, test the next 3 months, move,
+  retrain), random-entry benchmark, cost stress, parameter grid, monthly block
+  bootstrap (Monte Carlo).
+
+### What broke
+| Candidates (engine rules) | dev universe, dev period | dev universe, holdout | OOS universe, dev period | OOS universe, holdout |
+|---|---|---|---|---|
+| all scanner setups | +0.046R | −0.014R | −0.011R* | −0.054R |
+| + momentum ≥80 & efficiency ≥0.25 (round-2 gates) | +0.139R | +0.075R | −0.002R* | −0.072R |
+| walk-forward rank model (top 40%) | +0.103R (in-sample) | +0.001R | +0.007R* | −0.044R |
+*OOS universe all periods.
+
+- **Feature importance** (#2): only volatility (ATR%, Bollinger width, spread — one
+  concept) and fewer "confluence" points were stable in BOTH universes. EMA
+  alignment, EMA slopes, RS, RVOL, MACD, patterns and structure breaks were
+  stable in the development universe only; EMA alignment even reversed out
+  of sample. They described the hindsight-picked 2023-26 growth leaders, not
+  a repeatable edge.
+- **Random-entry benchmark** (#27): the same stocks, random entry days within
+  ±60 sessions, same stop and exit — beat the scanner in every cell.
+  Breakout / trend-continuation / pullback entries were 0.2-0.6R per trade
+  WORSE than random: they buy short-term strength, and short-term moves
+  tend to reverse. Mean-reversion and support-bounce entries (buying
+  weakness) beat random.
+- **Resistance** (#16, your question): rejections at resistance and failed
+  breakouts in the last 5 days did NOT predict worse trades (same mean R).
+  Room to the next resistance zone helped somewhat in the dev universe but
+  not consistently out of sample, so it is not a hard rule.
+- **Losers** (#4): low-ATR stocks, "confluence" support bounces, and gap-
+  throughs (30% of the worst decile). **Winners** (#5, dev only): strong
+  trend slope and RS — which is exactly what did not hold out of sample.
+- **Exits** (#18/#19): longer holds beat 5 days in both universes (dev:
+  +0.08R at 5d → +0.25R at 20d; OOS +0.00 → +0.06R). Closing trades that
+  "do nothing" after 3-5 days did not help.
+- **Regime** (#6): quarterly results of both universes move together (the
+  market drives them); VIX / SPY-trend did not flag the bad quarters for
+  the old setups.
+- Setup-by-setup (#14): Support Bounce ≈ 0R in both universes (40% of all
+  trades), Breakout/Pullback/Trend-Continuation negative out of sample,
+  Mean Reversion positive in both.
+
+### What survived: LEADER DIP (analysis/leader_dip.py)
+Buy a **momentum leader** (composite momentum rank ≥ 80 in the universe) after
+a **dip** (5-day move ≤ −1 ATR); next open, stop 2.5 ATR, exit after 10 sessions.
+Pre-registered on the drawing board next to 5 other hypotheses (pullback in
+uptrend, RSI(2), 21-EMA touch, 20-day breakout = strength control): it was the
+only one above the unconditional baseline in all four cells.
+
+**Parameter robustness** (#10): 13 variants (momentum 70/80/90, dip
+0.5-2.0 ATR, lookback 3/5/10, stop 2-3 ATR, hold 5-15) — all 13 positive in all 4
+cells; worst cell +0.011R; stronger momentum and 10-15 day holds are better.
+
+**Confirmations** (each better in all four cells): deep dip ≥ 1 ATR below the
+daily 21 EMA; VIX > 20; SPY below its 50-day SMA; ATR% ≥ 3 — i.e. the more
+fear/dip around a leader, the better the reversal. Grade A = 3-4, B = 2, C = watch.
+
+| LEADER DIP | dev/dev | dev/holdout | OOS/dev | OOS/holdout |
+|---|---|---|---|---|
+| all | +0.124R (1824) | +0.118R (633) | +0.096R (1594) | +0.054R (542) |
+| grade A+B | +0.188R PF 1.66 | +0.130R PF 1.43 | +0.174R PF 1.65 | +0.073R PF 1.25 |
+| grade A | +0.257R PF 2.13 | +0.209R PF 1.77 | +0.348R PF 2.68 | +0.185R PF 1.76 |
+
+Grade A+B was positive in every calendar year 2022-2026 in both universes.
+Costs (#9/#21): +0.5% extra slippage per side still leaves A+B +0.064R and A
++0.177R. Monthly block bootstrap, 0.5% risk, taking every trade: grade A ≈ 2-3%
+chance of a losing year, p95 max drawdown 7-10%; A+B ≈ 10-12% and 15-22% (dips
+cluster in sell-offs — respect the 6% portfolio-heat cap).
+
+### Leader Dip grading by regime (update)
+Splitting the confirmations into MARKET (VIX > 20, SPY below its 50-day) and
+STOCK (deep dip under the 21 EMA, ATR% >= 3) showed the stock ones only sort
+the dips in a stressed market:
+
+| | dev/dev | dev/holdout | OOS/dev | OOS/holdout |
+|---|---|---|---|---|
+| stressed, both stock confirmations (A) | +0.216R | +0.335R | +0.407R | +0.256R |
+| stressed, one (B) | +0.282R | +0.070R | +0.144R | +0.098R |
+| stressed, none (C, watch) | −0.029R | −0.327R | +0.129R | +0.011R |
+| calm, every leader dip (R, half size) | +0.071R | +0.110R | +0.023R | +0.026R |
+| calm, both stock confirmations | +0.005R | +0.099R | −0.111R | +0.044R |
+
+So in a calm market (64% of weeks) the old A/B rule threw away every dip
+although calm-market dips were still positive in all four cells; they are
+now grade R, tradeable at half size (0.25% risk) because the edge is thin.
+
+### Changes
+- ADDED: `analysis/leader_dip.py` (primary, validated setup; top of the terminal
+  output and the dashboard; explicit NO TRADE when there is no A/B), the whole
+  `research/opt_*`, `drawing_board`, `leader_dip`, `opt_random_baseline` tool chain.
+- DEMOTED: the strategy-based setups (breakout, trend continuation, pullback,
+  support bounce, mean reversion) — still listed, labelled "not validated,
+  info only". Chart patterns ("Ready to boom") likewise: info/confirmation only.
+- REJECTED: the walk-forward rank model, the resistance-rejection rule, early
+  failure exits, the round-2 momentum/efficiency gates as an edge source for
+  the old setups (≈0 out of sample).
+
+### Remaining weaknesses
+- Survivorship: both universes are today's listed stocks; delisted names are
+  missing (dips in companies that later collapsed are not in the data).
+- The confirmation set was chosen while all four cells were visible (each was
+  also better in the development cell alone, and all come from one theory),
+  so grade A's numbers are somewhat optimistic; the ungraded rule is the clean test.
+- It is a fear/dip setup: in calm markets (VIX < 20, SPY above its 50-day)
+  grade A/B is rare — NO TRADE is the normal answer then.
+- 10-session hold, not 5: the 5-session variant is positive but weakest.
+- Daily bars only; earnings within the hold window are not excluded (flag them yourself).
+
+### How to run
+    python scanner.py --dashboard dashboard.html      # LEADER DIP first, then info-only lists
+    python -m research.leader_dip --oos-tickers <list> --out grid.pkl   # re-test the rule
+    python -m research.drawing_board --tickers default --out ev.pkl     # the hypotheses board
+
+## Optimization-phase audit (latest — supersedes the performance numbers further down)
+
+An adversarial "why would this scanner pick bad trades tomorrow?" audit. Every
+number below comes from full-universe backtests (134 tickers, 5 years), each
+assembled from four merged chunk runs, and every change was checked separately
+in both halves of the sample (split at the median entry date). Metrics are
+reported **risk-adjusted** (R = $ P&L / $ risked at entry) and profit factor is
+$-weighted — the older "% expectancy" ignores position sizing and flattered the
+system.
+
+### Bugs found in the validation pipeline (the old numbers were too optimistic)
+
+- **Stops filled at the stop price even when the market gapped through it.**
+  Now filled at the (worse) open. Alone this cut the reported profit factor from
+  1.21 to 1.07.
+- **15% of the score was fake in every backtest.** The backtester never passed
+  SPY/sector data to the context, so `relative_strength` (weight 10) and `sector`
+  (weight 5) were pinned at neutral for every trade. Fixed with walk-forward-safe,
+  per-date benchmark truncation and sector ranks. The score is now monotonic:
+  50-55 → -0.04%, 60-65 → +0.13%, 70-75 → +0.24%, 75+ → +0.41% per trade (this
+  resolves the old "score above ~65 doesn't predict quality" puzzle below).
+- **The EPS-growth gate is look-ahead-contaminated** (today's fundamentals filter
+  2021-era trades). Documented and warned at runtime; its old A/B is not clean.
+- `load_config(None)` falls back to `config/config.example.yaml`, so "default"
+  runs include that file's gates.
+
+### Changes that survived validation
+
+| Variant (full universe, 5y) | Trades | Win | PF | Mean R | Max losing streak |
+|---|---|---|---|---|---|
+| A. Original (5-day hold, tight structure stops) | 7460 | 45.4% | 1.06 | -0.016R | 15 |
+| B. + 7-day hold for Momentum/Trend Continuation | 7202 | 45.3% | 1.07 | -0.008R | 15 |
+| C. + stops never tighter than the 2-ATR stop | 6783 | 50.2% | 1.09 | +0.031R | 11 |
+| D. + no-chase entry (skip if it opens >0.5 ATR above the signal close) — **current default** | 6469 | **50.6%** | **1.11** | **+0.038R** | — |
+
+Each step improved in both halves (D: +0.034R early / +0.042R late, PF 1.10 / 1.12;
+net P&L $8,370 (A) → $11,166 (D) despite ~1,000 fewer trades).
+
+- **No-chase entry.** When the session after a signal opened >0.5 ATR above the
+  signal close, those trades lost money in both halves (worst for dip-buying
+  setups, where the gap erases the favorable entry). The entry is now a buy-limit
+  at close + 0.5 ATR (`gates.max_entry_gap_atr`); the scanner and dashboard show
+  that "max entry" price.
+
+- **Per-setup holding period.** 5-day vs 7-day caps: Momentum Continuation and
+  Trend Continuation improved with 7 days in both halves; Bullish Pullback got
+  worse; the rest were mixed. Only the consistent group was extended
+  (`risk.holding_days_by_strategy`).
+- **Minimum stop distance.** Structure stops sat a median 0.87 ATR from entry;
+  the tightest quintile (<0.71 ATR) was the only losing one (-0.22R). In every
+  one of the six strategies, stops <1.9 ATR had negative R and wider stops
+  positive R. Tight stops also got the largest positions and the highest R:R,
+  so the `risk_reward` score category was rewarding the worst trades. Support
+  Bounce (100% structure stops, median 0.74 ATR) went from 38.8% to 49.7% wins.
+- **Late-entry penalty for breakouts** (>2.5 ATR past the trigger). Only changes
+  the displayed confidence/score — nothing in the engine gates on it — so it
+  does not change backtest trade selection.
+
+### Tested and rejected (kept as-is on purpose)
+
+- **Cutting stale trades early** (exit on day 2-3 if still below entry): worse in
+  every variant and every strategy (+0.025R → +0.007..0.014R).
+- **Named indicator combos** (EMA+RS+RVOL, BB squeeze+ADX rising, RSI divergence
+  + liquidity sweep, ...): 4 of 5 did worse than trades without the combo.
+- **Holding through earnings:** higher mean R (+0.18 vs -0.02) but twice the
+  gap-through-stop rate (20% vs 10%) and a worst-1% of -23% vs -12%, and the
+  higher mean is plausibly survivorship-inflated. The live scanner keeps
+  avoiding earnings as tail-risk control.
+- **Tighter R:R gate:** raising `min_risk_reward` above ~1.5 made results worse
+  (2.0 → negative expectancy). 1.2 sits on a flat, robust plateau, as does the
+  RS-percentile gate (30-70).
+
+### Remaining weaknesses
+
+- The edge is thin: +0.031R per trade. Treat the scanner as a candidate filter
+  with explanations, not a signal to trade blindly.
+- Survivorship bias is structural: failed names (e.g. SIVB, FRC) have no
+  retrievable yfinance history, and some dead tickers (SBNY, SI) are now reused
+  by unrelated companies.
+- Support Bounce is still ~0R after the stop fix — the largest-volume setup with
+  no demonstrated edge; a candidate for removal that has not been A/B-tested yet.
+- Mean Reversion lost money in BULLISH regimes and Bullish Pullback in NEUTRAL
+  regimes (both halves, legacy stops) — regime-specific gating not yet tested.
+
+### Research tooling added (`research/`)
+
+`capture_trades` (per-trade feature snapshots, `--workers`, A/B overrides),
+`merge_captures`, `report_from_pickle` (R and $ metrics), `feature_importance`
+(importance, redundancy, interactions, per-regime), `exit_sweep`,
+`stop_comparison`, `walk_forward_screener`, `parameter_robustness`,
+`data_integrity`, `false_positive_log` (loser database with failure reasons).
+Run long captures in ~34-ticker chunks: this container kills long-lived
+background processes.
+
+## Chart patterns + "ready to boom" list
+
+`analysis/patterns.py` detects every bullish pattern the same way (trigger,
+invalidation, measured-move target, lines to draw): falling wedge,
+descending channel, descending triangle, ascending triangle, symmetric
+triangle, double bottom, inverse head & shoulders, cup & handle, bull flag,
+flat base, horizontal range, VCP, channel up (bounce and strong breakout).
+
+`research/pattern_backtest.py` backtests each one on its breakout day
+(5y, 190 tickers, entry next open, 2-4 ATR stop at the invalidation,
+2-4R target, 10-day time exit, gap-through fills): 9,419 breakouts.
+
+| pattern | n | win % | mean R | PF | H1 / H2 |
+|---|---|---|---|---|---|
+| descending triangle | 58 | 60.3 | +0.34 | 2.42 | +0.08 / +0.67 |
+| VCP | 220 | 55.0 | +0.15 | 1.44 | +0.09 / +0.23 |
+| channel up strong breakout | 422 | 54.5 | +0.15 | 1.54 | +0.14 / +0.16 |
+| descending channel | 446 | 58.7 | +0.12 | 1.49 | +0.13 / +0.12 |
+| bull flag | 1070 | 51.5 | +0.12 | 1.33 | +0.15 / +0.09 |
+| cup & handle | 645 | 56.1 | +0.11 | 1.35 | +0.09 / +0.13 |
+| ascending triangle | 646 | 55.4 | +0.10 | 1.40 | +0.15 / +0.05 |
+| double bottom | 869 | 54.3 | +0.10 | 1.39 | +0.14 / +0.05 |
+| falling wedge | 409 | 52.1 | +0.09 | 1.29 | +0.09 / +0.09 |
+| inverse head & shoulders | 291 | 51.5 | +0.07 | 1.21 | +0.12 / +0.01 |
+| flat base | 1306 | 54.5 | +0.07 | 1.26 | +0.08 / +0.05 |
+| horizontal range | 728 | 52.7 | +0.07 | 1.27 | +0.15 / −0.02 |
+| symmetric triangle | 872 | 48.1 | +0.06 | 1.15 | +0.10 / +0.02 |
+| channel up bounce | 1437 | 46.6 | −0.02 | 0.95 | −0.04 / −0.00 |
+
+Context that helps (all patterns pooled): above the daily 200 EMA +0.106R
+vs +0.054R below it; two or more patterns breaking out together +0.111R;
+EMA 21>50>200 stacked + ATR% >= 3 + breakout volume > 1.5x: +0.153R, PF 1.60,
+both halves.
+
+`python -m analysis.setup_finder --top 15 --html boom.html` scans the
+universe for patterns that broke out today / 1-3 days ago (still < 1.5 ATR
+above the trigger) or are READY (within min(3%, 1 ATR) under the trigger),
+scores them on the pattern's own edge plus that context (and momentum rank,
+efficiency, tight coil, room to the next resistance zone) and writes an
+annotated chart per setup with trigger (buy-stop), stop and target.
+Channel up bounce never makes the list.
+
+### Second round: out-of-sample, entries, exits, the 4H 200 EMA
+
+`research/pattern_research.py` re-ran every pattern walk-forward on the 190
+scanner tickers AND on 163 other liquid US stocks that were never used to
+build or tune anything (out-of-sample), 2021-2026:
+
+- **Most of the in-sample pattern edge did not survive.** Pooled breakouts:
+  +0.095R in-sample vs +0.026R out-of-sample (PF 1.09, second half
+  negative). The first round's numbers were flattered by a universe picked
+  with hindsight (2023-26 growth leaders).
+- **Held up in both samples and all four halves**: descending channel
+  (+0.124 / +0.117R), bull flag (+0.118 / +0.116R), channel up strong
+  breakout (+0.146 / +0.096R). Positive in both but weaker: inverse H&S,
+  double bottom, ascending triangle, falling wedge (+0.03..+0.07R out).
+- **Failed out-of-sample**: VCP (−0.04R), cup & handle (0.00), descending
+  triangle (−0.04), flat base (0.00), horizontal range (−0.04), symmetric
+  triangle (−0.02). They no longer appear in the ready-to-boom list.
+- **The first score did not rank**: higher score buckets were not better,
+  in or out of sample. Its above-200/stacked/coil/room/multi-pattern
+  points helped in-sample only (or not at all) and were dropped.
+- **4H 200 EMA** (in-sample, last 2y where 1h data exists): breakouts
+  above it +0.095R (n=4,204), below it −0.055R (n=648, PF 0.86). Now
+  +15 / −20 points.
+- **Held up in both samples**: breakout volume > 1.5x (+0.10/+0.06R vs
+  +0.09/+0.02R), ATR% >= 3 (+0.10/+0.06 vs +0.09/+0.01).
+- **Hold longer**: 20-day holds beat 10 and 5 in both samples (+0.145 vs
+  +0.095R in, +0.053 vs +0.026R out); target choice (2R/3R/measured) barely
+  matters.
+- **Entry**: buying on a close above the trigger (next open) was a bit
+  better than a buy-stop at the trigger in-sample (+0.095 vs +0.076R),
+  equal out-of-sample.
+
+The re-weighted score is built from these results and has not itself been
+tested on data it wasn't derived from yet -- forward-test it before
+sizing up.
+
+## Chart read: EMAs on two timeframes, zones, wedges, the plan
+
+Every setup the scanner lists now also gets a trader-style chart read
+(`analysis/chart_read.py`), shown in the terminal, the JSON and the
+dashboard with an annotated chart (`ui/chart_svg.py`):
+
+- daily EMA 9/21/50/200 and a fresh cross of the **DTF 200 EMA**
+- the **4H 200 EMA** (1h bars resampled to the 09:30/13:30 New York 4h
+  candles, as TradingView draws them)
+- **support/resistance zones** (price bands from clustered swing highs and
+  lows, not single lines) and a breakout out of one
+- **falling wedge / descending channel / descending triangle / bull flag**
+  since the last major peak, and a breakout above the upper line
+- the plan in chart language: `IF IT CAN HOLD <level> AND BREAK THROUGH
+  <4H 200 EMA / zone> @<price> -> NEXT RESISTANCE <zone>`, plus what
+  invalidates it
+
+For any ticker, with an HTML page of annotated charts:
+
+    python -m analysis.chart_read SYNA AMD --html charts.html
+
+It is a READ, not (yet) a filter or score input: whether wedge breakouts or
+4H-200-EMA reclaims add edge on top of the gates still needs a backtest.
+
+Daily history in the cache is now also refreshed when it is missing the
+last completed US session, not only after `cache_ttl_hours`: a scan on
+2026-09-26 had been served Thursday's closes from a Friday-evening cache.
+
+## Scanner comparison: uploaded "Explosive Breakout" scanner vs this one
+
+`alt_scanners/explosive_breakout_scanner.py` is an externally supplied scanner,
+kept verbatim (cross-sectional composite momentum 63/126/252d, top 10%,
+EMA9>EMA21 + EMA300 trend filter, 30-day efficiency ratio >= 0.35, VIX
+16–25, 1.5-ATR stop capped at 8%, 50% off at 1R + breakeven + 1.5-ATR
+trail, max 5 days). `research/compare_scanners.py` runs its own signal
+code on our price data and replays it under a ladder of rule sets, one
+assumption changed per step, then under **exactly our engine's rules**
+(next-open entry, gap-through fills, one position per ticker, same costs
+and sizing). Window 2023-01-04 → 2026-09-23 (their scanner needs 320 bars
+of history), 5y data, same window for both.
+
+**Their published numbers reproduce** on their own watchlist (99 of 102
+tickers still have data — ZI and CYBR are gone): 899 trades, +1.28%/trade,
+54.5% win vs. their stated +1.43%, 55.5%, 853 trades.
+
+| Universe | Scanner (engine rules) | trades | win % | mean R | PF (R) | H1 / H2 mean R | 1 account CAGR / max DD |
+|---|---|---|---|---|---|---|---|
+| ours (134) | theirs | 387 | 56.6 | **+0.167** | **1.42** | +0.175 / +0.163 | 8.6% / 13.3% |
+| ours (134) | ours | 5,874 | 51.4 | +0.052 | 1.15 | +0.065 / +0.036 | **14.9% / 20.1%** |
+| theirs (99) | theirs | 253 | 52.2 | **+0.176** | **1.37** | **+0.002** / +0.254 | 5.9% / 8.4% |
+| theirs (99) | ours | 4,070 | 49.2 | +0.060 | 1.17 | +0.077 / +0.040 | **17.7% / 21.9%** |
+
+"1 account" replays each trade list through one $10k account (0.5% risk,
+20% max position, 6% max heat, same-day candidates by our score / their
+momentum rank). Reading it:
+
+- **Per trade theirs is ~3× better** (+0.17R vs +0.05–0.06R), but it
+  fires ~70–100×/yr vs ~1,100–1,600×/yr, so in one account it leaves
+  capital idle and makes less money; risk-adjusted (CAGR/maxDD) the two are
+  close (theirs 0.64–0.70, ours 0.74–0.81).
+- **Theirs is less stable**: 2023 was −0.31R on their watchlist, the whole
+  first half ~0R; t-stat 2.7 vs 4.4 for ours; APP alone is 12 of its 65 R on
+  our universe. Their "walk-forward" fits nothing per window, and top-10%/
+  VIX 16–25 are the peak of a narrow ridge: top 5% +0.10R, top 15% +0.07R,
+  no VIX filter +0.09R, VIX 14–27 +0.11R (our universe, engine rules).
+- **Their robust ingredient is the efficiency ratio**: rises steadily with
+  the threshold (none +0.09R → 0.25 +0.13 → 0.35 +0.17 → 0.45 +0.22R) and
+  every threshold is positive in both halves. EMA300 and
+  the EMA9/21 trend filter add nothing (±0.01R).
+- Of their gap-through assumptions, "stop fills at the stop" hides 17–28%
+  of stop-outs that gapped through (worst trade −8.5% on paper, −47.8% real).
+
+Their exit (50% at 1R + breakeven + 1.5-ATR trail) replayed on our own
+entries is worse (+0.052R → −0.001R), so it was not taken over.
+
+### Adopted: their momentum rank + efficiency ratio as gates on our scanner
+
+`gates.min_momentum_percentile` (composite 63/126/252-day momentum,
+last 5 days skipped, percentile vs. the whole scanned universe) and
+`gates.min_efficiency_ratio` (30-day Kaufman ER) now run before scoring,
+for every strategy. Real gated backtests (not post-hoc filtering; each
+chunk ranked against the full universe via `capture_trades
+--rank-tickers`), same window and rules as above:
+
+| Universe | Variant | trades/wk | win % | mean R | PF (R) | H1 / H2 mean R | mean R 2023 / 24 / 25 / 26 | 1 account CAGR / max DD |
+|---|---|---|---|---|---|---|---|---|
+| ours | before (no gates) | 30.4 | 51.4 | +0.052 | 1.15 | +0.065 / +0.036 | +0.04 / +0.07 / +0.08 / +0.00 | 14.9% / 20.1% |
+| ours | momentum 90 only | 4.5 | 52.4 | +0.097 | 1.27 | +0.059 / +0.138 | −0.00 / +0.13 / +0.14 / +0.14 | 11.3% / 13.1% |
+| ours | **momentum 80 + ER 0.25 (default)** | 4.5 | 52.8 | **+0.122** | 1.35 | +0.139 / +0.105 | +0.09 / +0.18 / +0.09 / +0.12 | 14.8% / **9.7%** |
+| ours | momentum 90 + ER 0.25 | 2.5 | 55.1 | +0.185 | 1.51 | +0.208 / +0.159 | +0.13 / +0.31 / +0.11 / +0.19 | 12.3% / 5.6% |
+| ours | momentum 90 + ER 0.35 | 1.6 | 56.6 | +0.207 | 1.56 | +0.171 / +0.246 | +0.01 / +0.36 / +0.25 / +0.19 | 8.7% / 4.3% |
+| theirs | before (no gates) | 21.0 | 49.2 | +0.060 | 1.17 | +0.077 / +0.040 | +0.09 / +0.06 / +0.07 / −0.01 | 17.7% / 21.9% |
+| theirs | momentum 90 only | 3.3 | 50.7 | +0.147 | 1.43 | +0.081 / +0.221 | −0.00 / +0.21 / +0.30 / +0.03 | 12.8% / 14.3% |
+| theirs | **momentum 80 + ER 0.25 (default)** | 3.3 | 54.5 | **+0.189** | 1.52 | +0.214 / +0.163 | +0.28 / +0.21 / +0.12 / +0.13 | 16.9% / **7.1%** |
+| theirs | momentum 90 + ER 0.25 | 1.9 | 53.6 | +0.244 | 1.69 | +0.166 / +0.326 | +0.20 / +0.24 / +0.36 / +0.10 | 12.0% / 5.8% |
+| theirs | momentum 90 + ER 0.35 | 1.2 | 51.7 | +0.249 | 1.65 | +0.184 / +0.315 | +0.04 / +0.43 / +0.29 / +0.12 | 8.7% / 5.5% |
+| theirs | *their own scanner (engine rules)* | 1.3 | 52.2 | +0.176 | 1.37 | +0.002 / +0.254 | −0.31 / +0.27 / +0.23 / +0.35 | 5.9% / 8.4% |
+
+Every variant with the efficiency gate beats both "before" and their own
+scanner in both halves on both universes, and the neighbourhood is smooth
+(80/90, 0.25/0.35), so the gain isn't one lucky threshold. Momentum alone is
+weaker (flat 2023 on both universes). The default, 80 + 0.25, was picked
+from that neighbourhood for the ~3–4.5 setups/week a person can actually
+follow: about the same one-account return as before at half the drawdown.
+Caveats: the thresholds were compared on this same 2023–2026 window;
+Bullish Pullback and Support Bounce contribute little inside the gated set
+(Support Bounce almost never qualifies); the single worst trade is still a
+~−43% gap, so earnings avoidance and small sizing still matter. The live
+scan needs `data.period` >= 2y for the 252-day horizon (now the default)
+and, with the gate on, lists setups by momentum rank first.
+
+The backtest has no universe filter, the live scan does. Inside the gated
+set the `min_atr_pct: 3` part of it helps, checked point-in-time on ATR% at
+entry: our universe ATR% < 3 −0.005R (339 trades) vs >= 3 +0.202R (538);
+theirs +0.15R (64) vs +0.19R (584). The first live scan with the old
+134-ticker list (2026-09-26) had only 45/134 pass the universe filter and
+gave 1 setup, so on request:
+
+- `DEFAULT_UNIVERSE` now also holds their watchlist (minus ZI/CYBR): 190 tickers.
+- `universe.max_market_cap` ($200B) is off — it removed 8 of the 27
+  strongest-momentum names (AMD, MU, AMAT, LRCX, PANW, ARM, MRVL, INTC) and
+  can't be backtested (only today's market cap is known).
+
+Gated backtest on the 190-ticker list (ranked against all 190), same window:
+
+| | trades/wk | win % | mean R | PF (R) | H1 / H2 | mean R 2023 / 24 / 25 / 26 | 1 account CAGR / max DD |
+|---|---|---|---|---|---|---|---|
+| all gated trades | 6.2 | 51.4 | +0.109 | 1.29 | +0.096 / +0.122 | +0.10 / +0.10 / +0.13 / +0.10 | 16.8% / 13.7% |
+| ATR% >= 3 at entry (≈ live) | 4.5 | 53.3 | +0.143 | 1.39 | +0.142 / +0.144 | +0.17 / +0.15 / +0.13 / +0.12 | 16.6% / 11.0% |
+
+The live scan still applies `min_price` 10 and `min_market_cap` $2B, which
+drop some of the added small caps (OCGN, BBAI, ...) that the backtest kept.
+
+    # our scanner on their watchlist (gates off = the "before" rows), then the comparison
+    python -m research.capture_trades --period 5y --tickers <their watchlist> --min-momentum-pct -1 --min-efficiency -1 --out ours_on_theirs.pkl
+    python -m research.compare_scanners --universe theirs --ours-pickle ours_on_theirs.pkl
+    # a gated chunk, ranked against the full universe (repeat per chunk, then merge_captures)
+    python -m research.capture_trades --period 5y --tickers <chunk> --rank-tickers default --out chunk1.pkl
+
+## Overnight session summary (autonomous build) — earlier, superseded numbers
 
 This section is the executive summary requested at the end of an unattended,
-overnight build/test/validate session. Everything below is backed by an actual
-backtest run cited inline — nothing here is a plan or an intention.
+overnight build/test/validate session. Its performance numbers were produced by
+the pre-audit backtester (fills at the stop through gaps, RS/sector scored as
+neutral) and are superseded by the section above.
 
 ### WHAT I BUILT
 
@@ -239,6 +897,13 @@ Every trade plan is built for a **5-trading-day hold** by default
   letting winning trades run for months.
 - Change the horizon with `risk.max_holding_days` in `config.yaml`, or per-run with
   `python backtest.py --max-holding-days 10 ...`.
+- **Per-setup horizon** (`risk.holding_days_by_strategy`): Momentum Continuation
+  and Trend Continuation are held **7** days, everything else the default 5. A
+  full-universe 5-day vs 7-day A/B, split at the median entry date, showed those
+  two trend-following setups improving with the longer hold in *both* halves,
+  while Bullish Pullback got worse and the others were mixed — momentum persists,
+  pullback/mean-reversion moves are short-lived. The horizon drives both the
+  target cap and the forced time exit, in the live scanner and the backtester.
 
 ## Running the scanner
 

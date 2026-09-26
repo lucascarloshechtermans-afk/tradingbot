@@ -88,6 +88,68 @@ def test_stop_hit_exits_at_stop_price():
     assert result.trades[0].pnl < 0
 
 
+def test_stop_gapped_through_exits_at_worse_open_not_stop_price():
+    """A stop resting at 95 cannot fill at 95 when the market opens at 90 —
+    once triggered it's a market order, filled at the open it actually got."""
+    idx = pd.date_range("2024-01-01", periods=4, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [100, 100, 100, 90],  # bar 3 opens BELOW the stop (95)
+            "high": [101, 101, 101, 91],
+            "low": [99, 99, 99, 85],
+            "close": [100, 100, 100, 90],
+            "volume": [1_000_000] * 4,
+        },
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    def stop_fn(h, entry):
+        return entry - 5  # stop at 95 (entry ~100)
+
+    def target_fn(h, entry, stop):
+        return entry + 1000
+
+    result = run_backtest(df, signal_once, stop_fn, target_fn, slippage_pct=0.0, commission_per_trade=0.0)
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.exit_reason == "stop"
+    assert trade.exit_price == pytest.approx(90.0)  # the gapped-down open, not the untouched 95 stop
+
+
+def test_target_gapped_through_exits_at_better_open_not_target_price():
+    """Symmetric case: the market opens ABOVE the target -- a real exit order
+    fills at that better open, not capped at the target price."""
+    idx = pd.date_range("2024-01-01", periods=4, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [100, 100, 100, 120],  # bar 3 opens ABOVE the target (110)
+            "high": [101, 101, 101, 121],
+            "low": [99, 99, 99, 119],
+            "close": [100, 100, 100, 120],
+            "volume": [1_000_000] * 4,
+        },
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    def stop_fn(h, entry):
+        return entry - 50
+
+    def target_fn(h, entry, stop):
+        return entry + 10  # target at 110
+
+    result = run_backtest(df, signal_once, stop_fn, target_fn, slippage_pct=0.0, commission_per_trade=0.0)
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.exit_reason == "target"
+    assert trade.exit_price == pytest.approx(120.0)  # the gapped-up open, not the capped 110 target
+
+
 def test_target_hit_exits_at_target_price():
     idx = pd.date_range("2024-01-01", periods=5, freq="D")
     df = pd.DataFrame(
@@ -220,6 +282,76 @@ def test_max_holding_days_forces_exit_after_n_bars():
     trade = result.trades[0]
     assert trade.exit_reason == "time_exit"
     assert trade.holding_bars == 5
+
+
+def test_holding_days_fn_overrides_max_holding_days_per_trade():
+    idx = pd.date_range("2024-01-01", periods=12, freq="D")
+    df = pd.DataFrame(
+        {"open": [100] * 12, "high": [101] * 12, "low": [99] * 12, "close": [100] * 12, "volume": [1_000_000] * 12},
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    result = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, max_holding_days=5,
+        holding_days_fn=lambda h: 7,
+    )
+    trade = result.trades[0]
+    assert trade.exit_reason == "time_exit"
+    assert trade.holding_bars == 7
+
+
+def test_holding_days_fn_returning_none_falls_back_to_max_holding_days():
+    idx = pd.date_range("2024-01-01", periods=12, freq="D")
+    df = pd.DataFrame(
+        {"open": [100] * 12, "high": [101] * 12, "low": [99] * 12, "close": [100] * 12, "volume": [1_000_000] * 12},
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    result = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, max_holding_days=5,
+        holding_days_fn=lambda h: None,
+    )
+    assert result.trades[0].holding_bars == 5
+
+
+def test_entry_filter_fn_can_cancel_a_gapped_up_entry():
+    idx = pd.date_range("2024-01-01", periods=6, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [100, 110, 100, 100, 100, 100],  # bar 1 gaps up 10 above the signal close
+            "high": [101, 111, 101, 101, 101, 101],
+            "low": [99, 109, 99, 99, 99, 99],
+            "close": [100, 110, 100, 100, 100, 100],
+            "volume": [1_000_000] * 6,
+        },
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    def no_chase(history_before_entry, open_price):
+        return open_price <= float(history_before_entry["close"].iloc[-1]) + 2
+
+    result = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, entry_filter_fn=no_chase,
+    )
+    assert result.trades == []
+
+    allowed = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, entry_filter_fn=lambda h, o: True,
+    )
+    assert len(allowed.trades) == 1
 
 
 def test_max_holding_days_none_disables_time_exit():

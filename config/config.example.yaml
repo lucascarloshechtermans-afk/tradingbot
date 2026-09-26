@@ -9,10 +9,11 @@ universe:
   # max_price: 300.0        # min_atr_pct + max_market_cap doen het zware werk nu
   # min_avg_dollar_volume: 5000000
   # min_market_cap: 2000000000
-  max_market_cap: 200000000000  # geen mega-caps (>$200B) — sluit AAPL/MSFT/NVDA/
-                                   # GOOGL/AMZN/META-achtige namen uit, los van
-                                   # prijs/ATR (max_price/min_atr_pct zijn er proxies
-                                   # voor, dit is de directe marktkapitalisatie-grens)
+  # max_market_cap: 200000000000  # mega-cap-grens ($200B) UITGESCHAKELD op verzoek
+                                   # (2026-09-26): sloot 8 van de 27 sterkste momentum-
+                                   # namen uit (AMD, MU, AMAT, LRCX, PANW, ARM, MRVL, INTC).
+                                   # Niet te backtesten (alleen de marktkap van vandaag is
+                                   # bekend); min_atr_pct blijft wel -- die hielp aantoonbaar
   # exclude_penny_stocks: true
   # sectors: []          # leeg = alle sectoren
   # max_spread_pct_estimate: 1.5  # Corwin-Schultz spread-schatting; hoger =
@@ -26,7 +27,9 @@ universe:
                              # die inmiddels los is uitgeschakeld)
 
 data:
-  period: "1y"             # hoeveel historie opgehaald wordt per ticker
+  period: "2y"             # hoeveel historie opgehaald wordt per ticker -- minstens
+                           # 2y: de momentum-rank (gates.min_momentum_percentile)
+                           # heeft ~258 handelsdagen nodig, 1y is net te kort
   cache_dir: ".cache"
   cache_ttl_hours: 20
   max_retries: 3
@@ -44,6 +47,10 @@ risk:
   max_holding_days: 5       # scanner targets are capped to be realistic within this
                              # many trading days, and the backtester force-closes any
                              # trade still open after this many bars
+  holding_days_by_strategy:  # per-setup override of max_holding_days. Trend-following
+    Momentum Continuation: 7 # setups held 7 days beat 5 days in BOTH halves of a
+    Trend Continuation: 7    # 5y/134-ticker test (median-date split); pullback/mean-
+                             # reversion setups didn't, so they keep the default
 
 gates:                     # hard pass/fail pre-filters, applied BEFORE scoring —
                              # see "Hard entry gates" in README.md
@@ -56,14 +63,40 @@ gates:                     # hard pass/fail pre-filters, applied BEFORE scoring 
   min_distance_to_resistance_atr: 0.5  # reject when there's virtually no room before resistance
   block_bearish_higher_timeframe: true # reject a long setup when the WEEKLY trend is bearish
   block_extreme_overextension: true    # reject when ALL distance references agree price is stretched
+  max_entry_gap_atr: 0.5    # no-chase rule: buy-limit at signal close + 0.5 ATR; skip the
+                             # trade if the next session opens above it (null disables)
+  min_momentum_percentile: 80  # overgenomen uit de vergeleken "Explosive Breakout"-scanner
+                             # (alt_scanners/): alleen aandelen in de top 20% van het
+                             # universum op samengesteld momentum (gem. rendement 3/6/12
+                             # maanden, laatste week overgeslagen). Geldt voor ALLE setups.
+  min_efficiency_ratio: 0.25 # idem: koers moet over 30 dagen minstens 25% "rechtdoor"
+                             # bewegen (Kaufman efficiency ratio; 0 = pure chop, 1 = rechte
+                             # lijn). Samen, echte backtest 2023-2026: +0.122R/trade (onze
+                             # 134) en +0.189R (hun 99) vs +0.052/+0.060R zonder, elk jaar
+                             # positief, ~3-4.5 setups/week, max account-daling ~10% i.p.v.
+                             # ~20%. 90 i.p.v. 80: +0.185/+0.244R maar ~2 setups/week.
+                             # Zie README "Scanner comparison".
+                             # null schakelt elk van beide uit.
   min_earnings_growth: 0.15  # Minervini/CANSLIM-style quality gate, reject
                                # below 15% YoY quarterly EPS growth when known
-                               # (missing data does NOT reject). Validated: a 5y/
-                               # 134-ticker A/B (isolating this + 3 other new
-                               # options together) cut trades ~17% (8958->7491)
-                               # while profit factor rose 1.17->1.21 and
-                               # expectancy +0.28%->+0.33% -- see GatesConfig's
-                               # comment in config/schema.py
+                               # (missing data does NOT reject). CAVEAT (found
+                               # during the optimization-phase audit, not
+                               # present when this was first added): the
+                               # backtest applies each ticker's CURRENT EPS
+                               # growth statically across the whole window --
+                               # 2021-era trades get filtered by 2026
+                               # fundamentals. That's look-ahead, not just
+                               # staleness, and correlates with survivorship
+                               # (today's growers are disproportionately past
+                               # winners). The previously-reported "cut trades
+                               # ~17%, profit factor 1.17->1.21" backtest
+                               # improvement (see GatesConfig's comment in
+                               # config/schema.py) should be read as PARTLY
+                               # hindsight until this is rebuilt on point-in-
+                               # time EPS-growth-by-report-date data -- not
+                               # clean validated edge. Enabling this in
+                               # backtest_screener.py now logs a warning to
+                               # this effect.
 
 scoring:
   weights:                 # moet optellen tot ~100
@@ -83,6 +116,15 @@ scoring:
     strong: 80
     interesting: 70
     watchlist: 60
+
+portfolio:                   # README "Research round 6": three price-only systems in one account
+  momentum_pct: 40             # MOMENTUM TOP 20 -- month-end, top 20 by 12-1 month return, SPY > 200d
+  dip_pct: 40                  # LEADER DIP swings -- the daily scanner
+  index_rsi2_pct: 20           # INDEX RSI(2) -- SPY/QQQ/IWM/DIA, a quarter each when triggered
+  momentum_top_n: 20
+  dip_risk_pct_of_sleeve: 1.0  # 1% of the 40% sleeve = 0.4% of the account per dip trade (halved below SPY 200d)
+  dip_max_positions: 10
+  # presets: option 1 = 100/0/0, option 2 = 0/100/0, option 3 = 50/50/0, option 4 = 0/0/100, option 5 = 40/40/20
 
 earnings:
   avoid_earnings: true

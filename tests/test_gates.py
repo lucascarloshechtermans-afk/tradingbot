@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 import pandas as pd
 
 from config.schema import AppConfig, GatesConfig
@@ -313,3 +314,94 @@ def test_successful_plan_is_not_added_to_no_trade_log():
     plan = build_trade_plan("BRK", ctx, ctx, config, None, None, rs_rank=100.0, no_trade_log=log)
     assert plan is not None
     assert "BRK" not in log
+
+
+# --------------------------------------------------------------------------- #
+# Composite momentum rank + efficiency ratio (taken from the compared scanner)
+# --------------------------------------------------------------------------- #
+
+
+def test_momentum_and_efficiency_gates_default_off_and_parse():
+    gates = GatesConfig.from_dict({})
+    assert gates.min_momentum_percentile is None
+    assert gates.min_efficiency_ratio is None
+    gates = GatesConfig.from_dict({"min_momentum_percentile": 90, "min_efficiency_ratio": 0.25})
+    assert gates.min_momentum_percentile == 90.0
+    assert gates.min_efficiency_ratio == 0.25
+
+
+def test_composite_momentum_skips_last_week_and_needs_full_history():
+    from relative_strength.relative_strength import composite_momentum
+
+    close = _trend_df(300, 50, 0.3)["close"]
+    m = composite_momentum(close)
+    assert m.iloc[:257].isna().all()  # 252 + 5 skip + 1 bars needed
+    t = len(close) - 1
+    expected = np.mean([(close.iloc[t - 5] / close.iloc[t - 5 - h] - 1) * 100 for h in (63, 126, 252)])
+    assert m.iloc[-1] == pytest.approx(expected)
+
+
+def test_universe_momentum_rank_series_ranks_causally_and_needs_ten_tickers():
+    from relative_strength.relative_strength import universe_momentum_rank_series
+
+    closes = {f"T{i}": _trend_df(300, 50, 0.05 * i)["close"] for i in range(12)}
+    ranks = universe_momentum_rank_series(closes)
+    last = ranks.iloc[-1]
+    assert last["T11"] == pytest.approx(100.0)
+    assert last["T0"] < last["T5"] < last["T11"]
+    # appending future bars never changes an earlier row
+    longer = universe_momentum_rank_series({t: _trend_df(320, 50, 0.05 * int(t[1:]))["close"] for t in closes})
+    pd.testing.assert_series_equal(ranks.iloc[-1], longer.loc[ranks.index[-1]])
+    few = universe_momentum_rank_series({t: c for t, c in list(closes.items())[:5]})
+    assert few.isna().all().all()
+
+
+def test_efficiency_ratio_straight_line_vs_chop():
+    from relative_strength.relative_strength import efficiency_ratio
+
+    assert efficiency_ratio(_trend_df(40, 50, 1.0)["close"]) == pytest.approx(1.0)
+    zigzag = pd.Series([50 + (i % 2) for i in range(40)], index=_idx(40), dtype=float)
+    assert efficiency_ratio(zigzag) < 0.1
+    assert efficiency_ratio(zigzag.iloc[:20]) is None
+
+
+def test_build_trade_plan_momentum_gate_applies_to_counter_trend_setups_too():
+    ctx = context_from(mean_reversion_history())
+    config = AppConfig()
+    config.gates.min_momentum_percentile = 90.0
+    log: dict[str, str] = {}
+    assert build_trade_plan("MR", ctx, ctx, config, None, None, rs_rank=100.0, no_trade_log=log, momentum_rank=50.0) is None
+    assert log["MR"].startswith("weak_momentum_rank")
+    assert build_trade_plan("MR", ctx, ctx, config, None, None, rs_rank=100.0, no_trade_log=log, momentum_rank=None) is None
+    assert log["MR"].startswith("momentum_rank_unavailable")
+    plan = build_trade_plan("MR", ctx, ctx, config, None, None, rs_rank=100.0, momentum_rank=95.0)
+    assert plan is not None
+    assert plan.momentum_percentile == 95.0
+
+
+def test_build_trade_plan_efficiency_gate_threshold():
+    from relative_strength.relative_strength import efficiency_ratio
+
+    ctx = context_from(mean_reversion_history())
+    er = efficiency_ratio(ctx.close)
+    config = AppConfig()
+    config.gates.min_efficiency_ratio = er + 0.01
+    log: dict[str, str] = {}
+    assert build_trade_plan("MR", ctx, ctx, config, None, None, rs_rank=100.0, no_trade_log=log) is None
+    assert log["MR"].startswith("choppy_price_action")
+    config.gates.min_efficiency_ratio = er - 0.01
+    assert build_trade_plan("MR", ctx, ctx, config, None, None, rs_rank=100.0) is not None
+
+
+def test_backtest_signal_fn_momentum_gate_rejects_before_building_context():
+    from backtest_screener import make_screener_functions
+
+    history = _trend_df(260, 50, 0.3)
+    config = AppConfig()
+    config.gates.min_momentum_percentile = 90.0
+    low = pd.Series(50.0, index=history.index)
+    # cache=None: if the gate didn't short-circuit, building the context would raise
+    signal_fn, *_ = make_screener_functions(None, config, {}, {}, {}, {}, {}, momentum_rank_series=low)
+    assert signal_fn(history) is False
+    signal_fn, *_ = make_screener_functions(None, config, {}, {}, {}, {}, {}, momentum_rank_series=None)
+    assert signal_fn(history) is False

@@ -90,6 +90,43 @@ def rank_sectors(sector_histories: dict[str, pd.DataFrame], spy_history: pd.Data
     return results
 
 
+def sector_rank_series(
+    sector_histories: dict[str, pd.DataFrame], spy_history: pd.DataFrame, window: int = 20
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Walk-forward equivalent of `rank_sectors`: a per-DATE cross-sectional rank
+    (1 = strongest) and trend label for every sector ETF, computed once for the
+    whole history instead of re-running `rank_sectors` on a truncated slice for
+    every single backtest bar (which would be correct but O(bars x sectors)
+    slower for no benefit — every quantity used here, `roc()` and a fixed
+    5-bar-back shift, only ever looks at trailing data, so it's exactly as
+    walk-forward-safe as the per-bar version).
+
+    Backtest callers should look up `rank_df.loc[date, etf]`/`trend_df.loc[date,
+    etf]` for the bar's own date — never index by position — to inherit the
+    same no-look-ahead guarantee `regime_series`/`rs_rank_table` already give.
+    """
+    spy_close = spy_history["close"]
+    spy_perf = roc(spy_close, window)
+
+    rs_by_etf = {}
+    for etf, df in sector_histories.items():
+        perf = roc(df["close"], window)
+        rs_by_etf[etf] = (perf - spy_perf.reindex(perf.index)).reindex(spy_close.index)
+
+    rs_df = pd.DataFrame(rs_by_etf)
+    # rank 1 = highest relative strength that date; NaN rows (insufficient
+    # warmup) rank as NaN too, resolved by callers via a neutral fallback
+    rank_df = rs_df.rank(axis=1, ascending=False, method="min")
+
+    rs_5d_ago = rs_df.shift(5)
+    trend_df = pd.DataFrame("stable", index=rs_df.index, columns=rs_df.columns)
+    trend_df = trend_df.mask((rs_df > rs_5d_ago + 0.5), "improving")
+    trend_df = trend_df.mask((rs_df < rs_5d_ago - 0.5), "deteriorating")
+    trend_df = trend_df.mask(rs_df.isna() | rs_5d_ago.isna(), "stable")
+
+    return rank_df, trend_df
+
+
 def sector_strength_for(sector_name: str | None, ranked: list[SectorStrength]) -> SectorStrength | None:
     if sector_name is None:
         return None
