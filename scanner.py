@@ -163,6 +163,7 @@ def build_trade_plan(
     trade_levels = plan_trade_levels(
         entry, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0),
         target_volatility_multiplier=config.risk.target_volatility_multiplier,
+        allow_tight_structure_stop=config.risk.allow_tight_structure_stop,
     )
     if trade_levels is None:
         return _reject("insufficient_data: could not compute a valid stop/target")

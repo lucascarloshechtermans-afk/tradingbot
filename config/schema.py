@@ -134,6 +134,11 @@ class RiskConfig:
     holding_days_by_strategy: dict[str, int] = field(
         default_factory=lambda: {"Momentum Continuation": 7, "Trend Continuation": 7}
     )
+    # False (default): a structure stop is only used when it is at least as wide
+    # as the 2-ATR stop -- see risk/stops_targets.py's compute_stop docstring for
+    # the backtest evidence. True restores the legacy "tightest reasonable
+    # structure stop" behavior, kept only for A/B comparison.
+    allow_tight_structure_stop: bool = False
 
     def holding_days_for(self, strategy: str | None) -> int:
         if strategy is None:
@@ -150,6 +155,7 @@ class RiskConfig:
             max_position_pct=float(raw.get("max_position_pct", 20.0)),
             max_holding_days=int(raw.get("max_holding_days", 5)),
             target_volatility_multiplier=float(raw.get("target_volatility_multiplier", 1.5)),
+            allow_tight_structure_stop=bool(raw.get("allow_tight_structure_stop", False)),
         )
         if by_strategy_raw is not None:
             cfg.holding_days_by_strategy = {str(k): int(v) for k, v in by_strategy_raw.items()}

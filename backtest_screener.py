@@ -204,6 +204,7 @@ def make_screener_functions(
             ctx.last_close, atr, ctx.levels, config.risk.holding_days_for(best.strategy),
             direction="long", rr_multiples=(1.5, 3.0),
             target_volatility_multiplier=config.risk.target_volatility_multiplier,
+            allow_tight_structure_stop=config.risk.allow_tight_structure_stop,
         )
         if trade_levels is None or trade_levels.risk_reward < gates.min_risk_reward:
             return False
@@ -268,6 +269,7 @@ def make_screener_functions(
         trade_levels = plan_trade_levels(
             entry, atr, ctx.levels, holding_days, direction="long", rr_multiples=(1.5, 3.0),
             target_volatility_multiplier=config.risk.target_volatility_multiplier,
+            allow_tight_structure_stop=config.risk.allow_tight_structure_stop,
         )
         if trade_levels is None:
             return entry * 0.95
@@ -752,6 +754,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-rs-gate", action="store_true", help="Disable the RS-vs-universe hard gate (sets min_rs_percentile to 0), for A/B comparison")
     parser.add_argument("--min-rr", type=float, default=None, help="Override config.gates.min_risk_reward")
     parser.add_argument("--max-holding-days", type=int, default=None, help="Override config.risk.max_holding_days, for A/B comparison")
+    parser.add_argument("--legacy-stops", action="store_true", help="Allow structure stops tighter than the ATR stop (pre-audit behavior), for A/B comparison")
     parser.add_argument(
         "--workers", type=int, default=1,
         help="Parallelize the per-ticker walk-forward loop across this many processes (each ticker is independent "
@@ -773,6 +776,8 @@ def main(argv: list[str] | None = None) -> int:
         # an explicit override means a UNIFORM cap for every strategy
         config.risk.max_holding_days = args.max_holding_days
         config.risk.holding_days_by_strategy = {}
+    if args.legacy_stops:
+        config.risk.allow_tight_structure_stop = True
 
     if args.dry_run:
         from scanner import SyntheticDataProvider

@@ -239,6 +239,13 @@ Every trade plan is built for a **5-trading-day hold** by default
   letting winning trades run for months.
 - Change the horizon with `risk.max_holding_days` in `config.yaml`, or per-run with
   `python backtest.py --max-holding-days 10 ...`.
+- **Per-setup horizon** (`risk.holding_days_by_strategy`): Momentum Continuation
+  and Trend Continuation are held **7** days, everything else the default 5. A
+  full-universe 5-day vs 7-day A/B, split at the median entry date, showed those
+  two trend-following setups improving with the longer hold in *both* halves,
+  while Bullish Pullback got worse and the others were mixed — momentum persists,
+  pullback/mean-reversion moves are short-lived. The horizon drives both the
+  target cap and the forced time exit, in the live scanner and the backtester.
 
 ## Running the scanner
 

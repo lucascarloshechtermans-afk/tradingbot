@@ -56,14 +56,23 @@ def compute_stop(
     atr_multiplier: float = 2.0,
     buffer_pct: float = 0.3,
     max_structure_distance_multiple: float = 2.0,
+    allow_tight_structure_stop: bool = False,
 ) -> StopLevels:
     """Combine an ATR-based stop with a structure-based stop.
 
-    The structure stop is preferred (it's a real support/resistance level, more
-    meaningful than a generic multiple) UNLESS it is unreasonably far from entry —
-    more than `max_structure_distance_multiple` times the ATR-stop distance — in
-    which case the ATR stop is used instead, to avoid an oversized, undefendable
-    risk on the trade.
+    The structure stop is used when it is at least as wide as the ATR stop and
+    not unreasonably far (at most `max_structure_distance_multiple` times the
+    ATR-stop distance); otherwise the ATR stop is used. In other words the
+    stop is never TIGHTER than the ATR stop.
+
+    Why: on the full 134-ticker/5y backtest, the nearest support + 0.3% buffer
+    sat a median 0.87 ATR from entry. Those trades won 38% vs 50% for 2-ATR
+    stops, and the tightest stop-distance quintile (<0.71 ATR) was the only
+    losing one, -0.22R/trade -- normal daily noise stopped them out, and
+    risk-based sizing made those the LARGEST positions. The tight stops also
+    produced the highest R:R ratios, so the risk_reward score category was
+    rewarding the worst trades. `allow_tight_structure_stop=True` restores the
+    old "prefer structure whenever it's not too far" behavior for A/B runs.
     """
     atr_stop_price = compute_atr_stop(entry, atr, atr_multiplier, direction)
     structure_stop_price = compute_structure_stop(entry, levels, direction, buffer_pct)
@@ -71,7 +80,8 @@ def compute_stop(
     if structure_stop_price is not None:
         atr_distance = abs(entry - atr_stop_price)
         structure_distance = abs(entry - structure_stop_price)
-        if atr_distance > 0 and structure_distance <= atr_distance * max_structure_distance_multiple:
+        wide_enough = allow_tight_structure_stop or structure_distance >= atr_distance
+        if atr_distance > 0 and wide_enough and structure_distance <= atr_distance * max_structure_distance_multiple:
             return StopLevels(
                 atr_stop=atr_stop_price,
                 structure_stop=structure_stop_price,
@@ -158,13 +168,14 @@ def plan_trade_levels(
     direction: str = "long",
     rr_multiples: tuple[float, float] = (1.5, 3.0),
     target_volatility_multiplier: float = 1.5,
+    allow_tight_structure_stop: bool = False,
 ) -> TradeLevels | None:
     """The full stop/target/R:R pipeline shared by the live scanner and the
     backtest: ATR+structure stop, then the further of a fixed-R:R target or the
     nearest structure level, both capped to what's realistically reachable within
     `max_holding_days` (see `cap_target_to_horizon`). Returns None only when the
     resulting risk is zero/invalid (division-by-zero guard)."""
-    stop_levels = compute_stop(entry, atr, levels, direction=direction)
+    stop_levels = compute_stop(entry, atr, levels, direction=direction, allow_tight_structure_stop=allow_tight_structure_stop)
     structure_target = nearest_structure_target(entry, levels, direction=direction)
     rr_targets = compute_rr_targets(entry, stop_levels.final_stop, direction=direction, rr_multiples=rr_multiples)
     target1 = rr_targets[0].price
