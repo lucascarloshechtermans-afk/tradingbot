@@ -134,3 +134,46 @@ def find_leader_dips(histories: dict[str, pd.DataFrame], spy: pd.DataFrame | Non
             out.append(s)
     grade_order = {"A": 0, "B": 1, "C": 2}
     return sorted(out, key=lambda s: (grade_order[s.grade], s.dip_atr))
+
+
+@dataclass
+class DipAlert:
+    """A momentum leader that is NOT dipping yet, with the prices at which it
+    would qualify on the next session -- for setting alerts."""
+    ticker: str
+    close: float
+    momentum_rank: float
+    atr: float
+    alert_price: float       # next close <= this -> 5-day move <= -1 ATR (setup)
+    deep_dip_price: float    # close <= this -> >= 1 ATR under the 21 EMA (confirmation)
+    atr_pct: float
+    daily: pd.DataFrame | None = None
+
+    @property
+    def distance_pct(self) -> float:
+        return (self.close / self.alert_price - 1) * 100
+
+
+def dip_alerts(histories: dict[str, pd.DataFrame], min_price: float = 5.0, min_dollar_volume: float = 5e6,
+               top: int = 15) -> list[DipAlert]:
+    """Leaders (momentum >= 80) closest to their dip trigger. For the next
+    session's 5-day move the reference close is today's close[-4]: the setup
+    fires if the next close <= close[-4] - 1 ATR."""
+    ranks = compute_universe_momentum_ranks({t: d["close"] for t, d in histories.items() if len(d)})
+    out = []
+    for t, df in histories.items():
+        df = df.dropna(subset=["open", "high", "low", "close"])
+        mr = ranks.get(t)
+        if mr is None or mr < MOM_MIN or len(df) < 60 or df["close"].iloc[-1] < min_price:
+            continue
+        if (df["close"] * df["volume"]).iloc[-20:].mean() < min_dollar_volume:
+            continue
+        c = df["close"]
+        a = float(atr_fn(df["high"], df["low"], c, 14).iloc[-1])
+        close = float(c.iloc[-1])
+        if (close - float(c.iloc[-1 - DIP_LOOKBACK])) / a <= -DIP_ATR:
+            continue  # already a setup
+        alert = float(c.iloc[-DIP_LOOKBACK]) - DIP_ATR * a  # next session's 5-day reference close
+        out.append(DipAlert(ticker=t, close=close, momentum_rank=float(mr), atr=a, alert_price=alert,
+                            deep_dip_price=float(ema(c, 21).iloc[-1]) - a, atr_pct=a / close * 100, daily=df))
+    return sorted(out, key=lambda x: x.distance_pct)[:top]

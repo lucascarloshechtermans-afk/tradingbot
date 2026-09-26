@@ -430,26 +430,32 @@ def build_chart_read(provider: DataProvider, ticker: str, period: str) -> dict:
 
 
 def find_validated_leader_dips(provider: DataProvider, histories: dict[str, pd.DataFrame],
-                               benchmarks: dict[str, pd.DataFrame]) -> tuple[list, dict]:
-    """The validated primary setup (analysis/leader_dip.py), each with its
-    chart read. Momentum is ranked against every fetched candidate."""
+                               benchmarks: dict[str, pd.DataFrame]) -> tuple[list, dict, list]:
+    """The validated primary setup (analysis/leader_dip.py) and the leaders
+    closest to triggering it, each with its chart read. Momentum is ranked
+    against every fetched candidate."""
     from analysis.chart_read import read_chart
-    from analysis.leader_dip import find_leader_dips, market_state
+    from analysis.leader_dip import dip_alerts, find_leader_dips, market_state
 
     spy, vix = benchmarks.get("spy"), benchmarks.get("vix")
     try:
         dips = find_leader_dips(histories, spy, vix)
     except Exception as exc:  # noqa: BLE001 - must never break the scan
         logger.warning("leader-dip search failed: %s", exc)
-        return [], {}
-    out = []
-    for d in dips:
-        try:
-            hourly = provider.get_history(d.ticker, period="730d", interval="1h")
-        except DataUnavailable:
-            hourly = None
-        out.append((d, read_chart(d.ticker, d.daily, hourly)))
-    return out, market_state(spy, vix)
+        return [], {}, []
+
+    def with_read(items: list) -> list:
+        res = []
+        for d in items:
+            try:
+                hourly = provider.get_history(d.ticker, period="730d", interval="1h")
+            except DataUnavailable:
+                hourly = None
+            res.append((d, read_chart(d.ticker, d.daily, hourly)))
+        return res
+
+    alerts = dip_alerts(histories, top=10)
+    return with_read(dips), market_state(spy, vix), with_read(alerts)
 
 
 def find_pattern_setups(provider: DataProvider, histories: dict[str, pd.DataFrame], top: int = 15) -> list:
@@ -497,6 +503,8 @@ class ScanRun:
     # [(analysis.leader_dip.LeaderDip, ChartRead)] -- the validated primary setup
     leader_dips: list = field(default_factory=list)
     market_state: dict = field(default_factory=dict)
+    # [(analysis.leader_dip.DipAlert, ChartRead)] -- leaders closest to a dip trigger
+    dip_alerts: list = field(default_factory=list)
 
 
 def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | None = None, max_workers: int = 8) -> ScanRun:
@@ -617,11 +625,11 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     logger.info("scan complete: %d tickers scanned, %d setups found in %.1fs", len(filter_result.included), len(trade_plans), duration)
 
     pattern_setups = find_pattern_setups(provider, {t: c[1] for t, c in candidates.items()})
-    leader_dips, mstate = find_validated_leader_dips(provider, {t: c[1] for t, c in candidates.items()}, benchmarks)
+    leader_dips, mstate, alerts = find_validated_leader_dips(provider, {t: c[1] for t, c in candidates.items()}, benchmarks)
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
-        pattern_setups=pattern_setups, leader_dips=leader_dips, market_state=mstate,
+        pattern_setups=pattern_setups, leader_dips=leader_dips, market_state=mstate, dip_alerts=alerts,
     )
 
 
@@ -814,6 +822,12 @@ def main(argv: list[str] | None = None) -> int:
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
     print_leader_dips(scan_run.leader_dips, scan_run.market_state)
+    if scan_run.dip_alerts:
+        print("--- Next-session alerts: momentum leaders closest to a LEADER DIP trigger ---")
+        for a, _r in scan_run.dip_alerts:
+            print(f"  {a.ticker:<6} close {a.close:>9.2f}  dip trigger <= {a.alert_price:>9.2f} ({-a.distance_pct:+.1f}%)  "
+                  f"deep-dip (21 EMA - 1 ATR) <= {a.deep_dip_price:>9.2f}  momentum {a.momentum_rank:.0f}  ATR {a.atr_pct:.1f}%")
+        print()
     print("--- Other strategy setups (NOT validated: bought short-term strength and did worse than random")
     print("    entries in the same stocks out-of-sample -- see README 'Optimization round 3'; info only) ---")
     print_scan_results(scan_run.trade_plans, min_score=args.min_score)
@@ -848,6 +862,7 @@ def main(argv: list[str] | None = None) -> int:
         pattern_setups=scan_run.pattern_setups,
         leader_dips=scan_run.leader_dips,
         market_state=scan_run.market_state,
+        dip_alerts=scan_run.dip_alerts,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)
