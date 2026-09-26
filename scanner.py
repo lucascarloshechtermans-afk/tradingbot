@@ -429,6 +429,38 @@ def build_chart_read(provider: DataProvider, ticker: str, period: str) -> dict:
             "bias": read.bias, "ema200_4h": read.ema200_4h, "svg": svg}
 
 
+def find_pattern_setups(provider: DataProvider, histories: dict[str, pd.DataFrame], top: int = 15) -> list:
+    """'Ready to boom' chart-pattern setups over every fetched candidate (see
+    analysis/setup_finder.py), each with its chart read for the dashboard."""
+    from analysis.chart_read import read_chart, resample_to_4h
+    from analysis.setup_finder import find_setups
+    from indicators.trend import ema as ema_fn
+
+    hourly_cache: dict[str, pd.DataFrame | None] = {}
+
+    def hourly(ticker: str) -> pd.DataFrame | None:
+        if ticker not in hourly_cache:
+            try:
+                hourly_cache[ticker] = provider.get_history(ticker, period="730d", interval="1h")
+            except DataUnavailable:
+                hourly_cache[ticker] = None
+        return hourly_cache[ticker]
+
+    def ema200_4h(ticker: str) -> float | None:
+        h = hourly(ticker)
+        if h is None:
+            return None
+        h4 = resample_to_4h(h)
+        return float(ema_fn(h4["close"], 200).iloc[-1]) if len(h4) >= 200 else None
+
+    try:
+        setups = find_setups(histories, ema200_4h_fn=ema200_4h)[:top]
+        return [(s, read_chart(s.ticker, s.daily, hourly(s.ticker))) for s in setups]
+    except Exception as exc:  # noqa: BLE001 - the pattern list must never break the scan
+        logger.warning("pattern setup search failed: %s", exc)
+        return []
+
+
 @dataclass
 class ScanRun:
     trade_plans: list[TradePlan]
@@ -437,6 +469,8 @@ class ScanRun:
     universe_size: int
     scan_duration_s: float
     no_trade: dict[str, str] = field(default_factory=dict)
+    # [(analysis.setup_finder.Setup, ChartRead)] -- the 'ready to boom' list
+    pattern_setups: list = field(default_factory=list)
 
 
 def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | None = None, max_workers: int = 8) -> ScanRun:
@@ -556,9 +590,11 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     duration = time.time() - started
     logger.info("scan complete: %d tickers scanned, %d setups found in %.1fs", len(filter_result.included), len(trade_plans), duration)
 
+    pattern_setups = find_pattern_setups(provider, {t: c[1] for t, c in candidates.items()})
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
+        pattern_setups=pattern_setups,
     )
 
 
@@ -732,6 +768,11 @@ def main(argv: list[str] | None = None) -> int:
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
     print_scan_results(scan_run.trade_plans, min_score=args.min_score)
+    if scan_run.pattern_setups:
+        print(f"--- Ready to boom: {len(scan_run.pattern_setups)} chart-pattern setups (hold up to 20 days) ---")
+        for i, (s, _read) in enumerate(scan_run.pattern_setups, 1):
+            print(f"  {i:<3}{s.ticker:<7}{s.score:>4.0f}  {s.status:<17}{s.names[:40]:<41}trigger {s.trigger:.2f}  stop {s.stop:.2f}  target {s.target:.2f}")
+        print()
     print_no_trade_summary(scan_run.no_trade)
 
     from ui.dashboard import build_dashboard_html, trade_plan_to_row
@@ -755,6 +796,7 @@ def main(argv: list[str] | None = None) -> int:
         watchlist_entries=watchlist_entries,
         universe_size=scan_run.universe_size,
         scan_duration_s=scan_run.scan_duration_s,
+        pattern_setups=scan_run.pattern_setups,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

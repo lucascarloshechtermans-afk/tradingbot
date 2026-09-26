@@ -157,9 +157,21 @@ def render_chart_page(items: list[tuple[pd.DataFrame, ChartRead]]) -> str:
             "</style></head><body>" + "".join(cards) + "</body></html>")
 
 
-def render_setup_page(items: list) -> str:
-    """'Ready to boom' page: per setup (analysis.setup_finder.Setup, ChartRead)
-    the status, patterns, trigger/stop/target, reasons and the annotated chart."""
+SETUP_CSS = (
+    ".bm section{background:#fff;color:#212529;border-radius:10px;padding:14px;margin:0 0 18px;box-shadow:0 1px 3px #0001}"
+    ".bm h2{margin:0 0 4px;font-size:19px;color:#212529}"
+    ".bm .st{font-size:12px;padding:2px 8px;border-radius:10px;background:#fff4e6;color:#d9480f;vertical-align:middle}"
+    ".bm .sc{font-size:12px;padding:2px 8px;border-radius:10px;background:#d3f9d8;color:#2b8a3e;vertical-align:middle}"
+    ".bm .pat{margin:2px 0;color:#e8590c;font-weight:700;text-transform:uppercase;font-size:13px}.bm .lv{margin:2px 0 6px;font-size:14px}"
+    ".bm .cols{display:flex;gap:18px;flex-wrap:wrap}.bm .cols ul{margin:0 0 6px;padding-left:18px;font-size:12.5px;flex:1 1 300px}"
+    ".bm .heads{color:#364fc7;font-weight:600;text-transform:uppercase}"
+    ".bm .plan{margin:4px 0 10px;padding:8px 10px;background:#edf2ff;border-left:3px solid #364fc7;color:#364fc7;font-weight:700;font-size:13px}"
+)
+
+
+def render_setup_cards(items: list) -> str:
+    """One card per (analysis.setup_finder.Setup, ChartRead): status, patterns,
+    trigger/stop/target, reasons, chart read and the annotated chart."""
     cards = []
     for rank, (setup, read) in enumerate(items, 1):
         levels = {"TRIGGER (buy-stop)": setup.trigger, "STOP": setup.stop, "TARGET": setup.target}
@@ -167,22 +179,21 @@ def render_setup_page(items: list) -> str:
         heads = "".join(f"<li>{escape(h)}</li>" for h in read.headlines)
         plan = f"<p class='plan'>{escape(read.plan)}</p>" if read.plan else ""
         cards.append(
-            f"<section><h2>#{rank} {escape(setup.ticker)} <span class='st'>{escape(setup.status)}</span> "
+            f"<section id='setup-{escape(setup.ticker)}'><h2>#{rank} {escape(setup.ticker)} <span class='st'>{escape(setup.status)}</span> "
             f"<span class='sc'>score {setup.score:.0f}</span></h2>"
             f"<p class='pat'>{escape(setup.names)}</p>"
             f"<p class='lv'>close {setup.close:.2f} · <b>trigger {setup.trigger:.2f}</b> · stop {setup.stop:.2f} · "
             f"target {setup.target:.2f} · R:R {setup.rr:.1f}</p>"
             f"<div class='cols'><ul class='rs'>{reasons}</ul><ul class='heads'>{heads}</ul></div>{plan}"
             f"{render_chart_svg(setup.daily, read, patterns=setup.patterns, levels=levels)}</section>")
+    return "<div class='bm'>" + "".join(cards) + "</div>"
+
+
+def render_setup_page(items: list) -> str:
+    """Standalone 'ready to boom' page (see render_setup_cards)."""
     return ("<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>Ready to boom</title><style>"
             ":root{--chart-bg:#fff}body{margin:0;padding:16px;background:#f1f3f5;color:#212529;font-family:system-ui,sans-serif}"
-            "section{background:#fff;border-radius:10px;padding:14px;margin:0 auto 18px;max-width:1000px;box-shadow:0 1px 3px #0001}"
-            "h2{margin:0 0 4px;font-size:19px}.st{font-size:12px;padding:2px 8px;border-radius:10px;background:#fff4e6;color:#d9480f;vertical-align:middle}"
-            ".sc{font-size:12px;padding:2px 8px;border-radius:10px;background:#d3f9d8;color:#2b8a3e;vertical-align:middle}"
-            ".pat{margin:2px 0;color:#e8590c;font-weight:700;text-transform:uppercase;font-size:13px}.lv{margin:2px 0 6px;font-size:14px}"
-            ".cols{display:flex;gap:18px;flex-wrap:wrap}.cols ul{margin:0 0 6px;padding-left:18px;font-size:12.5px;flex:1 1 300px}"
-            ".heads{color:#364fc7;font-weight:600;text-transform:uppercase}"
-            ".plan{margin:4px 0 10px;padding:8px 10px;background:#edf2ff;border-left:3px solid #364fc7;color:#364fc7;font-weight:700;font-size:13px}"
+            ".bm{max-width:1000px;margin:0 auto}" + SETUP_CSS +
             "</style></head><body><h1 style='max-width:1000px;margin:0 auto 12px;font-size:22px'>Ready to boom</h1>"
-            + "".join(cards) + "</body></html>")
+            + render_setup_cards(items) + "</body></html>")

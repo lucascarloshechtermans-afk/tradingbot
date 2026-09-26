@@ -25,6 +25,7 @@ PAGE_TEMPLATE = """<!doctype html>
   .badge.bearish {{ background: rgba(248,81,73,.15); color: var(--red); }}
   .badge.neutral {{ background: rgba(210,153,34,.15); color: var(--amber); }}
   .badge.high_volatility {{ background: rgba(248,81,73,.25); color: var(--red); }}
+  {setup_css}
   .tabs {{ display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }}
   .tab {{ padding: 8px 16px; cursor: pointer; color: var(--ink-soft); border-bottom: 2px solid transparent; font-size: 14px; }}
   .tab.active {{ color: var(--ink); border-bottom-color: var(--blue); }}
@@ -71,6 +72,7 @@ PAGE_TEMPLATE = """<!doctype html>
   <div class="tabs">
     <div class="tab active" data-tab="dashboard">Dashboard</div>
     <div class="tab" data-tab="scanner">Scanner</div>
+    <div class="tab" data-tab="boom">Ready to boom</div>
     <div class="tab" data-tab="watchlist">Watchlist</div>
   </div>
 
@@ -97,6 +99,17 @@ PAGE_TEMPLATE = """<!doctype html>
       <table><thead><tr><th>Rank</th><th>Ticker</th><th>Score</th><th>Setup</th></tr></thead>
       <tbody>{top_setups_html}</tbody></table>
     </div>
+    <div class="card">
+      <h3 style="margin-top:0">Ready to boom (chart patterns)</h3>
+      <table><thead><tr><th>#</th><th>Ticker</th><th>Score</th><th>Status</th><th>Pattern</th><th>Trigger</th><th>Stop</th><th>Target</th><th>R:R</th></tr></thead>
+      <tbody>{boom_rows_html}</tbody></table>
+    </div>
+  </div>
+
+  <div id="boom" class="panel">
+    <div class="card"><p style="margin:0;color:var(--ink-soft)">Bullish chart patterns that broke out today / 1-3 days ago or sit just under their trigger,
+    scored on what held up out-of-sample (pattern edge, 4H 200 EMA, breakout volume, ATR%). Plan to hold up to 20 trading days.</p></div>
+    {boom_cards_html}
   </div>
 
   <div id="scanner" class="panel">
@@ -264,7 +277,13 @@ def build_dashboard_html(
     universe_size: int,
     scan_duration_s: float,
     generated_at: datetime | None = None,
+    pattern_setups: list | None = None,
 ) -> str:
+    """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
+    'Ready to boom' tab."""
+    from html import escape
+
+    from ui.chart_svg import SETUP_CSS, render_setup_cards
     generated_at = generated_at or datetime.now()
     setup_count = len(scan_rows)
 
@@ -280,7 +299,14 @@ def build_dashboard_html(
     )
     top_setups_html = "".join(
         f"<tr><td>{i+1}</td><td><strong>{r['ticker']}</strong></td><td>{r['score']:.1f}</td><td>{r['setup']}</td></tr>"
-        for i, r in enumerate(scan_rows[:10])
+        for i, r in enumerate([r for r in scan_rows if r["setup"] != "No confirmed setup"][:10])
+    )
+    pattern_setups = pattern_setups or []
+    boom_rows_html = "".join(
+        f"<tr><td>{i}</td><td><a style='color:#74c0fc' href='#setup-{escape(s.ticker)}' onclick=\"document.querySelector('[data-tab=boom]').click()\">"
+        f"<strong>{escape(s.ticker)}</strong></a></td><td>{s.score:.0f}</td><td>{escape(s.status)}</td><td>{escape(s.names)}</td>"
+        f"<td>{s.trigger:.2f}</td><td>{s.stop:.2f}</td><td>{s.target:.2f}</td><td>{s.rr:.1f}</td></tr>"
+        for i, (s, _read) in enumerate(pattern_setups, 1)
     )
 
     return PAGE_TEMPLATE.format(
@@ -294,6 +320,9 @@ def build_dashboard_html(
         regime_factors_html=regime_factors_html or "<li>No regime data</li>",
         sector_rows_html=sector_rows_html or "<tr><td colspan=8>No sector data</td></tr>",
         top_setups_html=top_setups_html or "<tr><td colspan=4>No setups found</td></tr>",
+        boom_rows_html=boom_rows_html or "<tr><td colspan=9>No pattern setups</td></tr>",
+        boom_cards_html=render_setup_cards(pattern_setups) if pattern_setups else "",
+        setup_css=SETUP_CSS,
         scan_data_json=json.dumps(scan_rows),
         watchlist_data_json=json.dumps(watchlist_entries),
     )
