@@ -100,9 +100,15 @@ def _dip_why(d) -> tuple[list[str], list[str]]:
     why = [f"<b>Momentum-leider</b>: rank {d.momentum_rank:.0f}/100 -- bij de sterkste 20% van het universum over 3, 6 en 12 maanden.",
            f"<b>Dip</b>: {d.dip_atr:+.1f} ATR in 5 dagen -- een terugval in een sterk aandeel. Korte bewegingen keren vaak terug; "
            f"bij een leider is dat het kantelmoment (de enige setup die al onze out-of-sample tests doorstond)."]
+    nl = {"moves enough": "beweegt genoeg", "deep dip": "diepe dip", "fear": "angst in de markt", "weak tape": "zwakke markt"}
     for r in d.reasons[2:]:
+        if r.startswith("rustige markt"):
+            why.append("<b>Regime</b>: " + escape(r))
+            continue
+        for en, du in nl.items():
+            r = r.replace(en, du)
         why.append("<b>Bevestiging</b>: " + escape(r))
-    missing = ["Ontbreekt: " + escape(m) for m in d.missing]
+    missing = [("Let op: " if m.startswith("rustige markt") else "Ontbreekt: ") + escape(m) for m in d.missing]
     return why, missing
 
 
