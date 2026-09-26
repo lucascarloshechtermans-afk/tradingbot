@@ -36,9 +36,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--out", type=str, required=True)
     parser.add_argument("--workers", type=int, default=1, help="Parallelize the per-ticker loop across this many processes")
+    parser.add_argument("--max-holding-days", type=int, default=None, help="Override config.risk.max_holding_days, for A/B comparison")
+    parser.add_argument("--min-rr", type=float, default=None, help="Override config.gates.min_risk_reward")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
+    if args.max_holding_days is not None:
+        config.risk.max_holding_days = args.max_holding_days
+    if args.min_rr is not None:
+        config.gates.min_risk_reward = args.min_rr
     cache = DiskCache(cache_dir=config.data.cache_dir, ttl_hours=config.data.cache_ttl_hours)
     provider: DataProvider = YFinanceProvider(cache=cache, max_retries=config.data.max_retries, retry_backoff_seconds=config.data.retry_backoff_seconds)
     tickers = args.tickers.split(",") if args.tickers else DEFAULT_UNIVERSE
