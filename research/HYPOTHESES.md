@@ -105,3 +105,33 @@ SPY close < SPY close 5 sessions earlier.
 Prediction: SPY forward 10- and 20-session returns (entry next open) are higher in GO than in
 all other days, in each of: 1993–2007 (never looked at), 2022–2026 (VAL-T time span), and for
 the random-stock basket in VAL-T, VAL-U and FINAL. Neighbourhood check: VIX 13–20, lookback 3–10.
+
+---
+
+# Round 5 — technicals only, three new angles (written 2026-09-26, before any round-5 data was looked at)
+
+Metric for everything below: excess R vs the SAME-DAY, SAME-HALF random eligible stock
+(`engine2.day_baseline` logic); pass = excess > 0, t ≥ 3, ≥ 70% of DEV years positive, then
+the same sign in VAL-T, VAL-U and finally FINAL. Entry next open, 2.5 ATR stop, time exits.
+
+## A. Small caps (S&P SmallCap 600, new dataset `small.pkl`, own seeded research/holdout split)
+Less-followed stocks may keep technical inefficiencies. Run H01–H19 unchanged, holds 5/10/20/40.
+
+## B. Longer horizons (both universes), holds 20/40/60
+- H07 HIGH_52W, H09 MOMENTUM_TOP_DECILE, H13 RS_LEADS_PRICE re-run at 40/60 bars
+- L01 TREND_TEMPLATE (weekly sample): close > SMA50 > SMA150 > SMA200, SMA200 higher than 21
+  sessions ago, close ≥ 1.25 × 52w low and ≥ 0.75 × 52w high, momentum rank ≥ 70
+- L02 GOLDEN_CROSS: SMA50 crosses above SMA200
+- L03 EMA200_RECLAIM: close crosses above EMA200 after ≥ 20 sessions below it
+- L04 WEEKLY_26W_BREAKOUT: last session of the week, close ≥ highest close of the prior 126 sessions
+- L05 EMA_STACK_PULLBACK: EMA9 > EMA21 > EMA50 > EMA200 and low ≤ EMA21 ≤ close
+- L06 TIGHT_NEAR_HIGH: close ≥ 0.95 × 52w high and Bollinger-width percentile (120d) ≤ 0.20
+
+## C. The user's own multi-timeframe style (1h bars → 4H bars 09:30/13:30 NY; ~2 years only)
+Daily signal on day t (entry next open):
+- M01 D200_HOLD_4H200_BREAK: daily close > daily EMA200 AND a 4H bar on day t closes above the
+  4H EMA200 after ≥ 6 consecutive 4H closes below it
+- M02 same 4H break while the daily close < daily EMA200 (control: "not holding the DTF 200")
+- M03 D200_RETEST: daily close within 1 ATR above the daily EMA200 AND last 4H close > 4H EMA200
+Only ~2 years exist, so cells are the ticker halves only (research = dev, holdout = validation);
+low power is accepted and reported.
