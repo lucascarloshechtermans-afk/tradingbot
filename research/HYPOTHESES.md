@@ -135,3 +135,26 @@ Daily signal on day t (entry next open):
 - M03 D200_RETEST: daily close within 1 ATR above the daily EMA200 AND last 4H close > 4H EMA200
 Only ~2 years exist, so cells are the ticker halves only (research = dev, holdout = validation);
 low power is accepted and reported.
+
+---
+
+# Round 6 — complete trading systems (written 2026-09-26, parameters fixed from the literature before running)
+
+Goal: compare whole systems the user could run, not single signals. All execute at the next
+open, 10 bp cost per side, uninvested cash earns the 13-week T-bill (^IRX). Reported for
+1999–2007 (ETF systems only), 2008–2021 and 2022–2026; stock systems also per ticker half.
+Benchmarks: SPY buy-and-hold and SPY with the 200-day filter. No parameter is tuned; the
+listed neighbours are only reported as robustness.
+
+- S1 CURRENT SCANNER: LEADER DIP, 10-session hold, 0.5% risk (0.25% below SPY 200d), max 10.
+- S2 DIP + TREND: LEADER DIP only while SPY > 200d, 20-session hold.
+- S3 MOMENTUM PORTFOLIO: month-end, top 20 of the eligible universe by 12-1 month return,
+  equal weight, invested only if SPY > 200d SMA (else cash). Neighbours: top 10/50, 6-1 month.
+- S4 SECTOR ROTATION: month-end, the 3 of the 9 original sector SPDRs with the best average
+  of 3/6/12-month return, each held only if above its own 200d SMA (else that third in cash).
+  Neighbours: top 2/4.
+- S5 TREND BREAKOUT: close at a 50-day closing high while SPY > 200d; initial stop 2.5 ATR;
+  exit when the close falls below the 20-day lowest close; 0.5% risk per trade, max 20
+  positions, heat ≤ 10%. Control: the same exits on random entries.
+- S6 INDEX RSI(2): SPY (and QQQ) close > SMA200 and RSI(2) < 10 → buy next open; sell next
+  open after a close > SMA5.
