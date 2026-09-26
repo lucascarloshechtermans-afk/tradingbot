@@ -26,6 +26,10 @@ def regime_mult(df: pd.DataFrame, scheme: str) -> np.ndarray:
         return np.where(vix >= 15, 1.0, 0.0)
     if scheme == "vix>=15 & spyDown5":
         return np.where((vix >= 15) & down5, 1.0, 0.0)
+    if scheme == "vix>=15 & bull":
+        return np.where((vix >= 15) & bull, 1.0, 0.0)
+    if scheme == "vix>=15 & bull, 1.5x down5":
+        return np.select([(vix < 15) | ~bull, down5], [0.0, 1.5], 1.0)
     if scheme == "scaled":  # 0 calm, 1 normal, 1.5 fear-in-bull pullback
         return np.select([vix < 15, bull & down5], [0.0, 1.5], 1.0)
     if scheme == "scaled2":
@@ -33,7 +37,8 @@ def regime_mult(df: pd.DataFrame, scheme: str) -> np.ndarray:
     raise ValueError(scheme)
 
 
-def main(big_path: str, cand_path: str, cell: str = "DEV") -> int:
+def main(big_path: str, cand_path: str, cell: str = "DEV", schemes: str = "", prios: str = "mom_rank,deep,lowvol",
+         risks: str = "1.0", maxpos: str = "10") -> int:
     p = build_panel(pd.read_pickle(big_path))
     c = pd.read_pickle(cand_path)
     c = c[(c.cell == cell) & (c[PASSED].sum(axis=1) > 0)].copy()
@@ -44,12 +49,12 @@ def main(big_path: str, cand_path: str, cell: str = "DEV") -> int:
     for H in (10, 20):
         tr = c.rename(columns={f"r{H}": "r", f"exit{H}": "exit_t"}).dropna(subset=["r"]).copy()
         tr["exit_t"] = tr["exit_t"].astype(int)
-        for scheme in ("none", "vix>=15", "vix>=15 & spyDown5", "scaled", "scaled2"):
+        for scheme in (schemes.split(";") if schemes else ("none", "vix>=15", "vix>=15 & spyDown5", "scaled", "scaled2")):
             tr["risk_mult"] = regime_mult(tr, scheme)
-            for prio in ("mom_rank", "deep", "lowvol"):
-                for risk in (1.0,):
-                    res = run_portfolio(p, tr, stop_atr=2.5, risk_pct=risk, max_positions=10, priority=prio)
-                    print(f"{H:<6}{scheme:<20}{prio:<9}{risk:>5.1f}{res['trades']:>7}{res['CAGR'] * 100:>6.1f}%{res['maxDD'] * 100:>6.1f}%"
+            for prio in prios.split(","):
+                for risk, mp in ((float(r), int(m)) for r in risks.split(",") for m in maxpos.split(",")):
+                    res = run_portfolio(p, tr, stop_atr=2.5, risk_pct=risk, max_positions=mp, priority=prio)
+                    print(f"{H:<6}{scheme:<20}{prio:<9}{risk:>5.1f}/{mp:<3}{res['trades']:>7}{res['CAGR'] * 100:>6.1f}%{res['maxDD'] * 100:>6.1f}%"
                           f"{res['sharpe']:>7.2f}{res['avg_open']:>6.1f}{res['meanR']:>7.3f}{res['years_pos'] * 100:>5.0f}%{res['worst_year'] * 100:>7.1f}%", flush=True)
     return 0
 

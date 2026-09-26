@@ -93,3 +93,15 @@ def run_portfolio(p: Panel, trades: pd.DataFrame, *, stop_atr: float, risk_pct: 
             "maxDD": dd.max(), "sharpe": rets.mean() / rets.std() * np.sqrt(252) if rets.std() > 0 else np.nan,
             "avg_open": eq["open"].mean(), "meanR": float(np.mean(taken_r)) if taken_r else np.nan,
             "years_pos": (yearly > 0).mean(), "worst_year": yearly.min(), "curve": e, "yearly": yearly}
+
+
+def mc_portfolio(p: Panel, trades: pd.DataFrame, *, runs: int = 30, seed: int = 0, **kw) -> pd.DataFrame:
+    """Selection-luck Monte Carlo: the same candidate list with random daily
+    priority. Returns one row per run (CAGR, maxDD, sharpe, trades, meanR)."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for _ in range(runs):
+        tr = trades.assign(_rnd=rng.random(len(trades)))
+        res = run_portfolio(p, tr, priority="_rnd", **kw)
+        rows.append({k: res[k] for k in ("CAGR", "maxDD", "sharpe", "trades", "meanR", "worst_year")})
+    return pd.DataFrame(rows)

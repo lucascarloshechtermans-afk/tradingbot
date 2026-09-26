@@ -244,3 +244,34 @@ def simulate_rules(p: Panel, signal: np.ndarray, *, stop_atr: float = 2.5, max_h
             last_exit = exit_idx[i]
     return pd.DataFrame({"t": ts[keep], "j": js[keep], "r": r[keep], "bars": (k + 1)[keep],
                          "exit_t": exit_idx[keep]})
+
+
+def day_baseline(p: Panel, stop_atr: float = 2.5, holds=HOLDS) -> dict[int, np.ndarray]:
+    """Mean R of ALL eligible stocks entering on the same day (signal day t) for
+    each hold: a same-day, cross-sectional benchmark that uses no information
+    about the stock's own future. (The same-stock same-month baseline above
+    contains the event's own move and biases dips up / breakouts down.)"""
+    T, N = p.c.shape
+    sums = {H: np.zeros(T) for H in holds}
+    cnt = {H: np.zeros(T) for H in holds}
+    chunk = 120
+    for j0 in range(0, N, chunk):
+        cols = np.zeros(N, dtype=bool)
+        cols[j0:j0 + chunk] = True
+        s = np.ones_like(p.eligible) & cols[None, :]
+        tr = _simulate_all(p, s, stop_atr, holds)
+        t = tr["t"].to_numpy()
+        for H in holds:
+            r = tr[f"r{H}"].to_numpy()
+            ok = np.isfinite(r)
+            np.add.at(sums[H], t[ok], r[ok])
+            np.add.at(cnt[H], t[ok], 1)
+    return {H: np.where(cnt[H] > 0, sums[H] / np.maximum(cnt[H], 1), np.nan) for H in holds}
+
+
+def add_day_excess(trades: pd.DataFrame, dbase: dict[int, np.ndarray]) -> pd.DataFrame:
+    trades = trades.copy()
+    for H, b in dbase.items():
+        if f"r{H}" in trades:
+            trades[f"x{H}"] = trades[f"r{H}"] - b[trades["t"].to_numpy()]
+    return trades

@@ -81,3 +81,27 @@ the best-documented swing effect in the literature: post-earnings drift.
 - E06 DRIFT_AFTER_HOLD: E03 and close_{E+5} ≥ close_E → signal on the close of E+5
 - E07 NEGATIVE_SURPRISE (sanity, expected < 0): surprise < 0 and EAR ≤ −1
 Pass criterion unchanged (excess > 0, t ≥ 3, ≥ 70% DEV years positive).
+
+---
+
+# Round 4c — findings that changed the plan, and the market-state hypothesis (written before VAL/FINAL)
+
+1. **Baseline bias found in our own metric.** The same-stock/same-month baseline contains the
+   event's own move (a dip lowers that month's mean, a breakout raises it), so it biased dip
+   setups UP and breakout/earnings-gap setups DOWN. Re-scored against a same-day
+   cross-sectional baseline (`engine2.day_baseline`: mean R of all eligible stocks entering
+   the same day), NO price or earnings hypothesis (H01–H18, E01–E07) beats a random stock bought
+   the same day (|excess| ≤ 0.02R; breakouts H08 significantly negative, t −5).
+2. The dips' absolute edge is therefore **market timing**: they fire after market selloffs.
+   A random stock bought in DEV when SPY > SMA200, VIX ≥ 15 and SPY's 5-day return < 0 earned
+   R10 +0.156 / R20 +0.255 (85% of years positive) vs ≈ 0.01–0.06 in the other bull states.
+3. Cross-sectional characteristics (same-day quintiles, DEV) add only ±0.02–0.07R/20d; the
+   most consistent: less extended (EMA21/SMA50 distance, RSI14), lower ATR%, further below the
+   52-week high → slightly better (≈70% of years).
+
+## M1 MARKET_STATE (pre-registered here; tested on periods never used for its choice)
+State "GO" on the close of day t: SPY close > SMA200(SPY) AND VIX close ≥ 15 AND
+SPY close < SPY close 5 sessions earlier.
+Prediction: SPY forward 10- and 20-session returns (entry next open) are higher in GO than in
+all other days, in each of: 1993–2007 (never looked at), 2022–2026 (VAL-T time span), and for
+the random-stock basket in VAL-T, VAL-U and FINAL. Neighbourhood check: VIX 13–20, lookback 3–10.
