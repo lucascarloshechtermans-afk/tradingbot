@@ -744,6 +744,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-regime-gate", action="store_true", help="Disable the market-regime hard gate (config.gates.regime_gate_enabled), for A/B comparison")
     parser.add_argument("--no-rs-gate", action="store_true", help="Disable the RS-vs-universe hard gate (sets min_rs_percentile to 0), for A/B comparison")
     parser.add_argument("--min-rr", type=float, default=None, help="Override config.gates.min_risk_reward")
+    parser.add_argument("--max-holding-days", type=int, default=None, help="Override config.risk.max_holding_days, for A/B comparison")
     parser.add_argument(
         "--workers", type=int, default=1,
         help="Parallelize the per-ticker walk-forward loop across this many processes (each ticker is independent "
@@ -761,6 +762,8 @@ def main(argv: list[str] | None = None) -> int:
         config.gates.min_rs_percentile = 0.0
     if args.min_rr is not None:
         config.gates.min_risk_reward = args.min_rr
+    if args.max_holding_days is not None:
+        config.risk.max_holding_days = args.max_holding_days
 
     if args.dry_run:
         from scanner import SyntheticDataProvider
