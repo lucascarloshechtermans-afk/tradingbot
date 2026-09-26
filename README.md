@@ -136,12 +136,19 @@ loss rate at 61%, still net positive on R:R asymmetry), Momentum Continuation
 
 ### REMAINING RISKS
 
-- **Score above ~65 does not reliably predict better outcomes.** Confirmed
-  in two independent backtests (5y full period and tonight's 2y OOS check):
-  the 70-79 and 80+ score buckets show *flat-to-negative* expectancy, not
-  better. Use the score to find candidates worth reading the reasons/risks
-  for, never as a standalone conviction signal — this is now empirically
-  demonstrated, not just a disclaimer.
+- **Score above ~65 does not reliably predict better outcomes, and the reason
+  why remains unexplained.** Confirmed in two independent backtests (5y full
+  period and a 2y OOS check): the 70-79 and 80+ score buckets show
+  *flat-to-negative* expectancy, not better. The leading hypothesis —
+  overextended, "already-chased" setups score highly on many categories at
+  once but underperform — was tested directly (a new `print_overextension_report`
+  bucketing trades by `stretched_reference_count` at entry) and **rejected**:
+  overextension count correlates *positively* with expectancy in this
+  system (0 refs: +0.25%, 4 refs: +0.84%, monotonically increasing), the
+  opposite of the "buying exhaustion" theory. Use the score to find
+  candidates worth reading the reasons/risks for, never as a standalone
+  conviction signal — this is now empirically demonstrated, not just a
+  disclaimer, and the mechanism behind it is still an open question.
 - **Mean Reversion and Bullish Breakout flipped negative in the 2y OOS-only
   window** (-0.12% and -0.43% respectively, vs. +0.42%/+0.71% over the full
   5y) on samples of 94-118 trades. Could be real regime-sensitivity (both
