@@ -106,6 +106,48 @@ net P&L $8,370 (A) → $11,166 (D) despite ~1,000 fewer trades).
 Run long captures in ~34-ticker chunks: this container kills long-lived
 background processes.
 
+## Chart patterns + "ready to boom" list
+
+`analysis/patterns.py` detects every bullish pattern the same way (trigger,
+invalidation, measured-move target, lines to draw): falling wedge,
+descending channel, descending triangle, ascending triangle, symmetric
+triangle, double bottom, inverse head & shoulders, cup & handle, bull flag,
+flat base, horizontal range, VCP, channel up (bounce and strong breakout).
+
+`research/pattern_backtest.py` backtests each one on its breakout day
+(5y, 190 tickers, entry next open, 2-4 ATR stop at the invalidation,
+2-4R target, 10-day time exit, gap-through fills): 9,419 breakouts.
+
+| pattern | n | win % | mean R | PF | H1 / H2 |
+|---|---|---|---|---|---|
+| descending triangle | 58 | 60.3 | +0.34 | 2.42 | +0.08 / +0.67 |
+| VCP | 220 | 55.0 | +0.15 | 1.44 | +0.09 / +0.23 |
+| channel up strong breakout | 422 | 54.5 | +0.15 | 1.54 | +0.14 / +0.16 |
+| descending channel | 446 | 58.7 | +0.12 | 1.49 | +0.13 / +0.12 |
+| bull flag | 1070 | 51.5 | +0.12 | 1.33 | +0.15 / +0.09 |
+| cup & handle | 645 | 56.1 | +0.11 | 1.35 | +0.09 / +0.13 |
+| ascending triangle | 646 | 55.4 | +0.10 | 1.40 | +0.15 / +0.05 |
+| double bottom | 869 | 54.3 | +0.10 | 1.39 | +0.14 / +0.05 |
+| falling wedge | 409 | 52.1 | +0.09 | 1.29 | +0.09 / +0.09 |
+| inverse head & shoulders | 291 | 51.5 | +0.07 | 1.21 | +0.12 / +0.01 |
+| flat base | 1306 | 54.5 | +0.07 | 1.26 | +0.08 / +0.05 |
+| horizontal range | 728 | 52.7 | +0.07 | 1.27 | +0.15 / −0.02 |
+| symmetric triangle | 872 | 48.1 | +0.06 | 1.15 | +0.10 / +0.02 |
+| channel up bounce | 1437 | 46.6 | −0.02 | 0.95 | −0.04 / −0.00 |
+
+Context that helps (all patterns pooled): above the daily 200 EMA +0.106R
+vs +0.054R below it; two or more patterns breaking out together +0.111R;
+EMA 21>50>200 stacked + ATR% >= 3 + breakout volume > 1.5x: +0.153R, PF 1.60,
+both halves.
+
+`python -m analysis.setup_finder --top 15 --html boom.html` scans the
+universe for patterns that broke out today / 1-3 days ago (still < 1.5 ATR
+above the trigger) or are READY (within min(3%, 1 ATR) under the trigger),
+scores them on the pattern's own edge plus that context (and momentum rank,
+efficiency, tight coil, room to the next resistance zone) and writes an
+annotated chart per setup with trigger (buy-stop), stop and target.
+Channel up bounce never makes the list.
+
 ## Chart read: EMAs on two timeframes, zones, wedges, the plan
 
 Every setup the scanner lists now also gets a trader-style chart read

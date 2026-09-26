@@ -17,7 +17,13 @@ UP, DOWN = "#12b886", "#e03131"
 LINE = "#364fc7"
 
 
-def render_chart_svg(daily: pd.DataFrame, read: ChartRead, bars: int = 200, width: int = 980, height: int = 520) -> str:
+PATTERN_COLORS = ["#e8590c", "#9c36b5", "#1971c2", "#2b8a3e"]
+
+
+def render_chart_svg(daily: pd.DataFrame, read: ChartRead, bars: int = 200, width: int = 980, height: int = 520,
+                     patterns: list | None = None, levels: dict[str, float] | None = None) -> str:
+    """`patterns`: analysis.patterns.PatternHit list to draw; `levels`:
+    {label: price} horizontal lines (e.g. trigger / stop / target)."""
     full = daily.dropna(subset=["open", "high", "low", "close"])
     emas = {w: ema(full["close"], w) for w in DAILY_EMAS}
     d = full.iloc[-bars:]
@@ -29,6 +35,8 @@ def render_chart_svg(daily: pd.DataFrame, read: ChartRead, bars: int = 200, widt
     hi = float(d["high"].max())
     if read.ema200_4h:
         lo, hi = min(lo, read.ema200_4h), max(hi, read.ema200_4h)
+    for v in (levels or {}).values():
+        lo, hi = min(lo, v), max(hi, v)
     span = hi - lo
     lo, hi = lo - span * 0.05, hi + span * 0.08
     plot_w = width - pad_l - pad_r
@@ -79,6 +87,27 @@ def render_chart_svg(daily: pd.DataFrame, read: ChartRead, bars: int = 200, widt
             v0 = line.value_at(i0 + offset)
             v1 = line.value_at(int(i1) + offset)
             out.append(f'<line x1="{x(i0):.1f}" y1="{y(v0):.1f}" x2="{x(i1):.1f}" y2="{y(v1):.1f}" stroke="{LINE}" stroke-width="1.6"/>')
+    # chart patterns from analysis.patterns
+    pos = {ts: i for i, ts in enumerate(d.index)}
+    for k, hit in enumerate(patterns or []):
+        col = PATTERN_COLORS[k % len(PATTERN_COLORS)]
+        for ta, pa, tb, pb in hit.lines:
+            ia, ib = pos.get(ta), pos.get(tb)
+            if ia is None or ib is None:
+                continue
+            if ib >= n - 1:  # project the line one step past the last bar
+                ib_x = n + 3
+                pb = pa + (pb - pa) * (ib_x - ia) / max(ib - ia, 1)
+                ib = ib_x
+            out.append(f'<line x1="{x(ia):.1f}" y1="{y(pa):.1f}" x2="{x(ib):.1f}" y2="{y(pb):.1f}" stroke="{col}" stroke-width="2"/>')
+        la = pos.get(hit.lines[0][0]) if hit.lines else None
+        if la is not None:
+            out.append(f'<text x="{x(la):.1f}" y="{y(hit.lines[0][1]) - 6:.1f}" font-size="11.5" font-weight="700" fill="{col}">{escape(hit.name.upper())}</text>')
+    level_cols = {"TRIGGER": "#e8590c", "STOP": "#e03131", "TARGET": "#2b8a3e"}
+    for label, v in (levels or {}).items():
+        col = level_cols.get(label.split()[0], "#495057")
+        out.append(f'<line x1="{x(n - 12):.1f}" x2="{width - pad_r}" y1="{y(v):.1f}" y2="{y(v):.1f}" stroke="{col}" stroke-dasharray="6,3" stroke-width="1.4"/>'
+                   f'<text x="{width - pad_r - 4}" y="{y(v) - 4:.1f}" font-size="11" font-weight="700" fill="{col}" text-anchor="end">{escape(label)} {v:.2f}</text>')
     # 4H 200 EMA level
     if read.ema200_4h:
         yy = y(read.ema200_4h)
@@ -126,3 +155,34 @@ def render_chart_page(items: list[tuple[pd.DataFrame, ChartRead]]) -> str:
             ".heads{margin:0 0 6px;padding-left:18px;color:#364fc7;font-weight:600;font-size:13px;text-transform:uppercase}"
             ".plan{margin:4px 0 10px;padding:8px 10px;background:#edf2ff;border-left:3px solid #364fc7;color:#364fc7;font-weight:700;font-size:13px}"
             "</style></head><body>" + "".join(cards) + "</body></html>")
+
+
+def render_setup_page(items: list) -> str:
+    """'Ready to boom' page: per setup (analysis.setup_finder.Setup, ChartRead)
+    the status, patterns, trigger/stop/target, reasons and the annotated chart."""
+    cards = []
+    for rank, (setup, read) in enumerate(items, 1):
+        levels = {"TRIGGER (buy-stop)": setup.trigger, "STOP": setup.stop, "TARGET": setup.target}
+        reasons = "".join(f"<li>{escape(r)}</li>" for r in setup.reasons)
+        heads = "".join(f"<li>{escape(h)}</li>" for h in read.headlines)
+        plan = f"<p class='plan'>{escape(read.plan)}</p>" if read.plan else ""
+        cards.append(
+            f"<section><h2>#{rank} {escape(setup.ticker)} <span class='st'>{escape(setup.status)}</span> "
+            f"<span class='sc'>score {setup.score:.0f}</span></h2>"
+            f"<p class='pat'>{escape(setup.names)}</p>"
+            f"<p class='lv'>close {setup.close:.2f} · <b>trigger {setup.trigger:.2f}</b> · stop {setup.stop:.2f} · "
+            f"target {setup.target:.2f} · R:R {setup.rr:.1f}</p>"
+            f"<div class='cols'><ul class='rs'>{reasons}</ul><ul class='heads'>{heads}</ul></div>{plan}"
+            f"{render_chart_svg(setup.daily, read, patterns=setup.patterns, levels=levels)}</section>")
+    return ("<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Ready to boom</title><style>"
+            ":root{--chart-bg:#fff}body{margin:0;padding:16px;background:#f1f3f5;color:#212529;font-family:system-ui,sans-serif}"
+            "section{background:#fff;border-radius:10px;padding:14px;margin:0 auto 18px;max-width:1000px;box-shadow:0 1px 3px #0001}"
+            "h2{margin:0 0 4px;font-size:19px}.st{font-size:12px;padding:2px 8px;border-radius:10px;background:#fff4e6;color:#d9480f;vertical-align:middle}"
+            ".sc{font-size:12px;padding:2px 8px;border-radius:10px;background:#d3f9d8;color:#2b8a3e;vertical-align:middle}"
+            ".pat{margin:2px 0;color:#e8590c;font-weight:700;text-transform:uppercase;font-size:13px}.lv{margin:2px 0 6px;font-size:14px}"
+            ".cols{display:flex;gap:18px;flex-wrap:wrap}.cols ul{margin:0 0 6px;padding-left:18px;font-size:12.5px;flex:1 1 300px}"
+            ".heads{color:#364fc7;font-weight:600;text-transform:uppercase}"
+            ".plan{margin:4px 0 10px;padding:8px 10px;background:#edf2ff;border-left:3px solid #364fc7;color:#364fc7;font-weight:700;font-size:13px}"
+            "</style></head><body><h1 style='max-width:1000px;margin:0 auto 12px;font-size:22px'>Ready to boom</h1>"
+            + "".join(cards) + "</body></html>")
