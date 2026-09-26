@@ -429,6 +429,29 @@ def build_chart_read(provider: DataProvider, ticker: str, period: str) -> dict:
             "bias": read.bias, "ema200_4h": read.ema200_4h, "svg": svg}
 
 
+def find_validated_leader_dips(provider: DataProvider, histories: dict[str, pd.DataFrame],
+                               benchmarks: dict[str, pd.DataFrame]) -> tuple[list, dict]:
+    """The validated primary setup (analysis/leader_dip.py), each with its
+    chart read. Momentum is ranked against every fetched candidate."""
+    from analysis.chart_read import read_chart
+    from analysis.leader_dip import find_leader_dips, market_state
+
+    spy, vix = benchmarks.get("spy"), benchmarks.get("vix")
+    try:
+        dips = find_leader_dips(histories, spy, vix)
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("leader-dip search failed: %s", exc)
+        return [], {}
+    out = []
+    for d in dips:
+        try:
+            hourly = provider.get_history(d.ticker, period="730d", interval="1h")
+        except DataUnavailable:
+            hourly = None
+        out.append((d, read_chart(d.ticker, d.daily, hourly)))
+    return out, market_state(spy, vix)
+
+
 def find_pattern_setups(provider: DataProvider, histories: dict[str, pd.DataFrame], top: int = 15) -> list:
     """'Ready to boom' chart-pattern setups over every fetched candidate (see
     analysis/setup_finder.py), each with its chart read for the dashboard."""
@@ -471,6 +494,9 @@ class ScanRun:
     no_trade: dict[str, str] = field(default_factory=dict)
     # [(analysis.setup_finder.Setup, ChartRead)] -- the 'ready to boom' list
     pattern_setups: list = field(default_factory=list)
+    # [(analysis.leader_dip.LeaderDip, ChartRead)] -- the validated primary setup
+    leader_dips: list = field(default_factory=list)
+    market_state: dict = field(default_factory=dict)
 
 
 def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | None = None, max_workers: int = 8) -> ScanRun:
@@ -591,10 +617,11 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     logger.info("scan complete: %d tickers scanned, %d setups found in %.1fs", len(filter_result.included), len(trade_plans), duration)
 
     pattern_setups = find_pattern_setups(provider, {t: c[1] for t, c in candidates.items()})
+    leader_dips, mstate = find_validated_leader_dips(provider, {t: c[1] for t, c in candidates.items()}, benchmarks)
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
-        pattern_setups=pattern_setups,
+        pattern_setups=pattern_setups, leader_dips=leader_dips, market_state=mstate,
     )
 
 
@@ -631,6 +658,25 @@ def print_scan_results(trade_plans: list[TradePlan], min_score: float = 65.0) ->
         if cr.get("invalidation"):
             print(f"     INVALID: {cr['invalidation']}")
         print()
+
+
+def print_leader_dips(leader_dips: list, market: dict) -> None:
+    vix, weak = market.get("vix"), market.get("spy_below_50")
+    print()
+    print("=== LEADER DIP -- validated setup (buy next open, stop 2.5 ATR, exit after 10 sessions) ===")
+    if vix is not None:
+        print(f"    market: VIX {vix:.1f}{' (fear)' if vix > 20 else ''}, SPY {'BELOW' if weak else 'above'} its 50-day SMA")
+    tradeable = [(d, r) for d, r in leader_dips if d.grade in ("A", "B")]
+    if not tradeable:
+        print("    NO TRADE: no grade A/B leader dip today.")
+    for d, read in leader_dips:
+        tag = "TRADE" if d.grade in ("A", "B") else "watch"
+        print(f"  [{d.grade}] {d.ticker:<6} {tag:<6} close {d.close:.2f}  stop~{d.stop_estimate:.2f} ({d.risk_pct:.1f}%)  "
+              f"dip {d.dip_atr:+.1f} ATR  momentum {d.momentum_rank:.0f}  confirmations {d.confirmations}/4")
+        print("        + " + "; ".join(d.reasons[2:]) if len(d.reasons) > 2 else "        + (no confirmations)")
+        if d.missing:
+            print("        - " + "; ".join(d.missing))
+    print()
 
 
 def print_no_trade_summary(no_trade: dict[str, str]) -> None:
@@ -767,6 +813,9 @@ def main(argv: list[str] | None = None) -> int:
         provider = YFinanceProvider(cache=cache, max_retries=config.data.max_retries, retry_backoff_seconds=config.data.retry_backoff_seconds)
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
+    print_leader_dips(scan_run.leader_dips, scan_run.market_state)
+    print("--- Other strategy setups (NOT validated: bought short-term strength and did worse than random")
+    print("    entries in the same stocks out-of-sample -- see README 'Optimization round 3'; info only) ---")
     print_scan_results(scan_run.trade_plans, min_score=args.min_score)
     if scan_run.pattern_setups:
         print(f"--- Ready to boom: {len(scan_run.pattern_setups)} chart-pattern setups (hold up to 20 days) ---")
@@ -797,6 +846,8 @@ def main(argv: list[str] | None = None) -> int:
         universe_size=scan_run.universe_size,
         scan_duration_s=scan_run.scan_duration_s,
         pattern_setups=scan_run.pattern_setups,
+        leader_dips=scan_run.leader_dips,
+        market_state=scan_run.market_state,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

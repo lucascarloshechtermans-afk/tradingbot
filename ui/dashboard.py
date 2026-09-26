@@ -77,6 +77,7 @@ PAGE_TEMPLATE = """<!doctype html>
   </div>
 
   <div id="dashboard" class="panel active">
+    {leader_card}
     <div class="card">
       <div class="grid">
         <div class="stat"><div class="label">Market Regime</div><div class="value"><span class="badge {regime_class}">{regime_label}</span></div></div>
@@ -95,20 +96,21 @@ PAGE_TEMPLATE = """<!doctype html>
       <tbody>{sector_rows_html}</tbody></table>
     </div>
     <div class="card">
-      <h3 style="margin-top:0">Top setups</h3>
+      <h3 style="margin-top:0">Other strategy setups (not validated -- info only)</h3>
       <table><thead><tr><th>Rank</th><th>Ticker</th><th>Score</th><th>Setup</th></tr></thead>
       <tbody>{top_setups_html}</tbody></table>
     </div>
     <div class="card">
-      <h3 style="margin-top:0">Ready to boom (chart patterns)</h3>
+      <h3 style="margin-top:0">Chart patterns (info only)</h3>
       <table><thead><tr><th>#</th><th>Ticker</th><th>Score</th><th>Status</th><th>Pattern</th><th>Trigger</th><th>Stop</th><th>Target</th><th>R:R</th></tr></thead>
       <tbody>{boom_rows_html}</tbody></table>
     </div>
   </div>
 
   <div id="boom" class="panel">
-    <div class="card"><p style="margin:0;color:var(--ink-soft)">Bullish chart patterns that broke out today / 1-3 days ago or sit just under their trigger,
-    scored on what held up out-of-sample (pattern edge, 4H 200 EMA, breakout volume, ATR%). Plan to hold up to 20 trading days.</p></div>
+    <div class="card"><p style="margin:0;color:var(--ink-soft)"><strong>Info / confirmation only, not a validated setup.</strong>
+    Bullish chart patterns that broke out today / 1-3 days ago or sit just under their trigger. On the scanner's own candidates a
+    pattern breakout did not add edge out-of-sample (README, optimization round 3); use it as context, not as a reason to trade.</p></div>
     {boom_cards_html}
   </div>
 
@@ -278,6 +280,8 @@ def build_dashboard_html(
     scan_duration_s: float,
     generated_at: datetime | None = None,
     pattern_setups: list | None = None,
+    leader_dips: list | None = None,
+    market_state: dict | None = None,
 ) -> str:
     """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
     'Ready to boom' tab."""
@@ -302,6 +306,27 @@ def build_dashboard_html(
         for i, r in enumerate([r for r in scan_rows if r["setup"] != "No confirmed setup"][:10])
     )
     pattern_setups = pattern_setups or []
+    leader_dips = leader_dips or []
+    ms = market_state or {}
+    vix_txt = f"VIX {ms['vix']:.1f}" if ms.get("vix") is not None else "VIX n/a"
+    tape_txt = "SPY below 50-day" if ms.get("spy_below_50") else "SPY above 50-day"
+    dip_rows = "".join(
+        f"<tr><td><span class='badge'>{escape(d.grade)}</span></td><td><strong>{escape(d.ticker)}</strong></td>"
+        f"<td>{'TRADE' if d.grade in ('A', 'B') else 'watch'}</td><td>{d.close:.2f}</td><td>{d.stop_estimate:.2f} ({d.risk_pct:.1f}%)</td>"
+        f"<td>{d.dip_atr:+.1f} ATR</td><td>{d.momentum_rank:.0f}</td><td>{d.confirmations}/4</td>"
+        f"<td style='font-size:12px'>{escape('; '.join(d.reasons[2:]))}</td></tr>"
+        for d, _r in leader_dips
+    )
+    has_trade = any(d.grade in ("A", "B") for d, _r in leader_dips)
+    leader_card = (
+        "<div class='card'><h3 style='margin-top:0'>LEADER DIP -- validated setup</h3>"
+        f"<p style='margin:0 0 8px;color:var(--ink-soft)'>Buy next open, stop 2.5 ATR below the fill, exit at the close of the 10th session. "
+        f"Grade A = 3-4 confirmations, B = 2, C = watch only. Market now: {escape(vix_txt)}, {escape(tape_txt)}.</p>"
+        + ("" if has_trade else "<p style='margin:0 0 8px'><strong>NO TRADE today:</strong> no grade A/B leader dip.</p>")
+        + "<table><thead><tr><th>Grade</th><th>Ticker</th><th>Action</th><th>Close</th><th>Stop (est.)</th><th>Dip</th>"
+          "<th>Momentum</th><th>Conf.</th><th>Confirmations</th></tr></thead><tbody>"
+        + (dip_rows or "<tr><td colspan=9>No momentum leader is in a dip today.</td></tr>") + "</tbody></table></div>"
+    )
     boom_rows_html = "".join(
         f"<tr><td>{i}</td><td><a style='color:#74c0fc' href='#setup-{escape(s.ticker)}' onclick=\"document.querySelector('[data-tab=boom]').click()\">"
         f"<strong>{escape(s.ticker)}</strong></a></td><td>{s.score:.0f}</td><td>{escape(s.status)}</td><td>{escape(s.names)}</td>"
@@ -323,6 +348,7 @@ def build_dashboard_html(
         boom_rows_html=boom_rows_html or "<tr><td colspan=9>No pattern setups</td></tr>",
         boom_cards_html=render_setup_cards(pattern_setups) if pattern_setups else "",
         setup_css=SETUP_CSS,
+        leader_card=leader_card,
         scan_data_json=json.dumps(scan_rows),
         watchlist_data_json=json.dumps(watchlist_entries),
     )

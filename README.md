@@ -12,6 +12,120 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Optimization round 3 — "break your own scanner" (LATEST, supersedes everything below)
+
+**Verdict: the original scanner had no edge on data it was not built on, and
+its entries were worse than random entry days in the same stocks. It was
+rebuilt around the one setup that survived every test: LEADER DIP.**
+
+### How it was tested (research/opt_*.py, research/drawing_board.py, research/leader_dip.py)
+- Research dataset: every candidate trade the scanner's strategies produce
+  (all gates off) with ~90 point-in-time features on the signal bar
+  (`research/opt_dataset.py`): EMA alignment/slopes, RSI and divergences,
+  MACD, ADX, RVOL, OBV/A-D, VWAP, ATR, Bollinger squeeze, relative strength,
+  composite momentum rank, efficiency, market structure, support/resistance
+  ZONES with rejections and failed breakouts, 52-week-high distance, candle
+  and run-up (late entry) measures, SPY/VIX context, sector, liquidity,
+  overextension, the 4H 200 EMA, chart-pattern confirmation.
+- Four cells never mixed: the 190-ticker DEVELOPMENT universe and 163 other
+  liquid US stocks never used for anything (OUT-OF-SAMPLE), each split into
+  2022-09 → 2025-09 and a HOLDOUT year 2025-10 → 2026-09 that no decision
+  was based on until the end.
+- Walk-forward (train on everything before T, test the next 3 months, move,
+  retrain), random-entry benchmark, cost stress, parameter grid, monthly block
+  bootstrap (Monte Carlo).
+
+### What broke
+| Candidates (engine rules) | dev universe, dev period | dev universe, holdout | OOS universe, dev period | OOS universe, holdout |
+|---|---|---|---|---|
+| all scanner setups | +0.046R | −0.014R | −0.011R* | −0.054R |
+| + momentum ≥80 & efficiency ≥0.25 (round-2 gates) | +0.139R | +0.075R | −0.002R* | −0.072R |
+| walk-forward rank model (top 40%) | +0.103R (in-sample) | +0.001R | +0.007R* | −0.044R |
+*OOS universe all periods.
+
+- **Feature importance** (#2): only volatility (ATR%, Bollinger width, spread — one
+  concept) and fewer "confluence" points were stable in BOTH universes. EMA
+  alignment, EMA slopes, RS, RVOL, MACD, patterns and structure breaks were
+  stable in the development universe only; EMA alignment even reversed out
+  of sample. They described the hindsight-picked 2023-26 growth leaders, not
+  a repeatable edge.
+- **Random-entry benchmark** (#27): the same stocks, random entry days within
+  ±60 sessions, same stop and exit — beat the scanner in every cell.
+  Breakout / trend-continuation / pullback entries were 0.2-0.6R per trade
+  WORSE than random: they buy short-term strength, and short-term moves
+  tend to reverse. Mean-reversion and support-bounce entries (buying
+  weakness) beat random.
+- **Resistance** (#16, your question): rejections at resistance and failed
+  breakouts in the last 5 days did NOT predict worse trades (same mean R).
+  Room to the next resistance zone helped somewhat in the dev universe but
+  not consistently out of sample, so it is not a hard rule.
+- **Losers** (#4): low-ATR stocks, "confluence" support bounces, and gap-
+  throughs (30% of the worst decile). **Winners** (#5, dev only): strong
+  trend slope and RS — which is exactly what did not hold out of sample.
+- **Exits** (#18/#19): longer holds beat 5 days in both universes (dev:
+  +0.08R at 5d → +0.25R at 20d; OOS +0.00 → +0.06R). Closing trades that
+  "do nothing" after 3-5 days did not help.
+- **Regime** (#6): quarterly results of both universes move together (the
+  market drives them); VIX / SPY-trend did not flag the bad quarters for
+  the old setups.
+- Setup-by-setup (#14): Support Bounce ≈ 0R in both universes (40% of all
+  trades), Breakout/Pullback/Trend-Continuation negative out of sample,
+  Mean Reversion positive in both.
+
+### What survived: LEADER DIP (analysis/leader_dip.py)
+Buy a **momentum leader** (composite momentum rank ≥ 80 in the universe) after
+a **dip** (5-day move ≤ −1 ATR); next open, stop 2.5 ATR, exit after 10 sessions.
+Pre-registered on the drawing board next to 5 other hypotheses (pullback in
+uptrend, RSI(2), 21-EMA touch, 20-day breakout = strength control): it was the
+only one above the unconditional baseline in all four cells.
+
+**Parameter robustness** (#10): 13 variants (momentum 70/80/90, dip
+0.5-2.0 ATR, lookback 3/5/10, stop 2-3 ATR, hold 5-15) — all 13 positive in all 4
+cells; worst cell +0.011R; stronger momentum and 10-15 day holds are better.
+
+**Confirmations** (each better in all four cells): deep dip ≥ 1 ATR below the
+daily 21 EMA; VIX > 20; SPY below its 50-day SMA; ATR% ≥ 3 — i.e. the more
+fear/dip around a leader, the better the reversal. Grade A = 3-4, B = 2, C = watch.
+
+| LEADER DIP | dev/dev | dev/holdout | OOS/dev | OOS/holdout |
+|---|---|---|---|---|
+| all | +0.124R (1824) | +0.118R (633) | +0.096R (1594) | +0.054R (542) |
+| grade A+B | +0.188R PF 1.66 | +0.130R PF 1.43 | +0.174R PF 1.65 | +0.073R PF 1.25 |
+| grade A | +0.257R PF 2.13 | +0.209R PF 1.77 | +0.348R PF 2.68 | +0.185R PF 1.76 |
+
+Grade A+B was positive in every calendar year 2022-2026 in both universes.
+Costs (#9/#21): +0.5% extra slippage per side still leaves A+B +0.064R and A
++0.177R. Monthly block bootstrap, 0.5% risk, taking every trade: grade A ≈ 2-3%
+chance of a losing year, p95 max drawdown 7-10%; A+B ≈ 10-12% and 15-22% (dips
+cluster in sell-offs — respect the 6% portfolio-heat cap).
+
+### Changes
+- ADDED: `analysis/leader_dip.py` (primary, validated setup; top of the terminal
+  output and the dashboard; explicit NO TRADE when there is no A/B), the whole
+  `research/opt_*`, `drawing_board`, `leader_dip`, `opt_random_baseline` tool chain.
+- DEMOTED: the strategy-based setups (breakout, trend continuation, pullback,
+  support bounce, mean reversion) — still listed, labelled "not validated,
+  info only". Chart patterns ("Ready to boom") likewise: info/confirmation only.
+- REJECTED: the walk-forward rank model, the resistance-rejection rule, early
+  failure exits, the round-2 momentum/efficiency gates as an edge source for
+  the old setups (≈0 out of sample).
+
+### Remaining weaknesses
+- Survivorship: both universes are today's listed stocks; delisted names are
+  missing (dips in companies that later collapsed are not in the data).
+- The confirmation set was chosen while all four cells were visible (each was
+  also better in the development cell alone, and all come from one theory),
+  so grade A's numbers are somewhat optimistic; the ungraded rule is the clean test.
+- It is a fear/dip setup: in calm markets (VIX < 20, SPY above its 50-day)
+  grade A/B is rare — NO TRADE is the normal answer then.
+- 10-session hold, not 5: the 5-session variant is positive but weakest.
+- Daily bars only; earnings within the hold window are not excluded (flag them yourself).
+
+### How to run
+    python scanner.py --dashboard dashboard.html      # LEADER DIP first, then info-only lists
+    python -m research.leader_dip --oos-tickers <list> --out grid.pkl   # re-test the rule
+    python -m research.drawing_board --tickers default --out ev.pkl     # the hypotheses board
+
 ## Optimization-phase audit (latest — supersedes the performance numbers further down)
 
 An adversarial "why would this scanner pick bad trades tomorrow?" audit. Every
