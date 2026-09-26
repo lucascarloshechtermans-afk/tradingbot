@@ -515,7 +515,10 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     # comparison backtest, picking ~4 setups/week by momentum rank gave
     # +0.14R/trade vs +0.06R picking by composite score.
     if config.gates.min_momentum_percentile is not None:
-        trade_plans.sort(key=lambda p: (p.momentum_percentile or 0.0, p.score), reverse=True)
+        # (a ticker with no confirmed setup is never a trade, keep it below real setups)
+        trade_plans.sort(
+            key=lambda p: (p.setup != "No confirmed setup", p.momentum_percentile or 0.0, p.score), reverse=True
+        )
     else:
         trade_plans.sort(key=lambda p: p.score, reverse=True)
     duration = time.time() - started
