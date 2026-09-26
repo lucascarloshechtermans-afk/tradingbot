@@ -12,11 +12,98 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
-## Overnight session summary (autonomous build)
+## Optimization-phase audit (latest — supersedes the performance numbers further down)
+
+An adversarial "why would this scanner pick bad trades tomorrow?" audit. Every
+number below comes from full-universe backtests (134 tickers, 5 years), each
+assembled from four merged chunk runs, and every change was checked separately
+in both halves of the sample (split at the median entry date). Metrics are
+reported **risk-adjusted** (R = $ P&L / $ risked at entry) and profit factor is
+$-weighted — the older "% expectancy" ignores position sizing and flattered the
+system.
+
+### Bugs found in the validation pipeline (the old numbers were too optimistic)
+
+- **Stops filled at the stop price even when the market gapped through it.**
+  Now filled at the (worse) open. Alone this cut the reported profit factor from
+  1.21 to 1.07.
+- **15% of the score was fake in every backtest.** The backtester never passed
+  SPY/sector data to the context, so `relative_strength` (weight 10) and `sector`
+  (weight 5) were pinned at neutral for every trade. Fixed with walk-forward-safe,
+  per-date benchmark truncation and sector ranks. The score is now monotonic:
+  50-55 → -0.04%, 60-65 → +0.13%, 70-75 → +0.24%, 75+ → +0.41% per trade (this
+  resolves the old "score above ~65 doesn't predict quality" puzzle below).
+- **The EPS-growth gate is look-ahead-contaminated** (today's fundamentals filter
+  2021-era trades). Documented and warned at runtime; its old A/B is not clean.
+- `load_config(None)` falls back to `config/config.example.yaml`, so "default"
+  runs include that file's gates.
+
+### Changes that survived validation
+
+| Variant (full universe, 5y) | Trades | Win | PF | Mean R | Max losing streak |
+|---|---|---|---|---|---|
+| A. Original (5-day hold, tight structure stops) | 7460 | 45.4% | 1.06 | -0.016R | 15 |
+| B. + 7-day hold for Momentum/Trend Continuation | 7202 | 45.3% | 1.07 | -0.008R | 15 |
+| C. + stops never tighter than the 2-ATR stop | 6783 | **50.2%** | **1.09** | **+0.031R** | **11** |
+
+Each step improved in both halves (C: +0.027R early / +0.035R late, PF 1.08 / 1.11).
+
+- **Per-setup holding period.** 5-day vs 7-day caps: Momentum Continuation and
+  Trend Continuation improved with 7 days in both halves; Bullish Pullback got
+  worse; the rest were mixed. Only the consistent group was extended
+  (`risk.holding_days_by_strategy`).
+- **Minimum stop distance.** Structure stops sat a median 0.87 ATR from entry;
+  the tightest quintile (<0.71 ATR) was the only losing one (-0.22R). In every
+  one of the six strategies, stops <1.9 ATR had negative R and wider stops
+  positive R. Tight stops also got the largest positions and the highest R:R,
+  so the `risk_reward` score category was rewarding the worst trades. Support
+  Bounce (100% structure stops, median 0.74 ATR) went from 38.8% to 49.7% wins.
+- **Late-entry penalty for breakouts** (>2.5 ATR past the trigger). Only changes
+  the displayed confidence/score — nothing in the engine gates on it — so it
+  does not change backtest trade selection.
+
+### Tested and rejected (kept as-is on purpose)
+
+- **Cutting stale trades early** (exit on day 2-3 if still below entry): worse in
+  every variant and every strategy (+0.025R → +0.007..0.014R).
+- **Named indicator combos** (EMA+RS+RVOL, BB squeeze+ADX rising, RSI divergence
+  + liquidity sweep, ...): 4 of 5 did worse than trades without the combo.
+- **Holding through earnings:** higher mean R (+0.18 vs -0.02) but twice the
+  gap-through-stop rate (20% vs 10%) and a worst-1% of -23% vs -12%, and the
+  higher mean is plausibly survivorship-inflated. The live scanner keeps
+  avoiding earnings as tail-risk control.
+- **Tighter R:R gate:** raising `min_risk_reward` above ~1.5 made results worse
+  (2.0 → negative expectancy). 1.2 sits on a flat, robust plateau, as does the
+  RS-percentile gate (30-70).
+
+### Remaining weaknesses
+
+- The edge is thin: +0.031R per trade. Treat the scanner as a candidate filter
+  with explanations, not a signal to trade blindly.
+- Survivorship bias is structural: failed names (e.g. SIVB, FRC) have no
+  retrievable yfinance history, and some dead tickers (SBNY, SI) are now reused
+  by unrelated companies.
+- Support Bounce is still ~0R after the stop fix — the largest-volume setup with
+  no demonstrated edge; a candidate for removal that has not been A/B-tested yet.
+- Mean Reversion lost money in BULLISH regimes and Bullish Pullback in NEUTRAL
+  regimes (both halves, legacy stops) — regime-specific gating not yet tested.
+
+### Research tooling added (`research/`)
+
+`capture_trades` (per-trade feature snapshots, `--workers`, A/B overrides),
+`merge_captures`, `report_from_pickle` (R and $ metrics), `feature_importance`
+(importance, redundancy, interactions, per-regime), `exit_sweep`,
+`stop_comparison`, `walk_forward_screener`, `parameter_robustness`,
+`data_integrity`, `false_positive_log` (loser database with failure reasons).
+Run long captures in ~34-ticker chunks: this container kills long-lived
+background processes.
+
+## Overnight session summary (autonomous build) — earlier, superseded numbers
 
 This section is the executive summary requested at the end of an unattended,
-overnight build/test/validate session. Everything below is backed by an actual
-backtest run cited inline — nothing here is a plan or an intention.
+overnight build/test/validate session. Its performance numbers were produced by
+the pre-audit backtester (fills at the stop through gaps, RS/sector scored as
+neutral) and are superseded by the section above.
 
 ### WHAT I BUILT
 
