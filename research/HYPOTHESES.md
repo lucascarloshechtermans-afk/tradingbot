@@ -1,0 +1,50 @@
+# Research round 4 — pre-registered hypotheses (written 2026-09-26, before any result)
+
+## Data and cells (fixed before looking)
+- 966 US stocks (S&P 500 + S&P MidCap 400 + scanner lists), daily, split+dividend
+  adjusted, 2007-01 → 2026-09 (`research/bigdata.py`). Benchmarks SPY/QQQ/IWM/VIX/sector ETFs.
+- Tickers split once, seeded, stratified by sector: RESEARCH (486) / HOLDOUT (480).
+- Time split: ≤ 2021-12-31 / ≥ 2022-01-01.
+- Cells: DEV = research × ≤2021 (all exploration happens here) · VAL-T = research × ≥2022 ·
+  VAL-U = holdout × ≤2021 · FINAL = holdout × ≥2022 (looked at ONCE, at the very end).
+
+## Common rules
+- Signal on the close of day t, entry at the open of t+1 (+0.05% slippage), no look-ahead.
+- Eligible on day t: close ≥ $5, 20-day average dollar volume ≥ $10M, ≥ 260 bars of history.
+- Stop 2.5 ATR(14) below the entry (checked from the entry bar itself); exits: time exit at
+  the close after H ∈ {3, 5, 10, 20} bars; one open trade per ticker per hypothesis.
+- Metric: R per trade; EXCESS R = trade R minus the mean R of ALL eligible days of the same
+  ticker in the same calendar month with the same exit (a same-stock, same-time baseline);
+  t-stat computed on day-averaged excess (trades on the same day are not independent);
+  share of calendar years with positive excess; results split by market regime.
+- A hypothesis "passes DEV" if excess > 0 with t ≥ 3 and ≥ 70% of DEV years positive.
+
+## Hypotheses (signal on day t)
+Short-term reversal / dips
+- H01 LEADER_DIP: composite momentum rank ≥ 80, 5-day move ≤ −1 ATR
+- H02 LEADER_DIP_DEEP: H01 and close ≤ EMA21 − 1 ATR
+- H03 IBS_UPTREND: close > SMA200 and IBS = (close−low)/(high−low) < 0.15
+- H04 RSI2_UPTREND: close > SMA200 and RSI(2) < 10
+- H05 DOWN3_UPTREND: 3 consecutive lower closes and close > SMA200
+- H06 GAPDOWN_REVERSAL: open < prior low − 0.5 ATR, close > open, close > SMA200
+- H15 CAPITULATION: 5-day move ≤ −3 ATR and volume ≥ 2× 20-day average
+- H16 LEADER_PANIC_DAY: momentum rank ≥ 80 and 1-day move ≤ −2 ATR
+Momentum / breakout
+- H07 HIGH_52W: close at a 252-day closing high
+- H08 BREAKOUT_20D_VOL: close at a 20-day closing high and volume > 1.5× average
+- H09 MOMENTUM_TOP_DECILE: momentum rank ≥ 90 (sampled every 5th day)
+- H10 POCKET_PIVOT: up day with volume > max down-day volume of the prior 10 days, close > SMA50
+- H11 SQUEEZE_BREAKOUT: Bollinger width in the lowest 10% of 120 days (at t−1) and close > 20-day high
+- H12 NR7_INSIDE_UPTREND: narrowest range of 7 days and inside day, close > SMA50 (entry next open)
+Relative strength / sector
+- H13 RS_LEADS_PRICE: stock/SPY ratio at a 63-day high while close is ≥ 1 ATR below its 63-day high
+- H14 SECTOR_LEADER_DIP: stock's sector ETF in the top 3 by 1-month return and 5-day move ≤ −1 ATR
+Event proxies / calendar
+- H17 TURN_OF_MONTH_LEADERS: last trading day of the month and momentum rank ≥ 80
+- H18 GAP_UP_DRIFT: gap up > 2 ATR on volume ≥ 3× average, close in the top 25% of the day's range
+- H19 BASELINE: every 5th eligible day (the unconditional drift, for reference)
+
+## Afterwards (only for hypotheses that pass DEV)
+Confirmations, exits and stops refined on DEV only; parameter neighbourhoods; then VAL-T and
+VAL-U; the FINAL cell once; then a portfolio simulation (one account, max positions, daily
+ranking) and a block-bootstrap Monte Carlo.
