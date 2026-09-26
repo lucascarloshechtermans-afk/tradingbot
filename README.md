@@ -192,10 +192,24 @@ and, with the gate on, lists setups by momentum rank first.
 The backtest has no universe filter, the live scan does. Inside the gated
 set the `min_atr_pct: 3` part of it helps, checked point-in-time on ATR% at
 entry: our universe ATR% < 3 −0.005R (339 trades) vs >= 3 +0.202R (538);
-theirs +0.15R (64) vs +0.19R (584). With it, expect ~3 setups/week from the
-134-ticker list, fewer when the mega-cap cap (> $200B, a today-only
-snapshot that can't be backtested) also bites — the first live scan
-(2026-09-26) had 45/134 tickers pass the universe filter and 1 setup.
+theirs +0.15R (64) vs +0.19R (584). The first live scan with the old
+134-ticker list (2026-09-26) had only 45/134 pass the universe filter and
+gave 1 setup, so on request:
+
+- `DEFAULT_UNIVERSE` now also holds their watchlist (minus ZI/CYBR): 190 tickers.
+- `universe.max_market_cap` ($200B) is off — it removed 8 of the 27
+  strongest-momentum names (AMD, MU, AMAT, LRCX, PANW, ARM, MRVL, INTC) and
+  can't be backtested (only today's market cap is known).
+
+Gated backtest on the 190-ticker list (ranked against all 190), same window:
+
+| | trades/wk | win % | mean R | PF (R) | H1 / H2 | mean R 2023 / 24 / 25 / 26 | 1 account CAGR / max DD |
+|---|---|---|---|---|---|---|---|
+| all gated trades | 6.2 | 51.4 | +0.109 | 1.29 | +0.096 / +0.122 | +0.10 / +0.10 / +0.13 / +0.10 | 16.8% / 13.7% |
+| ATR% >= 3 at entry (≈ live) | 4.5 | 53.3 | +0.143 | 1.39 | +0.142 / +0.144 | +0.17 / +0.15 / +0.13 / +0.12 | 16.6% / 11.0% |
+
+The live scan still applies `min_price` 10 and `min_market_cap` $2B, which
+drop some of the added small caps (OCGN, BBAI, ...) that the backtest kept.
 
     # our scanner on their watchlist (gates off = the "before" rows), then the comparison
     python -m research.capture_trades --period 5y --tickers <their watchlist> --min-momentum-pct -1 --min-efficiency -1 --out ours_on_theirs.pkl
