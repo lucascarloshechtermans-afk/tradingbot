@@ -109,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
             sector_close=sector_closes.get(sector_etf) if sector_etf else None,
             sector_rank_df=sector_rank_df, sector_trend_df=sector_trend_df,
         )
-        signal_fn, stop_fn, target_fn, holding_days_fn = make_screener_functions(
+        signal_fn, stop_fn, target_fn, holding_days_fn, entry_filter_fn = make_screener_functions(
             cache_obj, config, {}, {}, {}, {}, {},
             regime_series=regime_series, rs_rank_series=rs_rank_series,
         )
@@ -123,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
             max_position_pct=config.risk.max_position_pct,
             max_holding_days=config.risk.max_holding_days,
             holding_days_fn=holding_days_fn,
+            entry_filter_fn=entry_filter_fn,
         )
         for idx, w in enumerate(windows, start=1):
             windows_by_index[idx].append(w)

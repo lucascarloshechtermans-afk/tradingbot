@@ -39,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-holding-days", type=int, default=None, help="Override config.risk.max_holding_days, for A/B comparison")
     parser.add_argument("--min-rr", type=float, default=None, help="Override config.gates.min_risk_reward")
     parser.add_argument("--legacy-stops", action="store_true", help="Allow structure stops tighter than the ATR stop (pre-audit behavior), for A/B comparison")
+    parser.add_argument("--max-entry-gap-atr", type=float, default=None, help="Override config.gates.max_entry_gap_atr (no-chase buy-limit); use -1 to disable")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -50,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
         config.gates.min_risk_reward = args.min_rr
     if args.legacy_stops:
         config.risk.allow_tight_structure_stop = True
+    if args.max_entry_gap_atr is not None:
+        config.gates.max_entry_gap_atr = None if args.max_entry_gap_atr < 0 else args.max_entry_gap_atr
     cache = DiskCache(cache_dir=config.data.cache_dir, ttl_hours=config.data.cache_ttl_hours)
     provider: DataProvider = YFinanceProvider(cache=cache, max_retries=config.data.max_retries, retry_backoff_seconds=config.data.retry_backoff_seconds)
     tickers = args.tickers.split(",") if args.tickers else DEFAULT_UNIVERSE

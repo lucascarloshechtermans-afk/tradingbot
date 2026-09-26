@@ -287,7 +287,16 @@ def make_screener_functions(
     def holding_days_fn(history_before_entry: pd.DataFrame) -> int | None:
         return holding_days_by_bar.get(len(history_before_entry))
 
-    return signal_fn, stop_fn, target_fn, holding_days_fn
+    def entry_filter_fn(history_before_entry: pd.DataFrame, open_price: float) -> bool:
+        if gates.max_entry_gap_atr is None:
+            return True
+        ctx = cache.get(history_before_entry)  # the signal bar's context, already cached
+        atr = ctx.atr14.iloc[-1]
+        if pd.isna(atr) or atr <= 0:
+            return True
+        return open_price <= ctx.last_close + gates.max_entry_gap_atr * atr
+
+    return signal_fn, stop_fn, target_fn, holding_days_fn, entry_filter_fn
 
 
 def backtest_ticker(
@@ -316,7 +325,7 @@ def backtest_ticker(
     rr_by_bar: dict[int, float] = {}
     overext_by_bar: dict[int, int] = {}
     feature_by_bar: dict[int, dict] | None = {} if capture_features else None
-    signal_fn, stop_fn, target_fn, holding_days_fn = make_screener_functions(
+    signal_fn, stop_fn, target_fn, holding_days_fn, entry_filter_fn = make_screener_functions(
         cache, config, attempted_strategy_by_bar, score_by_bar, regime_by_bar, rr_by_bar,
         overext_by_bar,
         min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
@@ -332,6 +341,7 @@ def backtest_ticker(
         max_position_pct=config.risk.max_position_pct,
         max_holding_days=config.risk.max_holding_days,
         holding_days_fn=holding_days_fn,
+        entry_filter_fn=entry_filter_fn,
     )
 
     trade_strategies = []

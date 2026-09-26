@@ -36,6 +36,7 @@ SignalFn = Callable[[pd.DataFrame], bool]
 StopFn = Callable[[pd.DataFrame, float], float]
 TargetFn = Callable[[pd.DataFrame, float, float], float]
 HoldingDaysFn = Callable[[pd.DataFrame], "int | None"]
+EntryFilterFn = Callable[[pd.DataFrame, float], bool]
 
 
 def run_backtest(
@@ -50,6 +51,7 @@ def run_backtest(
     max_position_pct: float = 20.0,
     max_holding_days: int | None = None,
     holding_days_fn: HoldingDaysFn | None = None,
+    entry_filter_fn: EntryFilterFn | None = None,
 ) -> BacktestResult:
     """Event-driven, single-position backtester with no look-ahead bias.
 
@@ -86,6 +88,10 @@ def run_backtest(
        `history.iloc[:i]` stop_fn/target_fn see) and may return a per-trade cap
        that overrides `max_holding_days` for that trade only -- e.g. a longer
        horizon for trend-following setups than for mean-reversion ones.
+    8. `entry_filter_fn(history.iloc[:i], raw_open_of_bar_i)`, when given, can
+       cancel the pending entry at the open -- models a buy-limit order placed
+       before the session (e.g. "no fill if it gaps up too far"). It only sees
+       the entry bar's OPEN, which is known at the moment the order would fill.
     """
     n = len(history)
     equity = initial_capital
@@ -102,8 +108,14 @@ def run_backtest(
         bar = history.iloc[i]
 
         if pending_entry and not in_position:
-            entry_price = float(bar["open"]) * (1 + slippage_pct / 100)
             history_before_entry = history.iloc[:i]
+            if entry_filter_fn is not None and not entry_filter_fn(history_before_entry, float(bar["open"])):
+                # the order is a buy-limit placed before the open; when the
+                # open is already above the limit it doesn't fill, no trade
+                pending_entry = False
+                equity_curve_values.append(equity)
+                continue
+            entry_price = float(bar["open"]) * (1 + slippage_pct / 100)
             stop = stop_fn(history_before_entry, entry_price)
             target = target_fn(history_before_entry, entry_price, stop)
 

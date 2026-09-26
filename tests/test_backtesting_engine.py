@@ -322,6 +322,38 @@ def test_holding_days_fn_returning_none_falls_back_to_max_holding_days():
     assert result.trades[0].holding_bars == 5
 
 
+def test_entry_filter_fn_can_cancel_a_gapped_up_entry():
+    idx = pd.date_range("2024-01-01", periods=6, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [100, 110, 100, 100, 100, 100],  # bar 1 gaps up 10 above the signal close
+            "high": [101, 111, 101, 101, 101, 101],
+            "low": [99, 109, 99, 99, 99, 99],
+            "close": [100, 110, 100, 100, 100, 100],
+            "volume": [1_000_000] * 6,
+        },
+        index=idx,
+    )
+
+    def signal_once(h):
+        return len(h) == 1
+
+    def no_chase(history_before_entry, open_price):
+        return open_price <= float(history_before_entry["close"].iloc[-1]) + 2
+
+    result = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, entry_filter_fn=no_chase,
+    )
+    assert result.trades == []
+
+    allowed = run_backtest(
+        df, signal_once, lambda h, e: e - 50, lambda h, e, s: e + 50,
+        slippage_pct=0.0, commission_per_trade=0.0, entry_filter_fn=lambda h, o: True,
+    )
+    assert len(allowed.trades) == 1
+
+
 def test_max_holding_days_none_disables_time_exit():
     idx = pd.date_range("2024-01-01", periods=10, freq="D")
     df = pd.DataFrame(

@@ -217,11 +217,16 @@ class GatesConfig:
     # on point-in-time EPS-growth-by-report-date data -- see
     # config.example.yaml's comment for the full caveat.
     min_earnings_growth: float | None = None
+    # No-chase entry rule: the entry is a buy-limit at (signal close + this many
+    # ATRs); if the next session opens above it, no fill. None disables.
+    max_entry_gap_atr: float | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "GatesConfig":
         meg = raw.get("min_earnings_growth", None)
+        mega = raw.get("max_entry_gap_atr", None)
         return cls(
+            max_entry_gap_atr=float(mega) if mega is not None else None,
             min_rs_percentile=float(raw.get("min_rs_percentile", 50.0)),
             rs_window=int(raw.get("rs_window", 60)),
             regime_gate_enabled=bool(raw.get("regime_gate_enabled", True)),
