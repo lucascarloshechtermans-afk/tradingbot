@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import argparse
 import logging
+import multiprocessing
 import sys
 import time
 from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor
 
 import pandas as pd
 
@@ -397,9 +399,13 @@ def build_gate_tables(provider: DataProvider, config: AppConfig, histories: dict
     return regime_series, rs_rank_table, spy_close, qqq_close, sector_closes, sector_rank_df, sector_trend_df
 
 
+def _backtest_ticker_job(job: dict):
+    return backtest_ticker(**job)
+
+
 def run_universe_backtest(
     provider: DataProvider, config: AppConfig, tickers: list[str], period: str, min_score: float | None = None,
-    capture_features: bool = False,
+    capture_features: bool = False, workers: int = 1,
 ):
     all_trades = []
     all_trade_strategies = []
@@ -461,17 +467,33 @@ def run_universe_backtest(
         provider, config, histories, period=period
     )
 
-    for i, (ticker, history) in enumerate(histories.items(), start=1):
-        rs_rank_series = rs_rank_table[ticker] if ticker in rs_rank_table.columns else None
+    jobs = []
+    for ticker, history in histories.items():
         sector_name = sector_by_ticker.get(ticker)
         sector_etf = SECTOR_ETF_MAP.get(sector_name) if sector_name else None
-        result, trade_strategies, trade_scores, trade_regimes, trade_rrs, trade_overexts, trade_features = backtest_ticker(
-            ticker, history, config, min_score=min_score, regime_series=regime_series, rs_rank_series=rs_rank_series,
+        jobs.append(dict(
+            ticker=ticker, history=history, config=config, min_score=min_score, regime_series=regime_series,
+            rs_rank_series=rs_rank_table[ticker] if ticker in rs_rank_table.columns else None,
             earnings_growth=earnings_growth_by_ticker.get(ticker), capture_features=capture_features,
             spy_close=spy_close, qqq_close=qqq_close, sector_name=sector_name,
             sector_close=sector_closes.get(sector_etf) if sector_etf else None,
             sector_rank_df=sector_rank_df, sector_trend_df=sector_trend_df,
-        )
+        ))
+
+    # Each ticker's walk-forward loop is independent once the shared gate
+    # tables above exist, so it parallelizes cleanly across processes. Results
+    # are consumed in the original ticker order either way, so the output is
+    # identical to a serial run.
+    if workers > 1:
+        executor = ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("fork"))
+        results_iter = (f.result() for f in [executor.submit(_backtest_ticker_job, job) for job in jobs])
+    else:
+        executor = None
+        results_iter = (_backtest_ticker_job(job) for job in jobs)
+
+    for i, (job, job_result) in enumerate(zip(jobs, results_iter), start=1):
+        ticker = job["ticker"]
+        result, trade_strategies, trade_scores, trade_regimes, trade_rrs, trade_overexts, trade_features = job_result
         for trade in result.trades:
             trade.ticker = ticker  # not a Trade dataclass field -- attached here so
             # research scripts (exit-day sweep, stop-structure comparison) can
@@ -492,6 +514,9 @@ def run_universe_backtest(
              "total_return_pct": (result.final_equity / result.initial_capital - 1) * 100}
         )
         logger.info("[%d/%d] %s: %d trades, %d wins", i, len(histories), ticker, len(closed), wins)
+
+    if executor is not None:
+        executor.shutdown()
 
     return (
         all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, all_trade_overexts,
@@ -719,6 +744,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-regime-gate", action="store_true", help="Disable the market-regime hard gate (config.gates.regime_gate_enabled), for A/B comparison")
     parser.add_argument("--no-rs-gate", action="store_true", help="Disable the RS-vs-universe hard gate (sets min_rs_percentile to 0), for A/B comparison")
     parser.add_argument("--min-rr", type=float, default=None, help="Override config.gates.min_risk_reward")
+    parser.add_argument(
+        "--workers", type=int, default=1,
+        help="Parallelize the per-ticker walk-forward loop across this many processes (each ticker is independent "
+             "once the shared regime/RS/sector tables are built). Default 1 (serial). Try os.cpu_count().",
+    )
     return parser
 
 
@@ -744,7 +774,7 @@ def main(argv: list[str] | None = None) -> int:
 
     started = time.time()
     all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs, all_trade_overexts, per_ticker_summaries, errors, _all_trade_features = run_universe_backtest(
-        provider, config, tickers, args.period, min_score=args.min_score
+        provider, config, tickers, args.period, min_score=args.min_score, workers=args.workers
     )
     logger.info("done in %.1fs", time.time() - started)
 

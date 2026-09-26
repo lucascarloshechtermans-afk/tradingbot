@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tickers", type=str, default=None)
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--out", type=str, required=True)
+    parser.add_argument("--workers", type=int, default=1, help="Parallelize the per-ticker loop across this many processes")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -46,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     (
         all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs,
         all_trade_overexts, per_ticker_summaries, errors, all_trade_features,
-    ) = run_universe_backtest(provider, config, tickers, args.period, min_score=None, capture_features=True)
+    ) = run_universe_backtest(provider, config, tickers, args.period, min_score=None, capture_features=True, workers=args.workers)
     logger.info("done in %.1fs — %d trades, %d errors", time.time() - started, len(all_trades), len(errors))
 
     payload = {
