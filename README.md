@@ -44,9 +44,17 @@ system.
 |---|---|---|---|---|---|
 | A. Original (5-day hold, tight structure stops) | 7460 | 45.4% | 1.06 | -0.016R | 15 |
 | B. + 7-day hold for Momentum/Trend Continuation | 7202 | 45.3% | 1.07 | -0.008R | 15 |
-| C. + stops never tighter than the 2-ATR stop | 6783 | **50.2%** | **1.09** | **+0.031R** | **11** |
+| C. + stops never tighter than the 2-ATR stop | 6783 | 50.2% | 1.09 | +0.031R | 11 |
+| D. + no-chase entry (skip if it opens >0.5 ATR above the signal close) — **current default** | 6469 | **50.6%** | **1.11** | **+0.038R** | — |
 
-Each step improved in both halves (C: +0.027R early / +0.035R late, PF 1.08 / 1.11).
+Each step improved in both halves (D: +0.034R early / +0.042R late, PF 1.10 / 1.12;
+net P&L $8,370 (A) → $11,166 (D) despite ~1,000 fewer trades).
+
+- **No-chase entry.** When the session after a signal opened >0.5 ATR above the
+  signal close, those trades lost money in both halves (worst for dip-buying
+  setups, where the gap erases the favorable entry). The entry is now a buy-limit
+  at close + 0.5 ATR (`gates.max_entry_gap_atr`); the scanner and dashboard show
+  that "max entry" price.
 
 - **Per-setup holding period.** 5-day vs 7-day caps: Momentum Continuation and
   Trend Continuation improved with 7 days in both halves; Bullish Pullback got

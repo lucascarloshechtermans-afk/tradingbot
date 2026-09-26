@@ -219,12 +219,15 @@ class GatesConfig:
     min_earnings_growth: float | None = None
     # No-chase entry rule: the entry is a buy-limit at (signal close + this many
     # ATRs); if the next session opens above it, no fill. None disables.
-    max_entry_gap_atr: float | None = None
+    # Full-universe A/B (on top of the minimum-stop fix): better in both halves
+    # of the sample on win rate, mean R, profit factor and net $ -- early
+    # +0.027R -> +0.034R, late +0.035R -> +0.042R; overall PF 1.09 -> 1.11.
+    max_entry_gap_atr: float | None = 0.5
 
     @classmethod
     def from_dict(cls, raw: dict) -> "GatesConfig":
         meg = raw.get("min_earnings_growth", None)
-        mega = raw.get("max_entry_gap_atr", None)
+        mega = raw.get("max_entry_gap_atr", 0.5)
         return cls(
             max_entry_gap_atr=float(mega) if mega is not None else None,
             min_rs_percentile=float(raw.get("min_rs_percentile", 50.0)),
