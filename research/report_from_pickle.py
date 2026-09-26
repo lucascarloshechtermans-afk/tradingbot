@@ -36,11 +36,21 @@ def main(argv: list[str] | None = None) -> int:
         cum_pnl = pd.Series([args.initial_capital])
     metrics = compute_metrics(closed, cum_pnl, initial_capital=args.initial_capital)
 
+    def r_multiple(t) -> float | None:
+        risk = t.shares * (t.entry_price - t.stop)
+        return t.pnl / risk if risk > 0 else None
+
+    r_values = [r for r in (r_multiple(t) for t in closed) if r is not None]
+    mean_r = sum(r_values) / len(r_values) if r_values else float("nan")
+    total_usd = sum(t.pnl for t in closed)
+
     label = args.label or args.trades
     print(f"\n=== {label} ({len(closed)} closed trades) ===")
     print(f"Win rate:        {metrics.win_rate_pct:.1f}%")
-    print(f"Profit factor:   {metrics.profit_factor}")
-    print(f"Expectancy:      {metrics.expectancy:+.2f}%")
+    print(f"Profit factor:   {metrics.profit_factor}  ($-weighted, reflects real position sizing)")
+    print(f"Mean R/trade:    {mean_r:+.3f}R  (risk-adjusted: $ P&L / $ risked at entry)")
+    print(f"Total net P&L:   ${total_usd:,.0f}  (sum over per-ticker $10k accounts)")
+    print(f"Expectancy:      {metrics.expectancy:+.2f}%  (% of position -- ignores sizing, compare with care)")
     print(f"Avg win/loss:    {metrics.avg_win_pct:.2f}% / {metrics.avg_loss_pct:.2f}%")
     print(f"Avg hold:        {metrics.avg_holding_days:.1f} days")
     print(f"Max cons losses: {metrics.max_consecutive_losses}")
@@ -50,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     by_strategy = defaultdict(list)
     for t, s in zip(closed, strategies[: len(closed)]):
         by_strategy[s].append(t)
-    print(f"\n{'Strategy':<26}{'Trades':<9}{'Win rate':<11}{'Expectancy'}")
+    print(f"\n{'Strategy':<26}{'Trades':<9}{'Win rate':<11}{'Mean R':<10}{'Net $':<10}{'Expectancy %'}")
     for strategy, strat_trades in sorted(by_strategy.items(), key=lambda kv: -len(kv[1])):
         wins = [t for t in strat_trades if t.pnl > 0]
         losses = [t for t in strat_trades if t.pnl < 0]
@@ -59,7 +69,10 @@ def main(argv: list[str] | None = None) -> int:
         avg_w = sum(t.pnl_pct for t in wins) / len(wins) if wins else 0
         avg_l = sum(t.pnl_pct for t in losses) / len(losses) if losses else 0
         expectancy = (len(wins) / n * avg_w) + (len(losses) / n * avg_l) if n else 0
-        print(f"{strategy:<26}{n:<9}{f'{wr:.1f}%':<11}{expectancy:+.2f}%")
+        rs = [r for r in (r_multiple(t) for t in strat_trades) if r is not None]
+        strat_r = sum(rs) / len(rs) if rs else float("nan")
+        strat_usd = sum(t.pnl for t in strat_trades)
+        print(f"{strategy:<26}{n:<9}{f'{wr:.1f}%':<11}{f'{strat_r:+.3f}':<10}{f'{strat_usd:,.0f}':<10}{expectancy:+.2f}%")
     print()
     return 0
 
