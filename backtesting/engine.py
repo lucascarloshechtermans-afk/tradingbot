@@ -65,6 +65,15 @@ def run_backtest(
     5. If both stop and target are breached within the same bar, the STOP is
        assumed to have been hit first (the conservative assumption — we cannot
        know intrabar order from daily OHLC data).
+    5b. A stop is a market order once triggered: if the bar's OPEN already gapped
+       through the stop (open <= stop for a long), the fill happens at that worse
+       open price, not at the theoretical stop level — a stop resting at $100
+       cannot be filled at $100 when the market opens at $95. The same applies,
+       symmetrically, to a target gapping through on the open (open >= target):
+       real brokers still fill a triggered market/marketable-limit exit at the
+       open when it's already better than the target, so pretending the fill
+       happened exactly at the target would understate gains just as pretending
+       a blown-through stop filled at the stop would overstate them.
     6. `max_holding_days`, when set, force-closes a position at that bar's CLOSE
        once it has been held for that many BARS (trading days, not calendar days —
        a weekend never counts) without hitting its stop or target — this is what
@@ -124,10 +133,17 @@ def run_backtest(
 
             if hit_stop or hit_target or hit_time_limit or is_last_bar:
                 if hit_stop:
-                    exit_price = trade.stop * (1 - slippage_pct / 100)
+                    # A stop becomes a market order once triggered: if the bar's
+                    # open already gapped through it, the fill is at that worse
+                    # open, not at the untouched stop level (see docstring 5b).
+                    base_price = min(float(bar["open"]), trade.stop)
+                    exit_price = base_price * (1 - slippage_pct / 100)
                     reason = "stop"
                 elif hit_target:
-                    exit_price = trade.target * (1 - slippage_pct / 100)
+                    # Symmetric: a gap open beyond the target is filled at that
+                    # (better) open rather than capped at the target price.
+                    base_price = max(float(bar["open"]), trade.target)
+                    exit_price = base_price * (1 - slippage_pct / 100)
                     reason = "target"
                 elif hit_time_limit:
                     exit_price = float(bar["close"])
