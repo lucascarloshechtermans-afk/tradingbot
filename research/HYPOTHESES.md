@@ -48,3 +48,36 @@ Event proxies / calendar
 Confirmations, exits and stops refined on DEV only; parameter neighbourhoods; then VAL-T and
 VAL-U; the FINAL cell once; then a portfolio simulation (one account, max positions, daily
 ranking) and a block-bootstrap Monte Carlo.
+
+---
+
+# Round 4b — earnings-event hypotheses (written 2026-09-26, before the earnings data was looked at)
+
+Motivation (from DEV so far, recorded before 4b): price-only dip signals carry a real but
+small edge; within a day, which dip you pick barely matters (per-feature spread ≈ ±0.01R),
+while the market regime dominates. A different information source is needed, so we test
+the best-documented swing effect in the literature: post-earnings drift.
+
+## Data
+- Earnings dates, time of day and EPS surprise % from Yahoo (`research/earnings_data.py`).
+- Same stocks, same cells (DEV/VAL-T/VAL-U/FINAL), same common rules and metrics as above.
+  Extra hold: 40 bars (drift is documented over 1–3 months).
+
+## Reaction day E (fixed rule)
+- report hour ≥ 16:00 NY → E = next session; hour < 09:30 → E = the report date's session;
+  any other hour (incl. unknown 00:00) → whichever of {date, next session} has the larger
+  |open gap| in ATR.
+- EAR = (close_E − close_{E−1}) / ATR_{E−1}  (earnings-announcement return in ATR units).
+- All signals are on the close of E or later; entry is the next open (the gap is never traded).
+
+## Hypotheses
+- E01 EARNINGS_GAP_UP: EAR ≥ +2 and close_E in the upper half of E's range
+- E02 SURPRISE_POSITIVE: surprise ≥ +10% and EAR ≥ 0
+- E03 SURPRISE_AND_GAP: surprise ≥ +10% and EAR ≥ +1
+- E04 LEADER_EARNINGS_FLUSH: EAR ≤ −2 and momentum rank (at E−1) ≥ 80  (overreaction fade)
+- E05 PRE_EARNINGS_RUNUP: enter the open 5 sessions before E, exit at the close of E−1
+  (only for reports whose date was already in the data ≥ 10 sessions earlier is NOT checkable
+  with this data → accepted look-ahead on the date only; flagged as such)
+- E06 DRIFT_AFTER_HOLD: E03 and close_{E+5} ≥ close_E → signal on the close of E+5
+- E07 NEGATIVE_SURPRISE (sanity, expected < 0): surprise < 0 and EAR ≤ −1
+Pass criterion unchanged (excess > 0, t ≥ 3, ≥ 70% DEV years positive).
