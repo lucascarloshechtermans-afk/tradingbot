@@ -54,3 +54,11 @@ def test_book_goes_to_cash_below_spy_200d_and_tracks_changes():
     assert len(b_up.picks) == 5 and {p.status for p in b_up.picks} <= {"NIEUW", "BLIJFT"}
     assert b_up.next_rebalance == pd.Timestamp("2026-03-31")
     assert set(b_up.preview_in) <= {p.ticker for p in b_up.preview}
+
+
+def test_per_ticker_min_price_keeps_cheap_small_caps_out():
+    c, v = _panel()
+    c["T29"] = c["T29"] * 30 / c["T29"].iloc[-1]   # strongest trend, but priced at $30
+    assert "T29" in [t for t, *_ in rank_at(c, v, len(c) - 1, top_n=5)]
+    ranked = [t for t, *_ in rank_at(c, v, len(c) - 1, top_n=5, min_price={"T29": 50.0})]
+    assert "T29" not in ranked

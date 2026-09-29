@@ -35,12 +35,26 @@ TOP_N = 20
 MIN_PRICE = 5.0
 MIN_DOLLAR_VOLUME = 10e6
 MEMBERS_PATH = Path(__file__).resolve().parent.parent / "data" / "sp1000_members.json"
+SMALL_PATH = Path(__file__).resolve().parent.parent / "data" / "sp600_members.json"
 
 
 def load_universe(path: Path = MEMBERS_PATH) -> dict[str, str | None]:
     """ticker -> GICS sector for the S&P 500 + 400 members."""
     with open(path) as f:
         return dict(json.load(f)["members"])
+
+
+def load_small_caps(path: Path = SMALL_PATH) -> dict[str, str | None]:
+    """ticker -> GICS sector for the S&P SmallCap 600 members (not in the 500/400)."""
+    with open(path) as f:
+        return dict(json.load(f)["members"])
+
+
+def _min_price(closes: pd.DataFrame, min_price) -> pd.Series | float:
+    """A scalar, or a per-ticker Series (e.g. $50 for small caps, $5 otherwise)."""
+    if isinstance(min_price, (pd.Series, dict)):
+        return pd.Series(min_price).reindex(closes.columns).fillna(MIN_PRICE)
+    return MIN_PRICE if min_price is None else float(min_price)
 
 
 @dataclass
@@ -68,6 +82,7 @@ class MomentumBook:
     next_rebalance: pd.Timestamp | None = None
     eligible_count: int = 0
     universe_size: int = 0
+    min_price: dict = field(default_factory=dict)   # per-ticker minimum price overrides (small caps)
 
 
 def naive_day(ts) -> pd.Timestamp:
@@ -93,7 +108,8 @@ def month_end_rows(index: pd.DatetimeIndex) -> list[int]:
     return rows
 
 
-def rank_at(closes: pd.DataFrame, volumes: pd.DataFrame, row: int, top_n: int = TOP_N) -> list[tuple[str, float, float, float]]:
+def rank_at(closes: pd.DataFrame, volumes: pd.DataFrame, row: int, top_n: int = TOP_N,
+            min_price=None) -> list[tuple[str, float, float, float]]:
     """[(ticker, mom_12_1 %, ret_1m %, close)] best first, using data up to `row`."""
     if row < LOOKBACK:
         return []
@@ -103,20 +119,20 @@ def rank_at(closes: pd.DataFrame, volumes: pd.DataFrame, row: int, top_n: int = 
     count = c.notna().sum()
     mom = c.iloc[-1 - SKIP] / c.iloc[-1 - LOOKBACK] - 1
     r1m = last / c.iloc[-1 - SKIP] - 1
-    ok = (last >= MIN_PRICE) & (dv >= MIN_DOLLAR_VOLUME) & (count >= LOOKBACK + 1) & mom.notna() & np.isfinite(mom)
+    ok = (last >= _min_price(closes, min_price)) & (dv >= MIN_DOLLAR_VOLUME) & (count >= LOOKBACK + 1) & mom.notna() & np.isfinite(mom)
     ranked = mom[ok].sort_values(ascending=False).iloc[:top_n]
     return [(t, float(m * 100), float(r1m[t] * 100), float(last[t])) for t, m in ranked.items()]
 
 
-def eligible_count_at(closes: pd.DataFrame, volumes: pd.DataFrame, row: int) -> int:
+def eligible_count_at(closes: pd.DataFrame, volumes: pd.DataFrame, row: int, min_price=None) -> int:
     c = closes.iloc[: row + 1]
     last = c.iloc[-1]
     dv = (c * volumes.iloc[: row + 1]).iloc[-20:].mean()
-    return int(((last >= MIN_PRICE) & (dv >= MIN_DOLLAR_VOLUME) & (c.notna().sum() >= LOOKBACK + 1)).sum())
+    return int(((last >= _min_price(closes, min_price)) & (dv >= MIN_DOLLAR_VOLUME) & (c.notna().sum() >= LOOKBACK + 1)).sum())
 
 
 def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series, sectors: dict[str, str | None],
-               top_n: int = TOP_N) -> MomentumBook:
+               top_n: int = TOP_N, min_price=None) -> MomentumBook:
     """closes/volumes: date x ticker (split+dividend adjusted closes)."""
     closes = closes.sort_index()
     volumes = volumes.reindex_like(closes)
@@ -131,8 +147,8 @@ def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series
 
     as_of, official, exits, invested = None, [], [], False
     if ends:
-        cur = rank_at(closes, volumes, ends[-1], top_n)
-        prev_rows = rank_at(closes, volumes, ends[-2], top_n) if len(ends) >= 2 else []
+        cur = rank_at(closes, volumes, ends[-1], top_n, min_price)
+        prev_rows = rank_at(closes, volumes, ends[-2], top_n, min_price) if len(ends) >= 2 else []
         prev = {t for t, *_ in prev_rows}
         as_of = closes.index[ends[-1]]
         invested = bool(spy_ok.iloc[ends[-1]])
@@ -140,7 +156,7 @@ def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series
         exits = sorted(prev - {t for t, *_ in cur})
     last_row = len(closes) - 1
     prev_now = {p.ticker for p in official}
-    pv_rows = rank_at(closes, volumes, last_row, top_n)
+    pv_rows = rank_at(closes, volumes, last_row, top_n, min_price)
     preview = picks(pv_rows, prev_now)
     pv_set = {t for t, *_ in pv_rows}
     last_date = closes.index[-1] if len(closes) else None
@@ -151,7 +167,7 @@ def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series
         as_of=as_of, invested=invested, picks=official, exits=exits, preview_date=last_date, preview=preview,
         preview_in=sorted(pv_set - prev_now), preview_out=sorted(prev_now - pv_set),
         spy_above_200_now=bool(spy_ok.iloc[-1]) if len(spy_ok) else None, next_rebalance=next_reb,
-        eligible_count=eligible_count_at(closes, volumes, last_row) if len(closes) else 0, universe_size=closes.shape[1],
+        eligible_count=eligible_count_at(closes, volumes, last_row, min_price) if len(closes) else 0, universe_size=closes.shape[1],
     )
 
 

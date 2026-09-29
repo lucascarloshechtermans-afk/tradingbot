@@ -124,6 +124,8 @@ portfolio:                   # README "Research round 6": three price-only syste
   momentum_top_n: 20
   dip_risk_pct_of_sleeve: 1.0  # 1% of the 40% sleeve = 0.4% of the account per dip trade (halved below SPY 200d)
   dip_max_positions: 10
+  include_small_caps: true     # + S&P SmallCap 600 in momentum / breakouts (tested: lowered results, see README round 8)
+  small_cap_min_price: 50      # small caps only at this share price or higher
   # presets: option 1 = 100/0/0, option 2 = 0/100/0, option 3 = 50/50/0, option 4 = 0/0/100, option 5 = 40/40/20
 
 earnings:

@@ -550,17 +550,25 @@ def find_momentum_book(provider: DataProvider, config: AppConfig, spy: pd.DataFr
     none = (None, None, None, {})
     if spy is None or spy.empty:
         return none
-    from analysis.momentum_portfolio import build_book, load_universe
+    from analysis.momentum_portfolio import MIN_PRICE, build_book, load_small_caps, load_universe
 
     try:
         sectors = load_universe()
         for t in DEFAULT_UNIVERSE:
             sectors.setdefault(t, (extra_sectors or {}).get(t))
+        min_price: dict[str, float] = {}
+        if config.portfolio.include_small_caps:
+            for t, sec in load_small_caps().items():
+                if t not in sectors:
+                    sectors[t] = f"{sec or '?'} (small cap)"
+                    min_price[t] = max(config.portfolio.small_cap_min_price, MIN_PRICE)
         spy_close = _naive_close(spy)
         closes, volumes = provider.get_universe_closes(sorted(sectors), latest_session=spy_close.index[-1])
         if closes.empty:
             return none
-        book = build_book(closes, volumes, spy_close, sectors, top_n=config.portfolio.momentum_top_n)
+        book = build_book(closes, volumes, spy_close, sectors, top_n=config.portfolio.momentum_top_n,
+                          min_price=min_price or None)
+        book.min_price = min_price
         return book, closes, volumes, sectors
     except NotImplementedError:
         logger.info("momentum book skipped: this data provider has no bulk universe download")
@@ -571,7 +579,7 @@ def find_momentum_book(provider: DataProvider, config: AppConfig, spy: pd.DataFr
 
 
 def find_breakouts(provider: DataProvider, config: AppConfig, closes, volumes, spy: pd.DataFrame | None,
-                   sectors: dict, held: set[str]) -> tuple[list, list]:
+                   sectors: dict, held: set[str], book_min_price: dict | None = None) -> tuple[list, list]:
     """LEADER BREAKOUTs today and leaders close to one (analysis/leader_breakout.py),
     each with full OHLC (ATR stop) and a chart read. ([(item, read)], [(item, read)])."""
     if closes is None or closes.empty or spy is None:
@@ -580,7 +588,7 @@ def find_breakouts(provider: DataProvider, config: AppConfig, closes, volumes, s
     from analysis.leader_breakout import attach_daily, find_leader_breakouts, prioritize_breakouts
 
     try:
-        outs, near, bull = find_leader_breakouts(closes, volumes, _naive_close(spy), sectors)
+        outs, near, bull = find_leader_breakouts(closes, volumes, _naive_close(spy), sectors, min_price=book_min_price or None)
     except Exception as exc:  # noqa: BLE001 - must never break the scan
         logger.warning("leader breakouts failed: %s", exc)
         return [], []
@@ -731,7 +739,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     held = {p.ticker for p in book.picks} if book is not None and book.invested and config.portfolio.momentum_pct > 0 else set()
     leader_dips = prioritize(leader_dips, held, config.portfolio.dip_max_positions)
     breakouts, near_breakouts = find_breakouts(provider, config, mom_closes, mom_volumes, benchmarks.get("spy"),
-                                               mom_sectors, held)
+                                               mom_sectors, held, getattr(book, "min_price", None))
     if config.portfolio.momentum_pct <= 0:
         book = None
     return ScanRun(

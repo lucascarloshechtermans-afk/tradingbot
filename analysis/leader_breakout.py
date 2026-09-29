@@ -64,14 +64,15 @@ class LeaderBreakout:
 
 
 def find_leader_breakouts(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series,
-                          sectors: dict[str, str | None] | None = None) -> tuple[list[LeaderBreakout], list[LeaderBreakout], bool]:
+                          sectors: dict[str, str | None] | None = None,
+                          min_price=None) -> tuple[list[LeaderBreakout], list[LeaderBreakout], bool]:
     """(breakouts today, leaders within NEAR_PCT of their 50-day closing high, spy_above_200)."""
     sectors = sectors or {}
     if closes.empty or len(closes) < 260:
         return [], [], False
     spy = spy_close.reindex(closes.index).ffill()
     bull = bool(spy.iloc[-1] > spy.rolling(200).mean().iloc[-1])
-    leaders = rank_at(closes, volumes, len(closes) - 1, top_n=LEADER_TOP)
+    leaders = rank_at(closes, volumes, len(closes) - 1, top_n=LEADER_TOP, min_price=min_price)
     out, near = [], []
     for rank, (t, mom, _r1m, _close) in enumerate(leaders, 1):
         c = closes[t].dropna()

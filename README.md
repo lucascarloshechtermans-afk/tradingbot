@@ -12,6 +12,24 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 8 — adding S&P 600 small caps priced ≥ $50
+
+`research/smallcap8.py`: the S&P SmallCap 600 names (not in the 500/400) join the
+momentum and breakout universe only while their price is ≥ $50.
+
+| | 2008–2021 research / holdout | 2022–2026 research / holdout |
+|---|---|---|
+| Momentum top 20, large+mid only | 21.0% / 20.1% | 13.0% / 25.4% |
+| Momentum top 20, + small caps ≥ $50 | 19.7% / 19.4% | 9.6% / 16.7% |
+| Leader breakout (CAGR), large+mid only | 7.2% / 12.2% | 17.1% / 10.9% |
+| Leader breakout (CAGR), + small caps ≥ $50 | 6.4% / 10.7% | 9.6% / 10.4% |
+
+Adding them lowered results in all eight comparisons. Caveat: today's index
+membership is used back in time, and small caps that grew into the S&P 400/500
+are counted as "large", which biases this test against small caps. At the user's
+request they are ON by default (`portfolio.include_small_caps: true`,
+`small_cap_min_price: 50`); set `include_small_caps: false` to follow the test.
+
 ## Research round 7 — breakouts inside momentum leaders (LEADER BREAKOUT)
 
 `research/breakout7.py`, pre-registered in `research/HYPOTHESES.md`. Leader = top 50

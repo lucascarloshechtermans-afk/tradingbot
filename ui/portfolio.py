@@ -152,7 +152,7 @@ def build_portfolio_tab_html(cfg, account_size: float, book, signals: list, bear
                        f"alleen het slot van de laatste handelsdag van de maand telt ({_date(book.next_rebalance)}).</p></div></details>")
         parts.append(
             "<div class='card'><h3 style='margin-top:0'>MOMENTUM TOP 20 <span class='sm'>maandlijst van "
-            f"{_date(book.as_of)} &middot; {book.eligible_count} van {book.universe_size} aandelen (S&amp;P 500 + 400 + scannerlijst) komen in aanmerking</span></h3>"
+            f"{_date(book.as_of)} &middot; {book.eligible_count} van {book.universe_size} aandelen (S&amp;P 500 + 400 + scannerlijst + S&amp;P 600 small caps vanaf $50 als ingeschakeld) komen in aanmerking</span></h3>"
             "<p class='sm'>Regel: op het slot van de laatste handelsdag van de maand de 20 aandelen met het hoogste rendement van 12 tot 1 maand "
             "geleden, gelijk gewogen, kopen op de volgende open -- alleen als SPY boven zijn 200-daags sloot. Een maand vasthouden, "
             "geen stops (de trendfilter is de rem).</p>"

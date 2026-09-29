@@ -373,6 +373,10 @@ class PortfolioConfig:
     momentum_top_n: int = 20
     dip_risk_pct_of_sleeve: float = 1.0   # risk per dip trade, % of the dip sleeve (halved below SPY's 200-day)
     dip_max_positions: int = 10
+    # add the S&P SmallCap 600 to the momentum / breakout universe, only at this
+    # price or higher (research round 8: it LOWERED results in every test, see README)
+    include_small_caps: bool = True
+    small_cap_min_price: float = 50.0
 
     @classmethod
     def from_dict(cls, raw: dict) -> "PortfolioConfig":
@@ -383,6 +387,8 @@ class PortfolioConfig:
             momentum_top_n=int(raw.get("momentum_top_n", 20)),
             dip_risk_pct_of_sleeve=float(raw.get("dip_risk_pct_of_sleeve", 1.0)),
             dip_max_positions=int(raw.get("dip_max_positions", 10)),
+            include_small_caps=bool(raw.get("include_small_caps", True)),
+            small_cap_min_price=float(raw.get("small_cap_min_price", 50.0)),
         )
         weights = (cfg.momentum_pct, cfg.dip_pct, cfg.index_rsi2_pct)
         if min(weights) < 0 or sum(weights) > 100.0001:
