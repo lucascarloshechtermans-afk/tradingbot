@@ -144,7 +144,7 @@ PAGE_TEMPLATE = """<!doctype html>
 <script>
 function openCard(t) {{
   document.querySelector('[data-tab=dashboard]').click();
-  for (const id of ['ov-' + t, 'ov-alert-' + t, 'ov-pat-' + t]) {{
+  for (const id of ['ov-bo-' + t, 'ov-' + t, 'ov-nb-' + t, 'ov-alert-' + t, 'ov-pat-' + t]) {{
     const el = document.getElementById(id);
     if (el) {{ el.open = true; el.scrollIntoView({{behavior: 'smooth', block: 'start'}}); return; }}
   }}
@@ -302,6 +302,8 @@ def build_dashboard_html(
     momentum_book=None,
     index_signals: list | None = None,
     momentum_closes=None,
+    leader_breakouts: list | None = None,
+    near_breakouts: list | None = None,
 ) -> str:
     """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
     'Ready to boom' tab."""
@@ -355,10 +357,12 @@ def build_dashboard_html(
         boom_rows_html=boom_rows_html or "<tr><td colspan=9>No pattern setups</td></tr>",
         boom_cards_html=render_setup_cards(pattern_setups) if pattern_setups else "",
         setup_css=SETUP_CSS,
-        overview_html=build_todo_html(portfolio_cfg, momentum_book, index_signals, len(leader_dips), bear)
+        overview_html=build_todo_html(portfolio_cfg, momentum_book, index_signals, len(leader_dips), bear,
+                                      n_breakouts=len(leader_breakouts or []))
         + build_overview_html(leader_dips, dip_alerts, pattern_setups, sector_ranked,
                               sector_by_ticker or {}, market_state or {},
-                              dip_risk_pct=portfolio_cfg.dip_risk_pct_of_account),
+                              dip_risk_pct=portfolio_cfg.dip_risk_pct_of_account,
+                              leader_breakouts=leader_breakouts, near_breakouts=near_breakouts),
         portfolio_html=build_portfolio_tab_html(portfolio_cfg, account_size, momentum_book, index_signals, bear,
                                                 momentum_closes),
         overview_css=OVERVIEW_CSS,

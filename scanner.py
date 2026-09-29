@@ -511,6 +511,9 @@ class ScanRun:
     momentum_book: object | None = None
     index_signals: list = field(default_factory=list)
     momentum_closes: pd.DataFrame | None = None
+    # [(analysis.leader_breakout.LeaderBreakout, ChartRead)] -- today's / almost
+    leader_breakouts: list = field(default_factory=list)
+    near_breakouts: list = field(default_factory=list)
 
 
 def _naive_close(df: pd.DataFrame) -> pd.Series:
@@ -542,9 +545,11 @@ def find_momentum_book(provider: DataProvider, config: AppConfig, spy: pd.DataFr
                        extra_sectors: dict[str, str | None] | None = None):
     """MOMENTUM TOP 20 over the S&P 500 + 400 plus the scanner's own universe
     -- the same 966-name universe the research backtest ranked
-    (analysis/momentum_portfolio.py). Returns (book, closes) or (None, None)."""
-    if config.portfolio.momentum_pct <= 0 or spy is None or spy.empty:
-        return None, None
+    (analysis/momentum_portfolio.py). Returns (book, closes, volumes, sectors);
+    Nones when unavailable."""
+    none = (None, None, None, {})
+    if spy is None or spy.empty:
+        return none
     from analysis.momentum_portfolio import build_book, load_universe
 
     try:
@@ -554,15 +559,48 @@ def find_momentum_book(provider: DataProvider, config: AppConfig, spy: pd.DataFr
         spy_close = _naive_close(spy)
         closes, volumes = provider.get_universe_closes(sorted(sectors), latest_session=spy_close.index[-1])
         if closes.empty:
-            return None, None
+            return none
         book = build_book(closes, volumes, spy_close, sectors, top_n=config.portfolio.momentum_top_n)
-        return book, closes
+        return book, closes, volumes, sectors
     except NotImplementedError:
         logger.info("momentum book skipped: this data provider has no bulk universe download")
-        return None, None
+        return none
     except Exception as exc:  # noqa: BLE001 - must never break the scan
         logger.warning("momentum book failed: %s", exc)
-        return None, None
+        return none
+
+
+def find_breakouts(provider: DataProvider, config: AppConfig, closes, volumes, spy: pd.DataFrame | None,
+                   sectors: dict, held: set[str]) -> tuple[list, list]:
+    """LEADER BREAKOUTs today and leaders close to one (analysis/leader_breakout.py),
+    each with full OHLC (ATR stop) and a chart read. ([(item, read)], [(item, read)])."""
+    if closes is None or closes.empty or spy is None:
+        return [], []
+    from analysis.chart_read import read_chart
+    from analysis.leader_breakout import attach_daily, find_leader_breakouts, prioritize_breakouts
+
+    try:
+        outs, near, bull = find_leader_breakouts(closes, volumes, _naive_close(spy), sectors)
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("leader breakouts failed: %s", exc)
+        return [], []
+    if not bull:
+        outs = []  # the rule only trades while SPY is above its 200-day
+    res = []
+    for item in outs + near[:10]:
+        try:
+            daily = provider.get_history(item.ticker, period=config.data.period)
+            attach_daily(item, daily)
+            try:
+                hourly = provider.get_history(item.ticker, period="730d", interval="1h")
+            except DataUnavailable:
+                hourly = None
+            res.append((item, read_chart(item.ticker, daily, hourly)))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("breakout detail failed for %s: %s", item.ticker, exc)
+    trades = prioritize_breakouts([x for x in res if not x[0].near], held)
+    alerts = prioritize_breakouts([x for x in res if x[0].near], held)
+    return trades, alerts
 
 
 def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | None = None, max_workers: int = 8) -> ScanRun:
@@ -686,18 +724,23 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     leader_dips, mstate, alerts = find_validated_leader_dips(provider, {t: c[1] for t, c in candidates.items()}, benchmarks)
     logger.info("building the portfolio plan: index RSI(2) + momentum top %d", config.portfolio.momentum_top_n)
     signals = find_index_signals(provider)
-    book, mom_closes = find_momentum_book(provider, config, benchmarks.get("spy"),
-                                          {t: c[0].sector for t, c in candidates.items()})
+    book, mom_closes, mom_volumes, mom_sectors = find_momentum_book(provider, config, benchmarks.get("spy"),
+                                                                    {t: c[0].sector for t, c in candidates.items()})
     from analysis.leader_dip import prioritize
 
     held = {p.ticker for p in book.picks} if book is not None and book.invested and config.portfolio.momentum_pct > 0 else set()
     leader_dips = prioritize(leader_dips, held, config.portfolio.dip_max_positions)
+    breakouts, near_breakouts = find_breakouts(provider, config, mom_closes, mom_volumes, benchmarks.get("spy"),
+                                               mom_sectors, held)
+    if config.portfolio.momentum_pct <= 0:
+        book = None
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
         pattern_setups=pattern_setups, leader_dips=leader_dips, market_state=mstate, dip_alerts=alerts,
         sector_by_ticker={t: c[0].sector for t, c in candidates.items()},
         momentum_book=book, index_signals=signals, momentum_closes=mom_closes,
+        leader_breakouts=breakouts, near_breakouts=near_breakouts,
     )
 
 
@@ -758,6 +801,25 @@ def print_leader_dips(leader_dips: list, market: dict, risk_pct: float = 0.5) ->
         print("        + " + "; ".join(d.reasons[2:]) if len(d.reasons) > 2 else "        + (no context notes)")
         if d.missing:
             print("        - " + "; ".join(d.missing))
+    print()
+
+
+def print_leader_breakouts(scan_run: ScanRun, risk_pct: float) -> None:
+    print()
+    print("=== LEADER BREAKOUT -- first close above the 50-day closing high in a top-50 momentum leader, SPY > 200d ===")
+    print("    buy next open, stop 2.5 ATR, trailing exit: sell next open after a close below the 20-day lowest close;")
+    print("    tested: better than a random stock, NOT better than buying a leader without a breakout (t < 2)")
+    if not scan_run.leader_breakouts:
+        print("    no leader breakout today")
+    for b, _r in scan_run.leader_breakouts:
+        stop = f"stop~{b.stop_estimate:.2f} ({b.risk_pct:.1f}%)" if b.stop_estimate is not None else "stop: n/a"
+        print(f"  #{b.priority:<2} {b.action:<8} score {b.score:3.0f}  {b.ticker:<6} close {b.close:.2f} > 50d high {b.breakout_level:.2f}  "
+              f"{stop}  trail exit < {b.exit_level:.2f}  leader #{b.leader_rank}  risk {risk_pct:.2f}%")
+    if scan_run.near_breakouts:
+        print("--- almost: leaders within 3% of their 50-day closing high (close above the level = breakout) ---")
+        for b, _r in scan_run.near_breakouts:
+            print(f"  {b.ticker:<6} close {b.close:>9.2f}  breakout if close > {b.breakout_level:>9.2f} ({b.distance_pct:+.1f}%)  "
+                  f"leader #{b.leader_rank}{'  (already in momentum book)' if b.in_momentum else ''}")
     print()
 
 
@@ -934,6 +996,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print_portfolio_plan(scan_run, config)
     print_leader_dips(scan_run.leader_dips, scan_run.market_state, config.portfolio.dip_risk_pct_of_account)
+    print_leader_breakouts(scan_run, config.portfolio.dip_risk_pct_of_account)
     if scan_run.dip_alerts:
         print("--- Next-session alerts: momentum leaders closest to a LEADER DIP trigger ---")
         for a, _r in scan_run.dip_alerts:
@@ -981,6 +1044,8 @@ def main(argv: list[str] | None = None) -> int:
         momentum_book=scan_run.momentum_book,
         index_signals=scan_run.index_signals,
         momentum_closes=scan_run.momentum_closes,
+        leader_breakouts=scan_run.leader_breakouts,
+        near_breakouts=scan_run.near_breakouts,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

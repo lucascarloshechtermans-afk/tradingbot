@@ -60,7 +60,7 @@ def allocation_rows(cfg, account_size: float, bear: bool | None) -> list[tuple[s
     return rows
 
 
-def todo_items(cfg, book, signals: list, n_dips: int, bear: bool | None) -> list[str]:
+def todo_items(cfg, book, signals: list, n_dips: int, bear: bool | None, n_breakouts: int = 0) -> list[str]:
     items = []
     if cfg.momentum_pct > 0 and book is not None:
         if book.as_of is None:
@@ -89,13 +89,15 @@ def todo_items(cfg, book, signals: list, n_dips: int, bear: bool | None) -> list
             items.append("Index RSI(2): geen signaal"
                          + (f"; dichtst bij: {near[0].etf} (slot &le; {near[0].buy_below:,.2f})" if near else "") + ".")
     if cfg.dip_pct > 0:
-        items.append(f"Dip-swings: {n_dips} LEADER DIP{'s' if n_dips != 1 else ''} vandaag"
-                     + (" (halve risico's: SPY onder zijn 200-daags)" if bear else "") + " -- zie hieronder.")
+        items.append(f"Swings: {n_dips} LEADER DIP{'s' if n_dips != 1 else ''} en {n_breakouts} LEADER BREAKOUT"
+                     f"{'s' if n_breakouts != 1 else ''} vandaag"
+                     + (" (halve risico's: SPY onder zijn 200-daags; breakouts alleen boven de 200-daags)" if bear else "")
+                     + " -- zie hieronder, in volgorde.")
     return items
 
 
-def build_todo_html(cfg, book, signals: list, n_dips: int, bear: bool | None) -> str:
-    items = todo_items(cfg, book, signals, n_dips, bear)
+def build_todo_html(cfg, book, signals: list, n_dips: int, bear: bool | None, n_breakouts: int = 0) -> str:
+    items = todo_items(cfg, book, signals, n_dips, bear, n_breakouts)
     return ("<div class='card'><h3 style='margin-top:0'>Vandaag te doen "
             f"<span class='sm'>portefeuilleplan {cfg.momentum_pct:.0f}/{cfg.dip_pct:.0f}/{cfg.index_rsi2_pct:.0f} "
             "(momentum / dip / index) -- details in de tab Portefeuille</span></h3><ul>"

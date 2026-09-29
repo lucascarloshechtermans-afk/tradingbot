@@ -12,6 +12,28 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 7 — breakouts inside momentum leaders (LEADER BREAKOUT)
+
+`research/breakout7.py`, pre-registered in `research/HYPOTHESES.md`. Leader = top 50
+by 12-1 month return that day; breakout = first close above the prior 50-session
+closing high; SPY > 200d; next-open entry, 2.5 ATR stop, trailing exit (next open
+after a close below the prior 20-session lowest close).
+
+| mean R per trade (trailing exit) | DEV | VAL-T | VAL-U | FINAL |
+|---|---|---|---|---|
+| B1 leader 50d breakout | +0.216 | +0.527 | +0.238 | +0.391 |
+| C1 leader, no breakout (control) | +0.175 | +0.190 | +0.170 | +0.270 |
+| C2 random stock (control) | +0.151 | +0.115 | +0.182 | +0.133 |
+
+B1 beat C2 in all four cells and C1 in three, but never with t ≥ 2 in DEV → it
+does **not** pass the pre-registered bar. One account, 0.5% risk, max 20:
+8–13%/yr (2008–2021), 11.5–16.8% (2022–2026), max drawdown 14–23%, ~1.3
+trades/week, 38% winners, +2.1R average winner vs −0.8R loser. Conclusion: if you
+trade breakouts, trade them in leaders with a trailing exit — plain breakouts
+were worse than random. Built into the scanner as **LEADER BREAKOUT**
+(`analysis/leader_breakout.py`) with a "bijna breakout" list, a priority
+(#, score = leader rank) and OVERLAP when the stock is already in the momentum book.
+
 ## Research round 6 — complete trading systems (options for the user)
 
 Whole systems, next-open execution, 10 bp per side, idle cash earns T-bills

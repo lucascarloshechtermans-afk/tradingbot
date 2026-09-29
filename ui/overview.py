@@ -116,6 +116,13 @@ def _dip_why(d) -> tuple[list[str], list[str]]:
     return why, missing
 
 
+def _first(a: list | None, b: list | None, ticker: str):
+    for item, _read in (a or []) + (b or []):
+        if item.ticker == ticker:
+            return item
+    return None
+
+
 def _card(anchor: str, badge: str, badge_cls: str, title: str, summary: str, why: list[str], missing: list[str],
           plan: str, svg: str) -> str:
     li = lambda xs: "".join(f"<li>{x}</li>" for x in xs)  # noqa: E731
@@ -130,10 +137,48 @@ def _pct(x: float) -> str:
     return f"{x:.2f}".rstrip("0").rstrip(".").replace(".", ",") + "%"
 
 
+def _breakout_cards(items: list, risk_pct: float, sector_of) -> list[tuple[str, str]]:
+    cards = []
+    for b, read in items:
+        why = [f"<b>Momentum-leider</b>: #{b.leader_rank} van de top 50 op 12-1 maand rendement ({b.mom_12_1:+.0f}%).",
+               (f"<b>Bijna breakout</b>: sluit hij boven <b>{_eur(b.breakout_level)}</b> ({b.distance_pct:+.1f}% vanaf nu), dan is "
+                f"het een LEADER BREAKOUT -- het hoogste slot van de voorbije 50 dagen." if b.near else
+                f"<b>Breakout</b>: slot {_eur(b.close)} boven het hoogste slot van de vorige 50 dagen ({_eur(b.breakout_level)}), "
+                f"voor het eerst.")]
+        why += explain_chart(read) + _patterns_nl(b.daily)
+        missing = ["Eerlijk: getest beter dan een willekeurig aandeel (alle 4 testcellen), maar niet beter dan een leider "
+                   "zonder breakout kopen, en niet significant. Losse breakouts buiten leiders deden het slechter dan willekeurig."]
+        if b.action == "OVERLAP":
+            missing.insert(0, "<b>Staat al in je MOMENTUM TOP 20</b> -- niet nog eens kopen (dubbele positie).")
+        stop = (f"initiële stop 2,5 ATR onder je instap (~{_eur(b.stop_estimate)}, {b.risk_pct:.1f}% koersrisico -- positie zo "
+                f"groot dat dit {_pct(risk_pct)} van je account is)" if b.stop_estimate is not None else "initiële stop 2,5 ATR")
+        trail = (f"Trailing exit: verkoop op de open na een slot onder het laagste slot van de vorige 20 dagen "
+                 f"(nu {_eur(b.exit_level)}; dat niveau schuift mee omhoog). Geen koersdoel -- winnaars laten lopen "
+                 f"(gemiddeld ~24 handelsdagen; 38% winnaars, maar +2,1R per winnaar tegen -0,8R per verliezer).")
+        plan = (f"Nog niets doen: alert op een slot boven {_eur(b.breakout_level)}. Dan kopen op de volgende open, {stop}. {trail}"
+                if b.near else f"Koop op de volgende open (~{_eur(b.close)}), {stop}. {trail}")
+        if b.action == "OVERLAP":
+            plan = "Overslaan: je houdt dit aandeel al via de momentum-lijst."
+        levels = {"BREAKOUT": b.breakout_level, "TRAIL EXIT": b.exit_level}
+        if b.stop_estimate is not None:
+            levels["STOP (est.)"] = b.stop_estimate
+        svg = render_chart_svg(b.daily, read, levels=levels) if b.daily is not None else ""
+        label = ("BIJNA BREAKOUT" if b.near else f"#{b.priority} {b.action} · score {b.score:.0f} · LEADER BREAKOUT")
+        cls = "gW" if b.near else ("gC" if b.action == "OVERLAP" else "gP")
+        summary = (f"{escape(sector_of(b.ticker))} · slot {_eur(b.close)} · 50d-high {_eur(b.breakout_level)}"
+                   + (f" ({b.distance_pct:+.1f}%)" if b.near else "") + f" · leider #{b.leader_rank}")
+        anchor = f"ov-{'nb' if b.near else 'bo'}-{b.ticker}"
+        cards.append((b.ticker, _card(anchor, label, cls, b.ticker, summary, why, missing, plan, svg)))
+    return cards
+
+
 def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: list, sector_ranked: list[dict],
-                        sector_by_ticker: dict[str, str | None], market_state: dict, dip_risk_pct: float = 0.5) -> str:
-    sector_of = lambda t: sector_by_ticker.get(t) or "Onbekend"  # noqa: E731
+                        sector_by_ticker: dict[str, str | None], market_state: dict, dip_risk_pct: float = 0.5,
+                        leader_breakouts: list | None = None, near_breakouts: list | None = None) -> str:
+    sector_of = lambda t: sector_by_ticker.get(t) or getattr(_first(leader_breakouts, near_breakouts, t), "sector", None) or "Onbekend"  # noqa: E731
     setups, possible = [], []
+    setups += _breakout_cards(leader_breakouts or [], dip_risk_pct, sector_of)
+    possible += _breakout_cards(near_breakouts or [], dip_risk_pct, sector_of)
     for d, read in leader_dips:
         why, missing = _dip_why(d)
         why += explain_chart(read, dip_setup=True) + _patterns_nl(d.daily)
@@ -211,7 +256,7 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
            + ("" if bear is None else f" en {'ONDER' if bear else 'boven'} zijn 200-daags gemiddelde")
            + (" -> halve posities" if bear else " -> normale posities")
            if vix is not None else "marktdata niet beschikbaar")
-    no_trade = ("" if setups else "<p class='nt'><b>NO TRADE vandaag</b> -- geen enkele momentum-leider staat in een dip. "
+    no_trade = ("" if setups else "<p class='nt'><b>NO TRADE vandaag</b> -- geen enkele momentum-leider staat in een dip of breekt uit. "
                 "Kijk naar de mogelijke setups hieronder.</p>")
     return (
         "<div class='card'><h3 style='margin-top:0'>Overzicht per sector</h3>"
@@ -220,7 +265,8 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
         "<th>Setups</th><th>Mogelijke setups</th></tr></thead><tbody>" + rows + "</tbody></table></div>"
         + RESEARCH_NOTE_HTML +
         "<div class='card'><h3 style='margin-top:0'>Setups (verhandelbaar)</h3>"
-        f"<p class='sm'>LEADER DIP: een gedisciplineerde dip-instap in een momentum-leider. Positiegrootte volgt de markttrend: "
+        f"<p class='sm'>LEADER BREAKOUT (oranje): eerste slot boven de 50-daagse high in een top-50 momentum-leider, trailing exit. "
+        f"LEADER DIP: een gedisciplineerde dip-instap in een momentum-leider. Positiegrootte volgt de markttrend: "
         f"normaal ({_pct(dip_risk_pct)} van je account als risico) als SPY boven zijn 200-daags staat, half "
         f"({_pct(dip_risk_pct / 2)}) eronder. <b>Volgorde</b>: #1 eerst; score = momentum-rank (0-100), de volgorde die de "
         f"backtest gebruikte als er meer kandidaten dan plaatsen waren. NEEM = nemen, RESERVE = alleen als er plaats vrijkomt, "
@@ -228,7 +274,8 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
         f"de volgorde is een regel om consequent te zijn. Klik voor uitleg en chart.</p>"
         + no_trade + "".join(c for _, c in setups) + "</div>"
         "<div class='card'><h3 style='margin-top:0'>Mogelijke setups (nog niet verhandelbaar)</h3>"
-        "<p class='sm'>Leiders vlak bij hun dip-trigger, en chart-patronen die klaarstaan (alleen info). "
+        "<p class='sm'>Leiders binnen 3% van een breakout (BIJNA BREAKOUT), leiders vlak bij hun dip-trigger, en chart-patronen "
+        "die klaarstaan (alleen info). "
         "Klik voor uitleg en chart.</p>"
         + ("".join(c for _, c in possible) or "<p>Geen.</p>") + "</div>"
     )
