@@ -58,6 +58,19 @@ class LeaderDip:
     reasons: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
     daily: pd.DataFrame | None = None
+    # set by prioritize(): order to take the dips in when there are more than
+    # the free slots, and whether the stock is already held by the momentum book
+    priority: int | None = None
+    action: str = ""          # NEEM / RESERVE / OVERLAP
+    in_momentum: bool = False
+
+    @property
+    def score(self) -> float:
+        """Priority score 0-100 = the momentum rank: the order the backtested
+        one-account simulation took candidates in when slots ran out. Honest
+        caveat: within one day the choice of dip barely changed results
+        (+/-0.01-0.03R), the score is an ordering rule, not a forecast."""
+        return self.momentum_rank
 
     @property
     def risk_pct(self) -> float:
@@ -150,6 +163,28 @@ def find_leader_dips(histories: dict[str, pd.DataFrame], spy: pd.DataFrame | Non
         if s is not None:
             out.append(s)
     return sorted(out, key=lambda s: s.dip_atr)
+
+
+def prioritize(dips: list, momentum_tickers: set[str] | None = None, max_positions: int = 10) -> list:
+    """Order dips for execution: stocks NOT already in the momentum book first,
+    by momentum rank (highest first; ties -> deeper dip); the first
+    `max_positions` are NEEM, the rest RESERVE. Dips in stocks the momentum
+    book already holds go last as OVERLAP -- taking them would double the
+    position in one name, and skipping them costs nothing measurable (a dip
+    entry did not beat a random same-day entry). Works on LeaderDip objects or
+    (LeaderDip, extra) tuples; returns the same shape, re-ordered."""
+    momentum_tickers = momentum_tickers or set()
+    get = (lambda x: x[0]) if dips and isinstance(dips[0], tuple) else (lambda x: x)  # noqa: E731
+    fresh = [x for x in dips if get(x).ticker not in momentum_tickers]
+    overlap = [x for x in dips if get(x).ticker in momentum_tickers]
+    key = lambda x: (-get(x).momentum_rank, get(x).dip_atr)  # noqa: E731
+    ordered = sorted(fresh, key=key) + sorted(overlap, key=key)
+    for i, x in enumerate(ordered, 1):
+        d = get(x)
+        d.priority = i
+        d.in_momentum = d.ticker in momentum_tickers
+        d.action = "OVERLAP" if d.in_momentum else ("NEEM" if i <= max_positions else "RESERVE")
+    return ordered
 
 
 @dataclass

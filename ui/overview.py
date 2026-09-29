@@ -147,6 +147,15 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
                    f"{d.momentum_rank:.0f}")
         cls = "gR" if d.grade == "H" else "gA"
         label = "LEADER DIP" + (" (halve positie)" if d.grade == "H" else "")
+        if d.priority is not None:
+            label = f"#{d.priority} {d.action} · score {d.score:.0f} · " + label
+            cls = {"NEEM": cls, "RESERVE": "gW", "OVERLAP": "gC"}.get(d.action, cls)
+        if d.action == "OVERLAP":
+            missing.insert(0, "<b>Staat al in je MOMENTUM TOP 20</b> -- niet nog eens kopen (anders zit je dubbel in "
+                              "hetzelfde aandeel). Overslaan kost niets meetbaars: een dip-instap was niet beter dan willekeurig.")
+            plan = "Overslaan: je houdt dit aandeel al via de momentum-lijst. " + plan
+        elif d.action == "RESERVE":
+            missing.insert(0, "Reserve: je maximum aantal dip-posities is al gevuld door hogere scores. Alleen nemen als er een plaats vrijkomt.")
         card = _card(f"ov-{d.ticker}", label, cls, d.ticker, summary, why, missing, plan, svg)
         setups.append((d.ticker, card))
     for a, read in dip_alerts:
@@ -213,7 +222,10 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
         "<div class='card'><h3 style='margin-top:0'>Setups (verhandelbaar)</h3>"
         f"<p class='sm'>LEADER DIP: een gedisciplineerde dip-instap in een momentum-leider. Positiegrootte volgt de markttrend: "
         f"normaal ({_pct(dip_risk_pct)} van je account als risico) als SPY boven zijn 200-daags staat, half "
-        f"({_pct(dip_risk_pct / 2)}) eronder. Klik voor uitleg en chart.</p>"
+        f"({_pct(dip_risk_pct / 2)}) eronder. <b>Volgorde</b>: #1 eerst; score = momentum-rank (0-100), de volgorde die de "
+        f"backtest gebruikte als er meer kandidaten dan plaatsen waren. NEEM = nemen, RESERVE = alleen als er plaats vrijkomt, "
+        f"OVERLAP = zit al in je momentum-lijst, overslaan. Eerlijk: welke dip je kiest maakte historisch weinig uit, "
+        f"de volgorde is een regel om consequent te zijn. Klik voor uitleg en chart.</p>"
         + no_trade + "".join(c for _, c in setups) + "</div>"
         "<div class='card'><h3 style='margin-top:0'>Mogelijke setups (nog niet verhandelbaar)</h3>"
         "<p class='sm'>Leiders vlak bij hun dip-trigger, en chart-patronen die klaarstaan (alleen info). "

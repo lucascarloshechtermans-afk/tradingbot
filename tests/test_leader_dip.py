@@ -65,3 +65,18 @@ def test_grade_is_a_trend_risk_dial_not_an_edge_claim():
     m = {"spy_below_200": False}
     assert grade_for(m, deep_dip=True, moves=True) == grade_for(m, deep_dip=False, moves=False)
     assert RISK_PCT["H"] == RISK_PCT["N"] / 2
+
+
+def test_prioritize_orders_by_momentum_and_pushes_momentum_overlap_last():
+    from analysis.leader_dip import LeaderDip, prioritize
+
+    def dip(t, mom, depth=-1.5):
+        return LeaderDip(ticker=t, grade="N", confirmations=0, close=10, stop_estimate=9, atr=0.4,
+                         momentum_rank=mom, dip_atr=depth, hold_days=10)
+
+    dips = [(dip("A", 85), None), (dip("B", 97), None), (dip("C", 99), None), (dip("D", 90), None), (dip("E", 90, -3.0), None)]
+    out = prioritize(dips, momentum_tickers={"C"}, max_positions=3)
+    assert [d.ticker for d, _ in out] == ["B", "E", "D", "A", "C"]  # tie at 90 -> deeper dip first
+    assert [d.action for d, _ in out] == ["NEEM", "NEEM", "NEEM", "RESERVE", "OVERLAP"]
+    assert [d.priority for d, _ in out] == [1, 2, 3, 4, 5]
+    assert out[-1][0].in_momentum and out[0][0].score == 97

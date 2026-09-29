@@ -688,6 +688,10 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     signals = find_index_signals(provider)
     book, mom_closes = find_momentum_book(provider, config, benchmarks.get("spy"),
                                           {t: c[0].sector for t, c in candidates.items()})
+    from analysis.leader_dip import prioritize
+
+    held = {p.ticker for p in book.picks} if book is not None and book.invested and config.portfolio.momentum_pct > 0 else set()
+    leader_dips = prioritize(leader_dips, held, config.portfolio.dip_max_positions)
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
@@ -743,9 +747,13 @@ def print_leader_dips(leader_dips: list, market: dict, risk_pct: float = 0.5) ->
               f"{'' if bear is None else (', BELOW its 200-day' if bear else ', above its 200-day')}")
     if not leader_dips:
         print("    NO TRADE: no leader dip today.")
+    if leader_dips:
+        print("    order: #1 first; score = momentum rank (the backtest's tie-break when slots run out); NEEM = take,")
+        print("    RESERVE = only if a slot frees up, OVERLAP = already in the momentum book -> skip (no double position)")
     for d, read in leader_dips:
         tag = {"N": "TRADE", "H": "HALF"}.get(d.grade, "watch")
-        print(f"  [{d.grade}] {d.ticker:<6} {tag:<6} close {d.close:.2f}  stop~{d.stop_estimate:.2f} ({d.risk_pct:.1f}%)  "
+        order = f"#{d.priority:<2} {d.action:<8} score {d.score:3.0f}  " if d.priority is not None else ""
+        print(f"  {order}[{d.grade}] {d.ticker:<6} {tag:<6} close {d.close:.2f}  stop~{d.stop_estimate:.2f} ({d.risk_pct:.1f}%)  "
               f"dip {d.dip_atr:+.1f} ATR  momentum {d.momentum_rank:.0f}")
         print("        + " + "; ".join(d.reasons[2:]) if len(d.reasons) > 2 else "        + (no context notes)")
         if d.missing:
