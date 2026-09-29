@@ -158,3 +158,23 @@ listed neighbours are only reported as robustness.
   positions, heat ≤ 10%. Control: the same exits on random entries.
 - S6 INDEX RSI(2): SPY (and QQQ) close > SMA200 and RSI(2) < 10 → buy next open; sell next
   open after a close > SMA5.
+
+---
+
+# Round 7 — breakouts inside momentum leaders (written 2026-09-29, before running)
+
+Question from the user: they trade breakouts. Plain breakouts were ≤ random (rounds 4–5).
+Does a breakout help when it happens in a stock that is already a momentum leader?
+
+Leader on day t = top 50 of the eligible universe by 12-1 month return (close t−21 / close t−252).
+Only while SPY > its 200-day SMA. Entry next open, initial stop 2.5 ATR.
+- B1 LEADER_50D_BREAKOUT: first close above the highest close of the prior 50 sessions.
+- B2 LEADER_20D_BREAKOUT_VOL: close above the prior 20-session closing high, volume > 1.5× 20d avg.
+Exits: (a) trend exit — next open after a close below the lowest close of the prior 20 sessions;
+(b) fixed 20-session time exit.
+Controls, same exits, same days/regime:
+- C1 a random leader (top 50) that is NOT breaking out — does the breakout TIMING add anything
+  over simply owning a leader?
+- C2 a random eligible stock (same-day baseline).
+Pass: B beats C1 by > 0 with t ≥ 2 in DEV (research ≤2021) and keeps the sign in VAL-T, VAL-U
+and FINAL. Then it goes into the scanner as a breakout setup; otherwise the scanner says so.
