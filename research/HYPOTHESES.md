@@ -200,3 +200,15 @@ Leader breakout (trailing exit, one open trade per ticker):
 - breakout lookback 20 / 50 (default) / 100 sessions
 - trailing exit 10 / 20 (default) / 50 sessions
 - initial stop 2 / 2.5 (default) / 3.5 ATR
+
+## Round 10 results (momentum + breakout parameters)
+No variant beat the defaults in DEV and in every validation cell; defaults kept
+(top 20 monthly; leader top 50, 50-day breakout, 20-day trailing exit, 2.5 ATR stop).
+A 50-day trailing exit raised R per trade in all cells but also max drawdown in all cells.
+
+# Round 10b — market filter and volatility targeting for the momentum book (written before running)
+Filters (evaluated at each month-end): F0 none · F1 SPY > 200d SMA (default) · F2 SPY > its
+10-month SMA of month-end closes · F3 SPY 12-month return > T-bill 12-month yield (absolute momentum).
+Vol targeting (on top of F1): V1 scale the book to 20% annualised volatility using the
+book's own 126-day realised volatility (weight ≤ 1, no leverage) · V2 same with 63 days.
+Same adoption rule as round 10 (Sharpe, all four cells).
