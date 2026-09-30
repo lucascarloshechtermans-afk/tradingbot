@@ -246,3 +246,19 @@ Rules: R1 buy only names above their 50-day SMA at the rebalance · R2 daily cra
 closes below its 200d → whole book to cash at the next open until the next month-end ·
 R3 per-stock exit: close below its 20-day lowest close → that slot to cash until month-end ·
 R4 two tranches (half rebalanced at month-end, half mid-month, ~10 sessions later).
+
+# Round 13 — resistance and chart patterns as a filter (written 2026-09-30, before running)
+The user sees picks running into resistance and wants proper chart analysis. Test on:
+(a) every momentum pick (month-end top 20 per ticker half, SPY > 200d), outcome = return to the
+next month-end MINUS the average of that month's 20 picks (same-month comparison);
+(b) every leader breakout (trailing exit), outcome = R.
+Features at the signal close (data up to that close only; analysis.chart_read.find_zones on
+the last 500 bars, analysis.patterns.detect_patterns):
+- ROOM = (low of the nearest resistance zone above the close − close) / ATR; "open sky" if none.
+- H1 AT_RESISTANCE: ROOM ≤ 1 ATR → predicted worse than the other picks.
+- H2 OPEN_SKY: no zone above → predicted better.
+- H3 PATTERN: a bullish pattern whose trigger is within 5% above the close or was cleared in the
+  last session → predicted better.
+Pass: sign as predicted with |t| ≥ 2 in DEV (research ≤2021) and the same sign in VAL-T, VAL-U,
+FINAL. A passing feature becomes a rule (skip / replace the pick); otherwise it is shown on the
+dashboard as information only.
