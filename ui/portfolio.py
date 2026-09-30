@@ -192,3 +192,34 @@ def build_portfolio_tab_html(cfg, account_size: float, book, signals: list, bear
             "<table><thead><tr><th>ETF</th><th>Status</th><th>Slot</th><th>RSI(2)</th><th>5-daags</th><th>200-daags</th>"
             "<th>Trigger morgen</th><th>Uitleg</th></tr></thead><tbody>" + rows + "</tbody></table></div>")
     return "".join(parts)
+
+
+def build_forward_html(summ: dict | None, results: list, momentum: pd.DataFrame | None) -> str:
+    """'Live logboek' card: how the logged signals actually turned out."""
+    if summ is None:
+        return ""
+    rows = ""
+    for b in sorted(results, key=lambda x: x.signal_date, reverse=True)[:30]:
+        r = "-" if b.r is None else f"{b.r:+.2f}R"
+        rows += (f"<tr><td>{_date(b.signal_date)}</td><td><b>{escape(b.ticker)}</b></td><td>{b.status}</td>"
+                 f"<td>{'-' if b.entry is None else f'{b.entry:,.2f}'}</td><td>{'-' if b.exit is None else f'{b.exit:,.2f}'}</td>"
+                 f"<td>{r}</td><td>{b.days}</td><td class='sm'>{escape(b.reason)}</td></tr>")
+    mom_rows = ""
+    if momentum is not None and len(momentum):
+        for m in momentum.sort_values("as_of", ascending=False).itertuples():
+            mom_rows += (f"<tr><td>{_date(m.as_of)}</td><td>{_date(m.until)}</td><td>{'belegd' if m.invested else 'cash'}</td>"
+                         f"<td>{m.book_pct:+.1f}%</td><td>{m.spy_pct:+.1f}%</td></tr>")
+    wr = "-" if summ["win_pct"] is None else f"{summ['win_pct']:.0f}%"
+    ar = "-" if summ["avg_r"] is None else f"{summ['avg_r']:+.2f}R"
+    return (
+        "<div class='card'><h3 style='margin-top:0'>Live logboek (forward test)</h3>"
+        "<p class='sm'>Elke scan schrijft zijn signalen weg (logs/signal_log.csv) en volgt ze met exact de backtest-regels. "
+        "Dit is de enige echte test: na een paar maanden zie je of het systeem live doet wat de backtest belooft "
+        "(breakouts: backtest ~+0,2..+0,5R per trade, 38% winnaars).</p>"
+        f"<p><b>Breakouts</b>: {summ['signals']} signalen, {summ['closed']} gesloten, {summ['open']} open &middot; "
+        f"winnaars {wr} &middot; gemiddeld {ar} &middot; totaal {summ['total_r']:+.1f}R</p>"
+        + ("<table><thead><tr><th>Signaal</th><th>Ticker</th><th>Status</th><th>Instap</th><th>Uitstap</th><th>R</th>"
+           "<th>Dagen</th><th>Reden</th></tr></thead><tbody>" + rows + "</tbody></table>" if rows else "<p class='sm'>Nog geen breakouts gelogd.</p>")
+        + ("<p><b>Momentum-maandlijsten</b> (gelijk gewogen, slot tot slot, tegenover SPY)</p><table><thead><tr><th>Lijst van</th>"
+           "<th>Tot</th><th>Stand</th><th>Lijst</th><th>SPY</th></tr></thead><tbody>" + mom_rows + "</tbody></table>" if mom_rows else "")
+        + "</div>")

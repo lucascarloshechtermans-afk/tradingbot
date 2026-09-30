@@ -304,6 +304,7 @@ def build_dashboard_html(
     momentum_closes=None,
     leader_breakouts: list | None = None,
     near_breakouts: list | None = None,
+    forward: tuple | None = None,
 ) -> str:
     """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
     'Ready to boom' tab."""
@@ -312,7 +313,7 @@ def build_dashboard_html(
     from ui.chart_svg import SETUP_CSS, render_setup_cards
     from config.schema import PortfolioConfig
     from ui.overview import OVERVIEW_CSS, build_overview_html
-    from ui.portfolio import build_portfolio_tab_html, build_todo_html
+    from ui.portfolio import build_forward_html, build_portfolio_tab_html, build_todo_html
     generated_at = generated_at or datetime.now()
     portfolio_cfg = portfolio_cfg or PortfolioConfig()
     index_signals = index_signals or []
@@ -365,7 +366,7 @@ def build_dashboard_html(
                               leader_breakouts=leader_breakouts, near_breakouts=near_breakouts,
                               breakout_risk_pct=portfolio_cfg.breakout_risk_pct_of_account),
         portfolio_html=build_portfolio_tab_html(portfolio_cfg, account_size, momentum_book, index_signals, bear,
-                                                momentum_closes),
+                                                momentum_closes) + build_forward_html(*(forward or (None, [], None))),
         overview_css=OVERVIEW_CSS,
         scan_data_json=json.dumps(scan_rows),
         watchlist_data_json=json.dumps(watchlist_entries),

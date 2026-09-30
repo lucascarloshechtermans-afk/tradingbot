@@ -13,10 +13,13 @@ from research.hypotheses4 import indicators, signals
 from research.portfolio4 import run_portfolio
 
 
-def donchian_trades(p, signal: np.ndarray, stop_atr: float = 2.5, exit_low: int = 20, max_bars: int = 250) -> pd.DataFrame:
-    """Entry next open; initial stop stop_atr*ATR (intrabar, gap-aware);
+def donchian_trades(p, signal: np.ndarray, stop_atr: float = 2.5, exit_low: int = 20, max_bars: int = 250,
+                    entry_at: str = "open") -> pd.DataFrame:
+    """Entry next open (entry_at="open") or at the signal day's close
+    (entry_at="close"); initial stop stop_atr*ATR (intrabar, gap-aware);
     exit at the next open after a close below the lowest close of the prior
-    `exit_low` sessions. One open trade per ticker."""
+    `exit_low` sessions. One open trade per ticker. Close entries also carry
+    te (entry bar) and entry_px for the portfolio simulation."""
     T, N = p.c.shape
     C = p.df(p.c)
     low_ref = C.rolling(exit_low).min().shift(1).to_numpy()
@@ -29,7 +32,7 @@ def donchian_trades(p, signal: np.ndarray, stop_atr: float = 2.5, exit_low: int 
             if t <= busy or t + 2 >= T:
                 continue
             te = t + 1
-            entry = p.o[te, j] * (1 + SLIP)
+            entry = (p.c[t, j] if entry_at == "close" else p.o[te, j]) * (1 + SLIP)
             dist = stop_atr * p.atr[t, j]
             if not (np.isfinite(entry) and np.isfinite(dist) and dist > 0):
                 continue
@@ -40,7 +43,7 @@ def donchian_trades(p, signal: np.ndarray, stop_atr: float = 2.5, exit_low: int 
                 if not np.isfinite(lo):
                     continue
                 if lo <= stop:
-                    px = (min(op, stop) if d > te else min(entry, stop)) * (1 - SLIP)
+                    px = (min(op, stop) if (d > te or entry_at == "close") else min(entry, stop)) * (1 - SLIP)
                     ex = d
                     break
                 if p.c[d, j] < low_ref[d, j] and d + 1 < T and np.isfinite(p.o[d + 1, j]):
@@ -51,9 +54,10 @@ def donchian_trades(p, signal: np.ndarray, stop_atr: float = 2.5, exit_low: int 
                 px, ex = p.c[d, j] * (1 - SLIP), d
             if not np.isfinite(px):
                 continue
-            rows.append((t, j, (px - entry) / dist, ex))
+            rows.append((t, j, (px - entry) / dist, ex, t if entry_at == "close" else te, entry))
             busy = ex
-    return pd.DataFrame(rows, columns=["t", "j", "r", "exit_t"])
+    out = pd.DataFrame(rows, columns=["t", "j", "r", "exit_t", "te", "entry_px"])
+    return out if entry_at == "close" else out.drop(columns=["te", "entry_px"])
 
 
 def report(p, name, tr, risk, maxpos, stop_atr, halves=((1, "research"), (0, "holdout"))):

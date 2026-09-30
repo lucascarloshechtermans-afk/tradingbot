@@ -12,6 +12,27 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 11 — execution and diversification (`research/round11.py`)
+
+- **Buy breakouts at the close.** Buying a leader breakout at the close of the
+  breakout day instead of the next open gave higher one-account CAGR and lower max
+  drawdown in all four cells (DEV 7.4 vs 7.2%, VAL-T 19.2 vs 17.1%, VAL-U 13.0 vs
+  12.2%, FINAL 13.4 vs 10.9%) and avoids next-morning gaps. The dashboard now says:
+  use the BIJNA BREAKOUT level, and if the price is above it ~10 minutes before the
+  close, buy with a market-on-close order; otherwise the next open.
+- **ETF leader breakouts** (24 ETFs incl. bonds, gold, countries, sectors): better than
+  random ETF entries in 2006–14 and 2022–26, worse in 2015–21, only 1–4%/yr at account
+  level → not added.
+
+### Live log (forward test)
+Every real scan appends its signals to `logs/signal_log.csv` (LEADER BREAKOUTs marked
+NEEM, and each month-end momentum list) and re-evaluates all logged signals with the
+backtest rules (`tracking/forward_log.py`): breakouts get entry, stop / trailing exit,
+R and days; momentum lists get their return vs SPY until the next list. Shown in the
+terminal and in the Portefeuille tab as "Live logboek". Keep the file: after a few
+months it is the only real test of whether the system does live what it did in the
+backtest.
+
 ## Research round 10 — robustness of the dip-free plan (`research/round10.py`, `round10b.py`)
 
 Adoption rule (pre-registered): better than the default in DEV and not worse in any

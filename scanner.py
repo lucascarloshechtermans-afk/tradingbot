@@ -514,6 +514,7 @@ class ScanRun:
     # [(analysis.leader_breakout.LeaderBreakout, ChartRead)] -- today's / almost
     leader_breakouts: list = field(default_factory=list)
     near_breakouts: list = field(default_factory=list)
+    spy_history: pd.DataFrame | None = None
 
 
 def _naive_close(df: pd.DataFrame) -> pd.Series:
@@ -750,7 +751,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         pattern_setups=pattern_setups, leader_dips=leader_dips, market_state=mstate, dip_alerts=alerts,
         sector_by_ticker={t: c[0].sector for t, c in candidates.items()},
         momentum_book=book, index_signals=signals, momentum_closes=mom_closes,
-        leader_breakouts=breakouts, near_breakouts=near_breakouts,
+        leader_breakouts=breakouts, near_breakouts=near_breakouts, spy_history=benchmarks.get("spy"),
     )
 
 
@@ -812,6 +813,29 @@ def print_leader_dips(leader_dips: list, market: dict, risk_pct: float = 0.5) ->
         if d.missing:
             print("        - " + "; ".join(d.missing))
     print()
+
+
+def update_forward_log(provider: DataProvider, scan_run: ScanRun, spy: pd.DataFrame | None):
+    """Log today's signals and evaluate every logged one (tracking/forward_log.py).
+    Returns (summary, breakout results, momentum table) or (None, [], None)."""
+    from tracking.forward_log import append_signals, evaluate_breakout, evaluate_momentum, read_log, rows_from_scan, summary
+
+    try:
+        added = append_signals(rows_from_scan(scan_run.leader_breakouts, scan_run.momentum_book))
+        log = read_log()
+        results = []
+        for r in log[log.system == "BREAKOUT"].itertuples():
+            try:
+                daily = provider.get_history(r.ticker, period="2y")
+                results.append(evaluate_breakout(r.ticker, daily, r.signal_date, float(r.atr)))
+            except (DataUnavailable, ValueError) as exc:
+                logger.warning("forward log: cannot evaluate %s: %s", r.ticker, exc)
+        mom = evaluate_momentum(log, scan_run.momentum_closes, _naive_close(spy)) if spy is not None else None
+        logger.info("forward log: %d new signal(s) logged, %d breakout(s) tracked", added, len(results))
+        return summary(results), results, mom
+    except Exception as exc:  # noqa: BLE001 - the log must never break the scan
+        logger.warning("forward log failed: %s", exc)
+        return None, [], None
 
 
 def print_leader_breakouts(scan_run: ScanRun, risk_pct: float) -> None:
@@ -1026,6 +1050,16 @@ def main(argv: list[str] | None = None) -> int:
         print()
     print_no_trade_summary(scan_run.no_trade)
 
+    fw_summary, fw_results, fw_momentum = (None, [], None)
+    if not args.dry_run:
+        fw_summary, fw_results, fw_momentum = update_forward_log(provider, scan_run, scan_run.spy_history)
+        if fw_summary:
+            s = fw_summary
+            print(f"--- LIVE LOG (forward test): {s['signals']} breakout signals, {s['closed']} closed, {s['open']} open"
+                  + (f", win {s['win_pct']:.0f}%, avg {s['avg_r']:+.2f}R, total {s['total_r']:+.1f}R" if s["closed"] else "")
+                  + " -- logs/signal_log.csv")
+            print()
+
     from ui.dashboard import build_dashboard_html, trade_plan_to_row
     from watchlist.store import WatchlistStore
 
@@ -1059,6 +1093,7 @@ def main(argv: list[str] | None = None) -> int:
         momentum_closes=scan_run.momentum_closes,
         leader_breakouts=scan_run.leader_breakouts,
         near_breakouts=scan_run.near_breakouts,
+        forward=(fw_summary, fw_results, fw_momentum),
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

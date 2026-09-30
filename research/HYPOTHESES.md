@@ -228,3 +228,10 @@ DEV → not adopted (offered as an option). Filters F0/F2/F3 not adopted.
   trailing exit; 0.5% risk, max 8. Periods 2006–2014 / 2015–2021 / 2022–2026. Compared with
   (a) random entries in the same ETFs with the same exits and (b) as a third sleeve next to
   the stock plan (does it lower drawdown / raise Sharpe?).
+
+## Round 11 results
+- X1 close entry: one-account CAGR higher and max drawdown lower in all four cells
+  (DEV 7.4 vs 7.2%, VAL-T 19.2 vs 17.1%, VAL-U 13.0 vs 12.2%, FINAL 13.4 vs 10.9%); R per trade
+  mixed. Adopted as the recommended execution (buy near the close when above the level).
+- E1 ETF leader breakouts: better than random ETF entries in 2006-14 and 2022-26, worse in
+  2015-21; 1-4%/yr at account level. Not adopted.

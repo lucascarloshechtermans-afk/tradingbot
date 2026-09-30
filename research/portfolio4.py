@@ -24,8 +24,12 @@ def run_portfolio(p: Panel, trades: pd.DataFrame, *, stop_atr: float, risk_pct: 
     tr = trades.copy()
     if date_mask is not None:
         tr = tr[date_mask[tr["t"].to_numpy()]]
-    tr["te"] = tr["t"] + 1
-    tr["entry"] = p.o[tr["te"], tr["j"]] * (1 + SLIP)
+    if "te" not in tr:
+        tr["te"] = tr["t"] + 1          # default: entry at the next open
+    if "entry_px" in tr:
+        tr["entry"] = tr["entry_px"]    # e.g. entry at the signal day's close
+    else:
+        tr["entry"] = p.o[tr["te"], tr["j"]] * (1 + SLIP)
     tr["dist"] = stop_atr * p.atr[tr["t"], tr["j"]]
     tr = tr[np.isfinite(tr.entry) & np.isfinite(tr.dist) & (tr.dist > 0)]
     tr["prio"] = tr[priority] if priority else 0.0

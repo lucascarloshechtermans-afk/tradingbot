@@ -157,8 +157,13 @@ def _breakout_cards(items: list, risk_pct: float, sector_of) -> list[tuple[str, 
                  f"(gemiddeld ~24 handelsdagen; 38% winnaars, maar +2,1R per winnaar tegen -0,8R per verliezer). "
                  f"Opent hij de volgende ochtend met een gap terug onder het breakout-niveau? Toch kopen: getest, zulke "
                  f"breakouts deden het even goed (+0,28R per trade) -- een 'mislukte breakout'-filter hielp niet.")
-        plan = (f"Nog niets doen: alert op een slot boven {_eur(b.breakout_level)}. Dan kopen op de volgende open, {stop}. {trail}"
-                if b.near else f"Koop op de volgende open (~{_eur(b.close)}), {stop}. {trail}")
+        plan = (f"<b>Beste instap (getest): op het slot.</b> Staat de koers vlak voor sluitingstijd (~21:50 Belgische tijd) boven "
+                f"{_eur(b.breakout_level)}, koop dan met een slotorder (MOC); zo niet, geen trade. Lukt dat niet, koop dan op de open "
+                f"na een slot boven {_eur(b.breakout_level)}. {stop[0].upper() + stop[1:]}. {trail}"
+                if b.near else
+                f"Het slot van vandaag was al de breakout, dus koop op de volgende open (~{_eur(b.close)}). Volgende keer beter: "
+                f"koop al op het slot van de breakout-dag (zie BIJNA BREAKOUT) -- dat gaf in alle 4 testperiodes meer rendement "
+                f"en een kleinere daling. {stop[0].upper() + stop[1:]}. {trail}")
         if b.action == "OVERLAP":
             plan = "Overslaan: je houdt dit aandeel al via de momentum-lijst."
         levels = {"BREAKOUT": b.breakout_level, "TRAIL EXIT": b.exit_level}
