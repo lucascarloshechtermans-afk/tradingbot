@@ -12,6 +12,27 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Backtest of the plan as configured (`research/final_backtest.py`)
+
+50% MOMENTUM TOP 20 + 50% LEADER BREAKOUT (bought at the close, 1% risk of the
+sleeve, max 20), universe S&P 500 + 400 + scanner list + S&P 600 ≥ $50,
+June 2008 – September 2026, costs and T-bills on cash included:
+
+| | CAGR | max drawdown | Sharpe | worst year | years up |
+|---|---|---|---|---|---|
+| **Plan 50/50** | **16.3%** | **31.0%** | **0.77** | −7.6% (2022) | 84% |
+| momentum sleeve alone | 22.3% | 36.3% | 0.81 | −14.2% | 89% |
+| breakout sleeve alone | 9.0% | 47.3% | 0.51 | −10.8% | 58% |
+| SPY buy & hold | 11.7% | 51.1% | 0.66 | −34.9% (2008) | 84% |
+
+10,000 → ~158,000 vs ~76,000 for SPY. Worst drawdown 31% (Jan 2021 → Jan 2022,
+recovered Feb 2024); the plan was more than 10% below its peak on 45% of days.
+Breakouts: 0.9 taken per week, 37% winners, +2.0R average winner vs −0.8R loser,
+median hold 23 sessions. Subtract the ~4–5%/yr survivorship bias measured in
+round 6: realistic expectation ~11–12%/yr with ~30% drawdowns — about SPY's return
+with roughly half its worst drawdown. Of the two sleeves, momentum does the heavy
+lifting; the breakout sleeve mainly dampens the momentum drawdowns.
+
 ## Research round 11 — execution and diversification (`research/round11.py`)
 
 - **Buy breakouts at the close.** Buying a leader breakout at the close of the
