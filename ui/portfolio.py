@@ -134,7 +134,8 @@ def _pick_rows(picks: list, closes: pd.DataFrame | None) -> str:
     for p in picks:
         spark = _spark(closes[p.ticker]) if closes is not None and p.ticker in closes else ""
         badge = "gA" if p.status == "NIEUW" else "gB"
-        rows += (f"<tr><td>{p.rank}</td><td><b>{escape(p.ticker)}</b></td><td>{escape(p.sector or '-')}</td>"
+        link = f"<a class='tk' href='#ov-mo-{escape(p.ticker)}' onclick=\"openCard('{escape(p.ticker)}')\">{escape(p.ticker)}</a>"
+        rows += (f"<tr><td>{p.rank}</td><td><b>{link}</b></td><td>{escape(p.sector or '-')}</td>"
                  f"<td>{p.mom_12_1:+.0f}%</td><td>{p.ret_1m:+.1f}%</td><td>{p.close:,.2f}</td><td>{spark}</td>"
                  f"<td><span class='gb {badge}'>{p.status}</span></td></tr>")
     return rows

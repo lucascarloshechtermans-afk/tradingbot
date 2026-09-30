@@ -144,7 +144,7 @@ PAGE_TEMPLATE = """<!doctype html>
 <script>
 function openCard(t) {{
   document.querySelector('[data-tab=dashboard]').click();
-  for (const id of ['ov-bo-' + t, 'ov-' + t, 'ov-nb-' + t, 'ov-alert-' + t, 'ov-pat-' + t]) {{
+  for (const id of ['ov-mo-' + t, 'ov-bo-' + t, 'ov-' + t, 'ov-nb-' + t, 'ov-alert-' + t, 'ov-pat-' + t]) {{
     const el = document.getElementById(id);
     if (el) {{ el.open = true; el.scrollIntoView({{behavior: 'smooth', block: 'start'}}); return; }}
   }}
@@ -305,6 +305,7 @@ def build_dashboard_html(
     leader_breakouts: list | None = None,
     near_breakouts: list | None = None,
     forward: tuple | None = None,
+    momentum_reads: dict | None = None,
 ) -> str:
     """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
     'Ready to boom' tab."""
@@ -364,7 +365,9 @@ def build_dashboard_html(
                               sector_by_ticker or {}, market_state or {},
                               dip_risk_pct=portfolio_cfg.dip_risk_pct_of_account,
                               leader_breakouts=leader_breakouts, near_breakouts=near_breakouts,
-                              breakout_risk_pct=portfolio_cfg.breakout_risk_pct_of_account),
+                              breakout_risk_pct=portfolio_cfg.breakout_risk_pct_of_account,
+                              momentum=((momentum_book, momentum_reads, portfolio_cfg.momentum_pct / max(portfolio_cfg.momentum_top_n, 1))
+                                        if momentum_book is not None and momentum_reads else None)),
         portfolio_html=build_portfolio_tab_html(portfolio_cfg, account_size, momentum_book, index_signals, bear,
                                                 momentum_closes) + build_forward_html(*(forward or (None, [], None))),
         overview_css=OVERVIEW_CSS,

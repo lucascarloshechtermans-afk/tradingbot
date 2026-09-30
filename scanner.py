@@ -515,6 +515,7 @@ class ScanRun:
     leader_breakouts: list = field(default_factory=list)
     near_breakouts: list = field(default_factory=list)
     spy_history: pd.DataFrame | None = None
+    momentum_reads: dict = field(default_factory=dict)   # ticker -> (ChartRead, daily) for the momentum list
 
 
 def _naive_close(df: pd.DataFrame) -> pd.Series:
@@ -577,6 +578,29 @@ def find_momentum_book(provider: DataProvider, config: AppConfig, spy: pd.DataFr
     except Exception as exc:  # noqa: BLE001 - must never break the scan
         logger.warning("momentum book failed: %s", exc)
         return none
+
+
+def analyze_momentum_picks(provider: DataProvider, config: AppConfig, book) -> dict:
+    """Full chart read (daily EMAs, 4H 200 EMA, zones, patterns) for every stock in
+    the momentum list and every name that would enter at the next rebalance.
+    ticker -> (ChartRead, daily)."""
+    if book is None or config.portfolio.momentum_pct <= 0:
+        return {}
+    from analysis.chart_read import read_chart
+
+    tickers = [p.ticker for p in book.picks] + [t for t in book.preview_in if t not in {p.ticker for p in book.picks}]
+    out = {}
+    for t in tickers:
+        try:
+            daily = provider.get_history(t, period=config.data.period)
+            try:
+                hourly = provider.get_history(t, period="730d", interval="1h")
+            except DataUnavailable:
+                hourly = None
+            out[t] = (read_chart(t, daily, hourly), daily)
+        except Exception as exc:  # noqa: BLE001 - one chart must never break the scan
+            logger.warning("momentum chart read failed for %s: %s", t, exc)
+    return out
 
 
 def find_breakouts(provider: DataProvider, config: AppConfig, closes, volumes, spy: pd.DataFrame | None,
@@ -747,6 +771,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
                                                    mom_sectors, held, getattr(book, "min_price", None))
     if config.portfolio.momentum_pct <= 0:
         book = None
+    momentum_reads = analyze_momentum_picks(provider, config, book)
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
@@ -754,6 +779,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         sector_by_ticker={t: c[0].sector for t, c in candidates.items()},
         momentum_book=book, index_signals=signals, momentum_closes=mom_closes,
         leader_breakouts=breakouts, near_breakouts=near_breakouts, spy_history=benchmarks.get("spy"),
+        momentum_reads=momentum_reads,
     )
 
 
@@ -1097,6 +1123,7 @@ def main(argv: list[str] | None = None) -> int:
         leader_breakouts=scan_run.leader_breakouts,
         near_breakouts=scan_run.near_breakouts,
         forward=(fw_summary, fw_results, fw_momentum),
+        momentum_reads=scan_run.momentum_reads,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

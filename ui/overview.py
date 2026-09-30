@@ -116,6 +116,12 @@ def _dip_why(d) -> tuple[list[str], list[str]]:
     return why, missing
 
 
+GICS_TO_YAHOO = {  # index member lists use GICS names; the sector table uses Yahoo's
+    "Information Technology": "Technology", "Health Care": "Healthcare", "Financials": "Financial Services",
+    "Consumer Discretionary": "Consumer Cyclical", "Consumer Staples": "Consumer Defensive", "Materials": "Basic Materials",
+}
+
+
 def _first(a: list | None, b: list | None, ticker: str):
     for item, _read in (a or []) + (b or []):
         if item.ticker == ticker:
@@ -182,9 +188,21 @@ def _breakout_cards(items: list, risk_pct: float, sector_of) -> list[tuple[str, 
 def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: list, sector_ranked: list[dict],
                         sector_by_ticker: dict[str, str | None], market_state: dict, dip_risk_pct: float = 0.5,
                         leader_breakouts: list | None = None, near_breakouts: list | None = None,
-                        breakout_risk_pct: float | None = None) -> str:
-    sector_of = lambda t: sector_by_ticker.get(t) or getattr(_first(leader_breakouts, near_breakouts, t), "sector", None) or "Onbekend"  # noqa: E731
+                        breakout_risk_pct: float | None = None, momentum: tuple | None = None) -> str:
+    mo_sectors = {}
+    if momentum is not None and momentum[0] is not None:
+        mo_sectors = {p.ticker: p.sector for p in list(momentum[0].picks) + list(momentum[0].preview)}
+
+    def sector_of(t: str) -> str:
+        sec = (sector_by_ticker.get(t) or mo_sectors.get(t)
+               or getattr(_first(leader_breakouts, near_breakouts, t), "sector", None) or "Onbekend")
+        sec = sec.replace(" (small cap)", "")
+        return GICS_TO_YAHOO.get(sec, sec)
     setups, possible = [], []
+    if momentum is not None:
+        mo_set, mo_pos = momentum_cards(*momentum)
+        setups += mo_set
+        possible += mo_pos
     bo_risk = dip_risk_pct if breakout_risk_pct is None else breakout_risk_pct
     setups += _breakout_cards(leader_breakouts or [], bo_risk, sector_of)
     possible += _breakout_cards(near_breakouts or [], bo_risk, sector_of)
@@ -266,15 +284,17 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
            + (" -> halve posities" if bear else " -> normale posities")
            if vix is not None else "marktdata niet beschikbaar")
     setup_intro = (
-        "<p class='sm'>LEADER BREAKOUT: eerste slot boven de hoogste slotkoers van de vorige 50 dagen, in een top-50 momentum-leider, "
+        ("<p class='sm'>MOMENTUM TOP 20: de maandlijst, elk aandeel met volledige chartanalyse (EMA's, 4H 200 EMA, steun, "
+         "weerstand, patronen). Groen = nieuw deze maand, blauw-groen = blijft. Klik voor chart en uitleg.</p>" if momentum else "")
+        + ("" if not (leader_breakouts or near_breakouts) else "<p class='sm'>LEADER BREAKOUT: eerste slot boven de hoogste slotkoers van de vorige 50 dagen, in een top-50 momentum-leider, "
         "alleen als SPY boven zijn 200-daags staat. Koop op de volgende open, stop 2,5 ATR, trailing exit (verkoop na een slot "
         f"onder het laagste slot van 20 dagen). Risico {_pct(bo_risk)} van je account per trade. <b>Volgorde</b>: #1 eerst, score = "
-        "plaats in de leiderslijst; OVERLAP = zit al in je momentum-lijst, overslaan.</p>"
+        "plaats in de leiderslijst; OVERLAP = zit al in je momentum-lijst, overslaan.</p>")
         + ("" if not leader_dips and not dip_alerts else
            f"<p class='sm'>LEADER DIP: dip-instap in een momentum-leider, risico {_pct(dip_risk_pct)} "
            f"(half onder de 200-daags van SPY). NEEM / RESERVE / OVERLAP zoals hierboven.</p>")
         + "<p class='sm'>Klik voor uitleg en chart.</p>")
-    no_trade = ("" if setups else "<p class='nt'><b>NO TRADE vandaag</b> -- geen enkele momentum-leider breekt vandaag uit. "
+    no_trade = ("" if setups else "<p class='nt'><b>Niets te doen</b> -- geen signalen vandaag. "
                 "Kijk naar de mogelijke setups hieronder.</p>")
     return (
         "<div class='card'><h3 style='margin-top:0'>Overzicht per sector</h3>"
@@ -286,7 +306,7 @@ def build_overview_html(leader_dips: list, dip_alerts: list, pattern_setups: lis
         + setup_intro
         + no_trade + "".join(c for _, c in setups) + "</div>"
         "<div class='card'><h3 style='margin-top:0'>Mogelijke setups (nog niet verhandelbaar)</h3>"
-        "<p class='sm'>Leiders binnen 3% van een breakout (BIJNA BREAKOUT: alert zetten op de breakout-prijs)"
+        "<p class='sm'>Aandelen die bij de volgende herbalancering in de momentum-lijst komen (voorlopig), leiders binnen 3% van een breakout"
         + (", leiders vlak bij hun dip-trigger" if dip_alerts else "") + " en chart-patronen die klaarstaan (alleen info). "
         "Klik voor uitleg en chart.</p>"
         + ("".join(c for _, c in possible) or "<p>Geen.</p>") + "</div>"
@@ -326,3 +346,75 @@ OVERVIEW_CSS = (
     ".gR{background:#0c8599;color:#fff}.gW{background:#1971c2;color:#fff}.gP{background:#e8590c;color:#fff}"
     "a.tk{color:#74c0fc;margin-right:6px}"
 )
+
+
+def _atr14(daily) -> float | None:
+    d = daily.dropna(subset=["high", "low", "close"])
+    if len(d) < 15:
+        return None
+    pc = d["close"].shift()
+    tr = __import__("pandas").concat([d["high"] - d["low"], (d["high"] - pc).abs(), (d["low"] - pc).abs()], axis=1).max(axis=1)
+    v = float(tr.rolling(14).mean().iloc[-1])
+    return v if v > 0 else None
+
+
+def resistance_room(read: ChartRead, daily) -> tuple[float | None, float | None]:
+    """(room to the nearest resistance zone in ATR, in %) -- None when there is no zone above."""
+    z = read.resistance_zone
+    atr = _atr14(daily)
+    if z is None or atr is None:
+        return None, None
+    return (z.low - read.close) / atr, (z.low / read.close - 1) * 100
+
+
+RESISTANCE_NOTE = ("Getest (research round 13, 7.000 momentum-aandelen 2008-2026): aandelen met weerstand binnen 1 ATR erboven "
+                   "deden het de maand erna niet slechter dan de andere 19 (in 2 van de 4 testperiodes zelfs beter). "
+                   "Informatie, geen reden om over te slaan.")
+
+
+def momentum_cards(book, reads: dict, pct_per_stock: float) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Analysis cards for the MOMENTUM TOP 20 (setups) and the names that would enter
+    at the next rebalance (possible setups). reads: ticker -> (ChartRead, daily)."""
+    if book is None:
+        return [], []
+    setups, possible = [], []
+    entries = [(p, False) for p in book.picks] + [(p, True) for p in book.preview if p.ticker in set(book.preview_in)]
+    for p, is_preview in entries:
+        if p.ticker not in reads:
+            continue
+        read, daily = reads[p.ticker]
+        why = [f"<b>Momentum</b>: #{p.rank} van {len(book.picks) or 20} -- {p.mom_12_1:+.0f}% van 12 tot 1 maand geleden; "
+               f"laatste maand {p.ret_1m:+.1f}%."]
+        why += explain_chart(read) + _patterns_nl(daily)
+        room_atr, room_pct = resistance_room(read, daily)
+        missing = []
+        if room_atr is not None and room_atr <= 1:
+            z = read.resistance_zone
+            missing.append(f"<b>Weerstand vlak erboven</b>: zone {_eur(z.low)}-{_eur(z.high)} ({room_atr:.1f} ATR / {room_pct:+.1f}%, "
+                           f"{z.touches}x geraakt). {RESISTANCE_NOTE}")
+        elif room_atr is not None:
+            z = read.resistance_zone
+            missing.append(f"Eerstvolgende weerstand: {_eur(z.low)}-{_eur(z.high)} ({room_atr:.1f} ATR / {room_pct:+.1f}% hoger).")
+        else:
+            missing.append("Geen weerstandszone boven de koers in de laatste 2 jaar (open lucht).")
+        if read.support_zone is not None:
+            s = read.support_zone
+            missing.append(f"Steun: {_eur(s.low)}-{_eur(s.high)} ({(s.high / read.close - 1) * 100:+.1f}%).")
+        plan = (f"{'Wordt gekocht bij de volgende herbalancering als hij dan nog in de top 20 staat' if is_preview else 'In de maandlijst'}: "
+                f"{pct_per_stock:.1f}% van je account, kopen op de open na het maandeinde, een maand houden, geen stop -- "
+                f"de trendfilter (SPY onder zijn 200-daags op het maandeinde = alles cash) is de rem. Blijft hij in de top 20, "
+                f"dan hou je hem.")
+        levels = {}
+        if read.resistance_zone is not None:
+            levels["WEERSTAND"] = read.resistance_zone.low
+        if read.support_zone is not None:
+            levels["STEUN"] = read.support_zone.high
+        svg = render_chart_svg(daily, read, levels=levels)
+        flag = " ⚠ weerstand" if room_atr is not None and room_atr <= 1 else ""
+        label = (f"VOLGENDE MAAND ERIN{flag}" if is_preview else f"MOMENTUM #{p.rank} · {p.status}{flag}")
+        cls = "gW" if is_preview else ("gA" if p.status == "NIEUW" else "gB")
+        summary = (f"{escape(p.sector or '-')} · slot {_eur(read.close)} · 12-1m {p.mom_12_1:+.0f}%"
+                   + (f" · weerstand {room_pct:+.1f}%" if room_pct is not None else " · open lucht"))
+        card = _card(f"ov-mo-{p.ticker}", label, cls, p.ticker, summary, why, missing, plan, svg)
+        (possible if is_preview else setups).append((p.ticker, card))
+    return setups, possible

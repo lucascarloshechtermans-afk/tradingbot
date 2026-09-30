@@ -24,7 +24,7 @@ def test_explain_chart_gives_dutch_reasons_for_the_emas():
 
 def test_overview_says_no_trade_without_grade_a_or_b_and_lists_sectors():
     html = build_overview_html([], [], [], SECTORS, {}, {"vix": 14.9, "spy_below_50": False})
-    assert "NO TRADE vandaag" in html
+    assert "Niets te doen" in html
     assert "Technology" in html and "Overzicht per sector" in html
 
 
@@ -33,3 +33,19 @@ def test_overview_shows_research_note_and_trend_sizing():
     assert "Wat het onderzoek zegt" in html
     assert "willekeurig aandeel" in html
     assert "ONDER zijn 200-daags" in html and "halve posities" in html
+
+
+def test_momentum_cards_show_analysis_and_resistance_warning():
+    from analysis.momentum_portfolio import MomentumBook, MomentumPick
+    from ui.overview import momentum_cards
+
+    daily = _daily()
+    read = read_chart("AAA", daily, hourly=None)
+    picks = [MomentumPick(1, "AAA", "Tech", 150.0, 3.0, float(daily["close"].iloc[-1]), "NIEUW")]
+    book = MomentumBook(as_of=daily.index[-1], invested=True, picks=picks, exits=[], preview_date=daily.index[-1],
+                        preview=picks, preview_in=[])
+    setups, possible = momentum_cards(book, {"AAA": (read, daily)}, 5.0)
+    assert len(setups) == 1 and not possible
+    html = setups[0][1]
+    assert "MOMENTUM #1" in html and "200 EMA op de dag" in html and "5.0% van je account" in html
+    assert "weerstand" in html.lower() or "open lucht" in html

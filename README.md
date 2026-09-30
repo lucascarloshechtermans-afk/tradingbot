@@ -12,6 +12,24 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 13 — resistance and chart patterns as filters (`research/round13.py`)
+
+10,526 chart analyses (zones from `analysis.chart_read.find_zones`, patterns from
+`analysis.patterns`) at the signal close of every momentum pick (7,000) and leader
+breakout (3,622). Momentum picks, next-month return minus that month's pick average:
+
+| | DEV | VAL-T | VAL-U | FINAL |
+|---|---|---|---|---|
+| resistance within 1 ATR above | +0.63% (t 1.1) | −1.55% (t −1.1) | +0.35% | −0.10% |
+| no zone above ("open sky") | −0.22% | +1.90% (t 1.7) | −0.08% | +0.09% |
+| bullish pattern near its trigger | −0.11% | −0.70% | −0.40% | −2.91% (t −2.4) |
+
+Breakouts at resistance were not worse either. Nothing passed, so resistance is not
+a rule — but every momentum pick now gets a full chart analysis card on the
+Dashboard tab (daily EMAs, 4H 200 EMA, support/resistance zones, patterns, room to
+resistance with a ⚠ flag within 1 ATR, the chart), including the names that would
+enter at the next rebalance.
+
 ## Research round 12 — can the momentum-only book be improved? (`research/round12.py`, `round12b.py`)
 
 CAGR / max drawdown / Sharpe per cell (DEV · VAL-T · VAL-U · FINAL):
