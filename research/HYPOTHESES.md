@@ -178,3 +178,25 @@ Controls, same exits, same days/regime:
 - C2 a random eligible stock (same-day baseline).
 Pass: B beats C1 by > 0 with t ≥ 2 in DEV (research ≤2021) and keeps the sign in VAL-T, VAL-U
 and FINAL. Then it goes into the scanner as a breakout setup; otherwise the scanner says so.
+
+---
+
+# Round 10 — robustness and refinements of the dip-free plan (written 2026-09-30, before running)
+
+Rule for adopting any change: it must beat the current default in DEV (research half,
+2008–2021) AND not be worse in any of VAL-T, VAL-U, FINAL (Sharpe for the momentum book,
+mean R per trade and one-account CAGR/maxDD for breakouts). Otherwise the default stays;
+neighbouring values are reported to show whether the default sits on a plateau.
+
+Momentum book (month-end unless stated, SPY > 200d filter):
+- M-N: top 10 / 20 (default) / 30
+- M-BUF: buffer — keep a holding while it is in the top 40, buy new names from the top 20
+- M-SEC: at most 5 names per GICS sector
+- M-VOL: inverse-volatility weights (63-day)
+- M-2W: rebalance every 10 sessions instead of monthly
+
+Leader breakout (trailing exit, one open trade per ticker):
+- leader list top 30 / 50 (default) / 100
+- breakout lookback 20 / 50 (default) / 100 sessions
+- trailing exit 10 / 20 (default) / 50 sessions
+- initial stop 2 / 2.5 (default) / 3.5 ATR
