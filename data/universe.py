@@ -45,6 +45,20 @@ DEFAULT_UNIVERSE = [
     "CRSP", "NTLA", "BEAM",                          # biotech
     "FCX", "AA", "ALB", "CCJ", "VST", "CEG",         # materials/energy, higher-beta
     "CCL", "RCL", "EXPE", "W",                       # travel/consumer discretionary
+    # Added from the compared "Explosive Breakout" scanner's watchlist
+    # (alt_scanners/), minus ZI/CYBR which no longer have data: with the
+    # momentum-rank + efficiency gates on, our scanner did +0.19R/trade on
+    # that list -- more candidates for the ~3-4 setups/week target.
+    "SOUN", "IONQ", "RGTI", "QUBT", "AI", "BBAI",   # AI / quantum small caps
+    "DELL", "WDAY", "HUBS", "TWLO", "DOCU", "CDNS", "SNPS", "FTNT", "S",  # tech/software
+    "RIOT", "MARA", "CLSK", "APLD", "CIFR", "HUT",  # crypto miners / AI hosting
+    "KEEL", "UPST", "LCID",
+    "PLUG", "FCEL", "QS", "ENPH", "FSLR", "SEDG",   # clean energy
+    "OCGN", "ARWR", "IONS", "ALNY", "ALGN", "BIIB",  # biotech/medtech
+    "ASML", "WOLF", "ENTG",                          # semis
+    "CHWY", "ETSY", "PINS", "SNAP", "CVNA", "TTWO", "AXON",  # consumer/internet
+    "MELI", "PDD", "BIDU", "JD", "NTES", "TCOM", "BILI", "IQ", "LI",  # international ADRs
+    "ZM",
 ]
 # CFLT and EXAS were both in this list and removed: every yfinance fetch for
 # them failed across every backtest/scan this session ("No history returned").

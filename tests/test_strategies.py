@@ -1,3 +1,5 @@
+import pandas as pd
+
 from tests.helpers import (
     breakout_history,
     context_from,
@@ -56,6 +58,37 @@ def test_breakout_rewards_fresh_52w_high_over_capped_breakout():
     assert fresh_signal.confidence > capped_signal.confidence
     assert any("fresh 52-week high" in r.lower() for r in fresh_signal.reasons)
     assert any("stronger historical resistance" in r.lower() for r in capped_signal.risks)
+
+
+def test_breakout_penalizes_chase_far_above_its_own_trigger_level():
+    """Item 15 of the optimization audit: a breakout that already gapped
+    several ATRs past its OWN trigger level should score materially lower
+    than one still close to it, even though `is_breakout` matches both."""
+    from tests.helpers import _to_ohlcv
+
+    rise_days = 60
+    flat_close = pd.Series([50.0 + 0.05 * i for i in range(rise_days)])
+
+    def _history(spike: float, volume_spike: float = 3_000_000.0) -> pd.DataFrame:
+        close = pd.concat([flat_close, pd.Series([flat_close.iloc[-1] + spike])], ignore_index=True)
+        idx = pd.date_range("2023-01-01", periods=len(close), freq="D")
+        close.index = idx
+        volume = pd.Series([1_000_000.0] * (len(close) - 1) + [volume_spike], index=idx)
+        return _to_ohlcv(close, volume=volume)
+
+    # fresh: breaks out today by a small amount just above the prior 20d high
+    fresh_ctx = context_from(_history(spike=0.5))
+    # chased: same setup, but a much bigger gap -- several ATRs past the trigger
+    chased_ctx = context_from(_history(spike=6.0))
+
+    fresh_signal = BreakoutStrategy().evaluate(fresh_ctx)
+    chased_signal = BreakoutStrategy().evaluate(chased_ctx)
+
+    assert fresh_signal.matched is True
+    assert chased_signal.matched is True
+    assert chased_signal.confidence < fresh_signal.confidence
+    assert any("chases an already-extended move" in r.lower() for r in chased_signal.risks)
+    assert any("fresh entry, not a chase" in r.lower() for r in fresh_signal.reasons)
 
 
 def test_breakout_does_not_match_flat_market():
