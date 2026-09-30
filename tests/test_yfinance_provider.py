@@ -151,5 +151,13 @@ def test_daily_cache_missing_last_completed_session_is_stale():
     assert YFinanceProvider._missing_last_session(old, "1d", age_s=7200) is True
     assert YFinanceProvider._missing_last_session(old, "1d", age_s=60) is False      # re-checked < 1h ago
     assert YFinanceProvider._missing_last_session(old, "1h", age_s=7200) is False    # intraday: TTL only
-    fresh = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex([pd.Timestamp.now(tz="UTC")]))
-    assert YFinanceProvider._missing_last_session(fresh, "1d", age_s=7200) is False
+    from data.sessions import last_completed_session
+
+    session = last_completed_session().tz_localize("America/New_York")
+    fresh = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex([session]).tz_convert("UTC"))
+    now = pd.Timestamp.now(tz="America/New_York")
+    after_close = (now - (session + pd.Timedelta(hours=16, minutes=30))).total_seconds()
+    assert YFinanceProvider._missing_last_session(fresh, "1d", age_s=after_close) is False
+    # the same bar cached at noon of that session was a live, partial bar -> stale
+    during = (now - (session + pd.Timedelta(hours=12))).total_seconds()
+    assert YFinanceProvider._missing_last_session(fresh, "1d", age_s=during) is True

@@ -731,13 +731,15 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     pattern_setups = find_pattern_setups(provider, {t: c[1] for t, c in candidates.items()})
     leader_dips, mstate, alerts = find_validated_leader_dips(provider, {t: c[1] for t, c in candidates.items()}, benchmarks)
     logger.info("building the portfolio plan: index RSI(2) + momentum top %d", config.portfolio.momentum_top_n)
-    signals = find_index_signals(provider)
+    signals = find_index_signals(provider) if config.portfolio.index_rsi2_pct > 0 else []
     book, mom_closes, mom_volumes, mom_sectors = find_momentum_book(provider, config, benchmarks.get("spy"),
                                                                     {t: c[0].sector for t, c in candidates.items()})
     from analysis.leader_dip import prioritize
 
     held = {p.ticker for p in book.picks} if book is not None and book.invested and config.portfolio.momentum_pct > 0 else set()
     leader_dips = prioritize(leader_dips, held, config.portfolio.dip_max_positions)
+    if config.portfolio.dip_pct <= 0:  # no dip buying in the plan (user's choice)
+        leader_dips, alerts = [], []
     breakouts, near_breakouts = find_breakouts(provider, config, mom_closes, mom_volumes, benchmarks.get("spy"),
                                                mom_sectors, held, getattr(book, "min_price", None))
     if config.portfolio.momentum_pct <= 0:
@@ -838,7 +840,9 @@ def print_portfolio_plan(scan_run: ScanRun, config: AppConfig) -> None:
     pc = config.portfolio
     bear = scan_run.market_state.get("spy_below_200")
     print()
-    print(f"=== PORTFOLIO PLAN {pc.momentum_pct:.0f}/{pc.dip_pct:.0f}/{pc.index_rsi2_pct:.0f} (momentum / dip / index RSI2) -- price data only ===")
+    parts = [f"{n} {v:.0f}%" for n, v in (("momentum", pc.momentum_pct), ("breakouts", pc.breakout_pct),
+                                           ("dips", pc.dip_pct), ("index RSI2", pc.index_rsi2_pct)) if v > 0]
+    print(f"=== PORTFOLIO PLAN {' / '.join(parts)} -- price data only ===")
     for name, pct, amount, rule in allocation_rows(pc, config.risk.account_size, bear):
         print(f"  {name:<22}{pct:>5}  {amount:>10}  {rule}")
     book = scan_run.momentum_book
@@ -1003,8 +1007,9 @@ def main(argv: list[str] | None = None) -> int:
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
     print_portfolio_plan(scan_run, config)
-    print_leader_dips(scan_run.leader_dips, scan_run.market_state, config.portfolio.dip_risk_pct_of_account)
-    print_leader_breakouts(scan_run, config.portfolio.dip_risk_pct_of_account)
+    print_leader_breakouts(scan_run, config.portfolio.breakout_risk_pct_of_account)
+    if config.portfolio.dip_pct > 0:
+        print_leader_dips(scan_run.leader_dips, scan_run.market_state, config.portfolio.dip_risk_pct_of_account)
     if scan_run.dip_alerts:
         print("--- Next-session alerts: momentum leaders closest to a LEADER DIP trigger ---")
         for a, _r in scan_run.dip_alerts:

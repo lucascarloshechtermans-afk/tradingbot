@@ -39,22 +39,29 @@ def _spark(series: pd.Series | None, w: int = 120, h: int = 26) -> str:
 
 
 def allocation_rows(cfg, account_size: float, bear: bool | None) -> list[tuple[str, str, str, str]]:
-    """(system, % of account, amount, per-position rule)"""
+    """(system, % of account, amount, per-position rule) for every system that is switched on."""
     n = max(cfg.momentum_top_n, 1)
     dip_risk = cfg.dip_risk_pct_of_account * (0.5 if bear else 1.0)
-    cash = max(0.0, 100 - cfg.momentum_pct - cfg.dip_pct - cfg.index_rsi2_pct)
-    rows = [
-        ("MOMENTUM TOP 20", f"{cfg.momentum_pct:.0f}%", _money(account_size * cfg.momentum_pct / 100),
-         f"{cfg.momentum_pct / n:.1f}% van je account per aandeel ({_money(account_size * cfg.momentum_pct / 100 / n)}), "
-         f"maandelijks herbalanceren; alles in cash als SPY op het maandeinde onder zijn 200-daags sloot"),
-        ("LEADER DIP swings", f"{cfg.dip_pct:.0f}%", _money(account_size * cfg.dip_pct / 100),
-         f"risico {dip_risk:.2f}% van je account per trade ({_money(account_size * dip_risk / 100)})"
-         f"{' -- gehalveerd: SPY onder zijn 200-daags' if bear else ''}; max {cfg.dip_max_positions} tegelijk, "
-         f"max 20% van dit deel per positie"),
-        ("INDEX RSI(2)", f"{cfg.index_rsi2_pct:.0f}%", _money(account_size * cfg.index_rsi2_pct / 100),
-         f"{cfg.index_rsi2_pct / 4:.1f}% van je account per ETF met een KOOP-signaal "
-         f"({_money(account_size * cfg.index_rsi2_pct / 400)}); de rest van dit deel in cash / geldmarkt"),
-    ]
+    bo_risk = cfg.breakout_risk_pct_of_account
+    cash = max(0.0, 100 - cfg.momentum_pct - cfg.breakout_pct - cfg.dip_pct - cfg.index_rsi2_pct)
+    rows = []
+    if cfg.momentum_pct > 0:
+        rows.append(("MOMENTUM TOP 20", f"{cfg.momentum_pct:.0f}%", _money(account_size * cfg.momentum_pct / 100),
+                     f"{cfg.momentum_pct / n:.1f}% van je account per aandeel ({_money(account_size * cfg.momentum_pct / 100 / n)}), "
+                     f"maandelijks herbalanceren; alles in cash als SPY op het maandeinde onder zijn 200-daags sloot"))
+    if cfg.breakout_pct > 0:
+        rows.append(("LEADER BREAKOUT", f"{cfg.breakout_pct:.0f}%", _money(account_size * cfg.breakout_pct / 100),
+                     f"risico {bo_risk:.2f}% van je account per trade ({_money(account_size * bo_risk / 100)}); "
+                     f"max {cfg.breakout_max_positions} tegelijk, max 20% van dit deel per positie; alleen als SPY boven zijn 200-daags staat"))
+    if cfg.dip_pct > 0:
+        rows.append(("LEADER DIP swings", f"{cfg.dip_pct:.0f}%", _money(account_size * cfg.dip_pct / 100),
+                     f"risico {dip_risk:.2f}% van je account per trade ({_money(account_size * dip_risk / 100)})"
+                     f"{' -- gehalveerd: SPY onder zijn 200-daags' if bear else ''}; max {cfg.dip_max_positions} tegelijk, "
+                     f"max 20% van dit deel per positie"))
+    if cfg.index_rsi2_pct > 0:
+        rows.append(("INDEX RSI(2)", f"{cfg.index_rsi2_pct:.0f}%", _money(account_size * cfg.index_rsi2_pct / 100),
+                     f"{cfg.index_rsi2_pct / 4:.1f}% van je account per ETF met een KOOP-signaal "
+                     f"({_money(account_size * cfg.index_rsi2_pct / 400)}); de rest van dit deel in cash / geldmarkt"))
     if cash > 0:
         rows.append(("Cash (niet toegewezen)", f"{cash:.0f}%", _money(account_size * cash / 100), "geldmarkt / T-bills"))
     return rows
@@ -89,18 +96,25 @@ def todo_items(cfg, book, signals: list, n_dips: int, bear: bool | None, n_break
             items.append("Index RSI(2): geen signaal"
                          + (f"; dichtst bij: {near[0].etf} (slot &le; {near[0].buy_below:,.2f})" if near else "") + ".")
     if cfg.dip_pct > 0:
-        items.append(f"Swings: {n_dips} LEADER DIP{'s' if n_dips != 1 else ''} en {n_breakouts} LEADER BREAKOUT"
-                     f"{'s' if n_breakouts != 1 else ''} vandaag"
-                     + (" (halve risico's: SPY onder zijn 200-daags; breakouts alleen boven de 200-daags)" if bear else "")
-                     + " -- zie hieronder, in volgorde.")
+        items.append(f"Dips: {n_dips} LEADER DIP{'s' if n_dips != 1 else ''} vandaag"
+                     + (" (halve risico's: SPY onder zijn 200-daags)" if bear else "") + ".")
+    if cfg.breakout_pct > 0:
+        items.append(f"Breakouts: <b>{n_breakouts} LEADER BREAKOUT{'s' if n_breakouts != 1 else ''}</b> vandaag"
+                     + (" -- geen nieuwe: SPY staat onder zijn 200-daags" if bear else "")
+                     + " -- zie Setups, in volgorde (#1 eerst).")
     return items
 
 
 def build_todo_html(cfg, book, signals: list, n_dips: int, bear: bool | None, n_breakouts: int = 0) -> str:
     items = todo_items(cfg, book, signals, n_dips, bear, n_breakouts)
+    if book is not None and book.preview_date is not None:
+        items.insert(0, f"Koersen t/m het <b>slot van {_date(book.preview_date)}</b> (alleen afgesloten beursdagen; "
+                        "een run tijdens de beurs gebruikt nog de vorige slotkoers).")
     return ("<div class='card'><h3 style='margin-top:0'>Vandaag te doen "
-            f"<span class='sm'>portefeuilleplan {cfg.momentum_pct:.0f}/{cfg.dip_pct:.0f}/{cfg.index_rsi2_pct:.0f} "
-            "(momentum / dip / index) -- details in de tab Portefeuille</span></h3><ul>"
+            "<span class='sm'>portefeuilleplan: " + " / ".join(f"{name} {pct:.0f}%" for name, pct in (
+                ("momentum", cfg.momentum_pct), ("breakouts", cfg.breakout_pct), ("dips", cfg.dip_pct),
+                ("index RSI(2)", cfg.index_rsi2_pct)) if pct > 0)
+            + " -- details in de tab Portefeuille</span></h3><ul>"
             + "".join(f"<li>{i}</li>" for i in items) + "</ul></div>")
 
 
@@ -122,13 +136,14 @@ def build_portfolio_tab_html(cfg, account_size: float, book, signals: list, bear
     parts = [
         "<div class='card'><h3 style='margin-top:0'>Portefeuilleplan</h3>"
         f"<p class='sm'>Accountgrootte uit config (risk.account_size): {_money(account_size)}. Alleen koersdata. "
-        "Verdeling instelbaar onder <code>portfolio:</code> in config.yaml (optie 1 = 100/0/0, 2 = 0/100/0, 3 = 50/50/0, "
-        "4 = 0/0/100, 5 = 40/40/20).</p>"
+        "Verdeling instelbaar onder <code>portfolio:</code> in config.yaml (momentum_pct, breakout_pct, dip_pct, "
+        "index_rsi2_pct).</p>"
         "<table><thead><tr><th>Systeem</th><th>Deel</th><th>Bedrag</th><th>Per positie</th></tr></thead><tbody>"
         + alloc + "</tbody></table>"
-        "<p class='sm'>Backtest 2008-2021 / 2022-2026 (40/40/20, onderzoeks- en controle-aandelen): 11.8-13.2% / 13.7-17.8% per jaar, "
-        "grootste daling 24-25% / 19-20%. Aandelen-backtests zijn ~4-5%/jaar te rooskleurig (aandelen die uit de index "
-        "vielen ontbreken) -- reken op ~9-14% met dalingen tot ~25%. Geen garantie.</p></div>"
+        "<p class='sm'>Backtest 50% momentum / 50% breakouts (onderzoeks- en controle-aandelen): 13-18% per jaar in 2008-2021, "
+        "16-23% in 2022-2026, grootste daling ~25%. Aandelen-backtests zijn ~4-5%/jaar te rooskleurig (aandelen die uit de index "
+        "vielen ontbreken) -- reken op ~9-19% met dalingen tot ~25-30%. Geen garantie. Geen dips, geen RSI(2): alleen kopen "
+        "op sterkte.</p></div>"
     ]
     if book is not None:
         head = ("<table><thead><tr><th>#</th><th>Ticker</th><th>Sector</th><th>12-1 mnd</th><th>Laatste mnd</th>"

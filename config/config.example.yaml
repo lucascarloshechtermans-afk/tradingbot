@@ -117,16 +117,18 @@ scoring:
     interesting: 70
     watchlist: 60
 
-portfolio:                   # README "Research round 6": three price-only systems in one account
-  momentum_pct: 40             # MOMENTUM TOP 20 -- month-end, top 20 by 12-1 month return, SPY > 200d
-  dip_pct: 40                  # LEADER DIP swings -- the daily scanner
-  index_rsi2_pct: 20           # INDEX RSI(2) -- SPY/QQQ/IWM/DIA, a quarter each when triggered
+portfolio:                   # README "Research rounds 6-9": price-only systems in one account
+  momentum_pct: 50             # MOMENTUM TOP 20 -- month-end, top 20 by 12-1 month return, SPY > 200d
+  breakout_pct: 50             # LEADER BREAKOUT -- 50-day breakout in a top-50 leader, trailing exit
+  dip_pct: 0                   # LEADER DIP swings -- off: no dip buying (user's choice, round 9)
+  index_rsi2_pct: 0            # INDEX RSI(2) -- off: it is dip buying too
   momentum_top_n: 20
-  dip_risk_pct_of_sleeve: 1.0  # 1% of the 40% sleeve = 0.4% of the account per dip trade (halved below SPY 200d)
+  breakout_risk_pct_of_sleeve: 1.0  # 1% of the 50% sleeve = 0.5% of the account per breakout
+  breakout_max_positions: 20
+  dip_risk_pct_of_sleeve: 1.0
   dip_max_positions: 10
   include_small_caps: true     # + S&P SmallCap 600 in momentum / breakouts (tested: lowered results, see README round 8)
   small_cap_min_price: 50      # small caps only at this share price or higher
-  # presets: option 1 = 100/0/0, option 2 = 0/100/0, option 3 = 50/50/0, option 4 = 0/0/100, option 5 = 40/40/20
 
 earnings:
   avoid_earnings: true

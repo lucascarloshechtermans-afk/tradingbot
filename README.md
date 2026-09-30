@@ -12,6 +12,28 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 9 — no dip buying: momentum + breakouts only (current default)
+
+The user wants technical buys only, no dips. `research/breakout9.py`:
+- **"Failed breakout" filter** (skip when the next open gaps back below the breakout
+  level): no help — those 1,612 breakouts earned +0.277R/trade vs +0.280R for all.
+  So a gap-down the morning after a breakout (MRNA, 30-09-2026) is not a reason to skip.
+- **Dip-free plan, 50% momentum top 20 + 50% leader breakouts** (1% risk of the
+  sleeve = 0.5% of the account, max 20): 13.3% / 18.2% a year (2008–2021, research /
+  holdout), 16.2% / 23.3% (2022–2026), max drawdown 25–26%, Sharpe 0.73–0.98 — at
+  least as good as the 40/40/20 plan with dips and RSI(2). Minus the ~4–5%/yr
+  survivorship bias of every stock backtest here.
+
+Default config is now `momentum_pct: 50, breakout_pct: 50, dip_pct: 0,
+index_rsi2_pct: 0`; LEADER DIP and INDEX RSI(2) (both dip buyers) are hidden unless
+switched back on.
+
+**Bug fixed: partial bars.** A scan during market hours used today's live bar as a
+close (the 29-09 breakouts were first reported at 14:45 New York time). Daily data
+is now always cut to the last COMPLETED session (`data/sessions.py`), live bars are
+never cached, and a cache written while its last session was still trading is
+refetched. The dashboard shows "Koersen t/m het slot van …".
+
 ## Research round 8 — adding S&P 600 small caps priced ≥ $50
 
 `research/smallcap8.py`: the S&P SmallCap 600 names (not in the 500/400) join the

@@ -7,6 +7,7 @@ from datetime import datetime
 import pandas as pd
 
 from data.cache import DiskCache
+from data.sessions import drop_incomplete_daily
 from data.provider import DataProvider, DataUnavailable, TickerInfo
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ class YFinanceProvider(DataProvider):
         if self.cache is not None:
             cached = self.cache.get(cache_key)
             if cached is not None and not self._missing_last_session(cached, interval, self.cache.age_seconds(cache_key)):
-                return cached
+                return drop_incomplete_daily(cached) if interval == "1d" else cached
 
         import yfinance as yf
 
@@ -90,6 +91,8 @@ class YFinanceProvider(DataProvider):
         df = df[["open", "high", "low", "close", "adj_close", "volume"]].sort_index()
         df = df[~df.index.duplicated(keep="last")]
         df = df.dropna(subset=["open", "high", "low", "close"])
+        if interval == "1d":
+            df = drop_incomplete_daily(df)  # never use or cache today's live bar as if it were a close
 
         if self.cache is not None:
             self.cache.set(cache_key, df)
@@ -103,9 +106,14 @@ class YFinanceProvider(DataProvider):
         as stale when its last bar is older than the last COMPLETED US session
         -- re-checking at most hourly so a genuinely missing bar (holiday,
         halted ticker) doesn't trigger a download on every call."""
-        if interval != "1d" or df.empty or (age_s is not None and age_s < 3600):
+        if interval != "1d" or df.empty:
             return False
         now = pd.Timestamp.now(tz="America/New_York")
+        last_bar = df.index[-1].tz_convert("America/New_York").normalize()
+        if age_s is not None and now - pd.Timedelta(seconds=age_s) < last_bar + pd.Timedelta(hours=16, minutes=15):
+            return True  # cached while that session was still trading: its last bar is a partial one
+        if age_s is not None and age_s < 3600:
+            return False
         session = now.normalize()
         if now.weekday() >= 5 or now < session + pd.Timedelta(hours=16, minutes=15):
             session -= pd.tseries.offsets.BDay(1)

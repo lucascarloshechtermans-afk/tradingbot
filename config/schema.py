@@ -364,13 +364,18 @@ class AlertsConfig:
 
 @dataclass
 class PortfolioConfig:
-    """How the account is split between the three price-only systems of
-    README 'Research round 6'. Percent of the account; 0 switches a system
-    off (100/0/0 = momentum only, 0/100/0 = dip swings only, ...)."""
-    momentum_pct: float = 40.0
-    dip_pct: float = 40.0
-    index_rsi2_pct: float = 20.0
+    """How the account is split between the price-only systems (README,
+    'Research rounds 6-9'). Percent of the account; 0 switches a system off.
+    Default (round 9, the user wants technical buys only, no dip buying):
+    50% MOMENTUM TOP 20 + 50% LEADER BREAKOUT; LEADER DIP and INDEX RSI(2)
+    (both dip buyers) are off."""
+    momentum_pct: float = 50.0
+    breakout_pct: float = 50.0
+    dip_pct: float = 0.0
+    index_rsi2_pct: float = 0.0
     momentum_top_n: int = 20
+    breakout_risk_pct_of_sleeve: float = 1.0   # risk per breakout, % of the breakout sleeve
+    breakout_max_positions: int = 20
     dip_risk_pct_of_sleeve: float = 1.0   # risk per dip trade, % of the dip sleeve (halved below SPY's 200-day)
     dip_max_positions: int = 10
     # add the S&P SmallCap 600 to the momentum / breakout universe, only at this
@@ -381,21 +386,28 @@ class PortfolioConfig:
     @classmethod
     def from_dict(cls, raw: dict) -> "PortfolioConfig":
         cfg = cls(
-            momentum_pct=float(raw.get("momentum_pct", 40.0)),
-            dip_pct=float(raw.get("dip_pct", 40.0)),
-            index_rsi2_pct=float(raw.get("index_rsi2_pct", 20.0)),
+            momentum_pct=float(raw.get("momentum_pct", 50.0)),
+            breakout_pct=float(raw.get("breakout_pct", 50.0)),
+            dip_pct=float(raw.get("dip_pct", 0.0)),
+            index_rsi2_pct=float(raw.get("index_rsi2_pct", 0.0)),
             momentum_top_n=int(raw.get("momentum_top_n", 20)),
+            breakout_risk_pct_of_sleeve=float(raw.get("breakout_risk_pct_of_sleeve", 1.0)),
+            breakout_max_positions=int(raw.get("breakout_max_positions", 20)),
             dip_risk_pct_of_sleeve=float(raw.get("dip_risk_pct_of_sleeve", 1.0)),
             dip_max_positions=int(raw.get("dip_max_positions", 10)),
             include_small_caps=bool(raw.get("include_small_caps", True)),
             small_cap_min_price=float(raw.get("small_cap_min_price", 50.0)),
         )
-        weights = (cfg.momentum_pct, cfg.dip_pct, cfg.index_rsi2_pct)
+        weights = (cfg.momentum_pct, cfg.breakout_pct, cfg.dip_pct, cfg.index_rsi2_pct)
         if min(weights) < 0 or sum(weights) > 100.0001:
             raise ConfigError(f"portfolio weights must be >= 0 and sum to at most 100 (got {weights})")
-        if cfg.momentum_top_n < 1 or cfg.dip_max_positions < 1:
-            raise ConfigError("portfolio.momentum_top_n and dip_max_positions must be >= 1")
+        if cfg.momentum_top_n < 1 or cfg.dip_max_positions < 1 or cfg.breakout_max_positions < 1:
+            raise ConfigError("portfolio.momentum_top_n, breakout_max_positions and dip_max_positions must be >= 1")
         return cfg
+
+    @property
+    def breakout_risk_pct_of_account(self) -> float:
+        return self.breakout_pct / 100 * self.breakout_risk_pct_of_sleeve
 
     @property
     def dip_risk_pct_of_account(self) -> float:

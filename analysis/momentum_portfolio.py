@@ -27,6 +27,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from data.sessions import drop_incomplete_daily
+
 logger = logging.getLogger(__name__)
 
 SKIP = 21            # skip the most recent month (short-term reversal)
@@ -182,8 +184,12 @@ def fetch_universe(tickers: list[str], cache=None, period: str = "15mo", batch: 
         c, v, miss = cache.get("momuni_close"), cache.get("momuni_volume"), cache.get("momuni_missing")
         missing = set(miss.iloc[:, 0]) if miss is not None and miss.shape[1] else set()
         fresh = c is not None and len(c.index) and (latest_session is None or c.index[-1] >= naive_day(latest_session))
+        written = pd.Timestamp.now(tz="America/New_York") - pd.Timedelta(seconds=cache.age_seconds("momuni_close") or 0)
+        if fresh and len(c.index):
+            # cached while the last bar's session was still trading -> that bar was partial
+            fresh = written.tz_localize(None) >= c.index[-1] + pd.Timedelta(hours=16, minutes=15)
         if fresh and v is not None and set(tickers) <= set(c.columns) | missing:
-            return c, v
+            return drop_incomplete_daily(c), drop_incomplete_daily(v)
     import yfinance as yf
 
     closes, vols = {}, {}
@@ -206,6 +212,7 @@ def fetch_universe(tickers: list[str], cache=None, period: str = "15mo", batch: 
     for df in (c, v):
         if len(df.index) and df.index.tz is not None:
             df.index = df.index.tz_localize(None)
+    c, v = drop_incomplete_daily(c), drop_incomplete_daily(v)  # never rank on today's live bar
     if cache is not None and not c.empty:
         cache.set("momuni_close", c)
         cache.set("momuni_volume", v)
