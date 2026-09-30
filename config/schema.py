@@ -366,11 +366,11 @@ class AlertsConfig:
 class PortfolioConfig:
     """How the account is split between the price-only systems (README,
     'Research rounds 6-9'). Percent of the account; 0 switches a system off.
-    Default (round 9, the user wants technical buys only, no dip buying):
-    50% MOMENTUM TOP 20 + 50% LEADER BREAKOUT; LEADER DIP and INDEX RSI(2)
-    (both dip buyers) are off."""
-    momentum_pct: float = 50.0
-    breakout_pct: float = 50.0
+    Default (user's choice after the final backtest): 100% MOMENTUM TOP 20.
+    LEADER BREAKOUT, LEADER DIP and INDEX RSI(2) are off (set their pct > 0
+    to switch them back on)."""
+    momentum_pct: float = 100.0
+    breakout_pct: float = 0.0
     dip_pct: float = 0.0
     index_rsi2_pct: float = 0.0
     momentum_top_n: int = 20
@@ -386,8 +386,8 @@ class PortfolioConfig:
     @classmethod
     def from_dict(cls, raw: dict) -> "PortfolioConfig":
         cfg = cls(
-            momentum_pct=float(raw.get("momentum_pct", 50.0)),
-            breakout_pct=float(raw.get("breakout_pct", 50.0)),
+            momentum_pct=float(raw.get("momentum_pct", 100.0)),
+            breakout_pct=float(raw.get("breakout_pct", 0.0)),
             dip_pct=float(raw.get("dip_pct", 0.0)),
             index_rsi2_pct=float(raw.get("index_rsi2_pct", 0.0)),
             momentum_top_n=int(raw.get("momentum_top_n", 20)),

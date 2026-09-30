@@ -38,6 +38,17 @@ def _spark(series: pd.Series | None, w: int = 120, h: int = 26) -> str:
             f"<polyline fill='none' stroke='{color}' stroke-width='1.5' points='{pts}'/></svg>")
 
 
+BACKTEST_NOTE = {
+    (100.0, 0.0): "<p class='sm'>Backtest alleen momentum (juni 2008 - sept 2026): 22,3% per jaar, grootste daling 36%, "
+                  "slechtste jaar -14,2% (2022), 89% van de jaren positief; SPY 11,7% / 51%. Aandelen-backtests zijn ~4-5%/jaar "
+                  "te rooskleurig (aandelen die uit de index vielen ontbreken) -- reken op ~17-18% met dalingen tot ~35-40%. "
+                  "Periodes van maanden onder water horen erbij. Geen garantie. Alleen kopen op sterkte.</p>",
+    (50.0, 50.0): "<p class='sm'>Backtest 50% momentum / 50% breakouts (juni 2008 - sept 2026): 16,3% per jaar, grootste daling "
+                  "31%; SPY 11,7% / 51%. Min ~4-5%/jaar voor ontbrekende aandelen. Geen garantie.</p>",
+    "other": "<p class='sm'>Zie README voor de backtest van deze verdeling. Aandelen-backtests zijn ~4-5%/jaar te rooskleurig.</p>",
+}
+
+
 def allocation_rows(cfg, account_size: float, bear: bool | None) -> list[tuple[str, str, str, str]]:
     """(system, % of account, amount, per-position rule) for every system that is switched on."""
     n = max(cfg.momentum_top_n, 1)
@@ -140,10 +151,7 @@ def build_portfolio_tab_html(cfg, account_size: float, book, signals: list, bear
         "index_rsi2_pct).</p>"
         "<table><thead><tr><th>Systeem</th><th>Deel</th><th>Bedrag</th><th>Per positie</th></tr></thead><tbody>"
         + alloc + "</tbody></table>"
-        "<p class='sm'>Backtest 50% momentum / 50% breakouts (onderzoeks- en controle-aandelen): 13-18% per jaar in 2008-2021, "
-        "16-23% in 2022-2026, grootste daling ~25%. Aandelen-backtests zijn ~4-5%/jaar te rooskleurig (aandelen die uit de index "
-        "vielen ontbreken) -- reken op ~9-19% met dalingen tot ~25-30%. Geen garantie. Geen dips, geen RSI(2): alleen kopen "
-        "op sterkte.</p></div>"
+        + BACKTEST_NOTE.get((cfg.momentum_pct, cfg.breakout_pct), BACKTEST_NOTE["other"]) + "</div>"
     ]
     if book is not None:
         head = ("<table><thead><tr><th>#</th><th>Ticker</th><th>Sector</th><th>12-1 mnd</th><th>Laatste mnd</th>"

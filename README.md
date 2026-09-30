@@ -12,7 +12,15 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
-## Backtest of the plan as configured (`research/final_backtest.py`)
+## Current default: momentum only
+
+After the final backtest the user chose **100% MOMENTUM TOP 20** (`momentum_pct: 100`,
+5% of the account per stock); breakouts, dips and index RSI(2) are off and hidden
+(set their `*_pct` above 0 to bring them back). Backtest of the momentum sleeve alone,
+June 2008 – September 2026: 22.3%/yr, max drawdown 36.3%, Sharpe 0.81, worst year
+−14.2% (2022), 89% of years up — minus the ~4–5%/yr survivorship bias.
+
+## Backtest of the 50/50 plan (`research/final_backtest.py`)
 
 50% MOMENTUM TOP 20 + 50% LEADER BREAKOUT (bought at the close, 1% risk of the
 sleeve, max 20), universe S&P 500 + 400 + scanner list + S&P 600 ≥ $50,

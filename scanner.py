@@ -741,8 +741,10 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     leader_dips = prioritize(leader_dips, held, config.portfolio.dip_max_positions)
     if config.portfolio.dip_pct <= 0:  # no dip buying in the plan (user's choice)
         leader_dips, alerts = [], []
-    breakouts, near_breakouts = find_breakouts(provider, config, mom_closes, mom_volumes, benchmarks.get("spy"),
-                                               mom_sectors, held, getattr(book, "min_price", None))
+    breakouts, near_breakouts = [], []
+    if config.portfolio.breakout_pct > 0:
+        breakouts, near_breakouts = find_breakouts(provider, config, mom_closes, mom_volumes, benchmarks.get("spy"),
+                                                   mom_sectors, held, getattr(book, "min_price", None))
     if config.portfolio.momentum_pct <= 0:
         book = None
     return ScanRun(
@@ -1031,7 +1033,8 @@ def main(argv: list[str] | None = None) -> int:
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
     print_portfolio_plan(scan_run, config)
-    print_leader_breakouts(scan_run, config.portfolio.breakout_risk_pct_of_account)
+    if config.portfolio.breakout_pct > 0:
+        print_leader_breakouts(scan_run, config.portfolio.breakout_risk_pct_of_account)
     if config.portfolio.dip_pct > 0:
         print_leader_dips(scan_run.leader_dips, scan_run.market_state, config.portfolio.dip_risk_pct_of_account)
     if scan_run.dip_alerts:

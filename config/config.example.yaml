@@ -118,12 +118,12 @@ scoring:
     watchlist: 60
 
 portfolio:                   # README "Research rounds 6-9": price-only systems in one account
-  momentum_pct: 50             # MOMENTUM TOP 20 -- month-end, top 20 by 12-1 month return, SPY > 200d
-  breakout_pct: 50             # LEADER BREAKOUT -- 50-day breakout in a top-50 leader, trailing exit
+  momentum_pct: 100            # MOMENTUM TOP 20 -- month-end, top 20 by 12-1 month return, SPY > 200d (5% per stock)
+  breakout_pct: 0              # LEADER BREAKOUT -- off (50 = the 50/50 plan of the final backtest)
   dip_pct: 0                   # LEADER DIP swings -- off: no dip buying (user's choice, round 9)
   index_rsi2_pct: 0            # INDEX RSI(2) -- off: it is dip buying too
   momentum_top_n: 20
-  breakout_risk_pct_of_sleeve: 1.0  # 1% of the 50% sleeve = 0.5% of the account per breakout
+  breakout_risk_pct_of_sleeve: 1.0  # risk per breakout, % of the breakout sleeve
   breakout_max_positions: 20
   dip_risk_pct_of_sleeve: 1.0
   dip_max_positions: 10

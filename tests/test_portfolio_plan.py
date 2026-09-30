@@ -21,15 +21,16 @@ def _sig(state="KOOP"):
 
 def test_portfolio_config_defaults_and_validation():
     cfg = PortfolioConfig.from_dict({})
-    assert (cfg.momentum_pct, cfg.breakout_pct, cfg.dip_pct, cfg.index_rsi2_pct) == (50, 50, 0, 0)  # no dip buying
-    assert cfg.breakout_risk_pct_of_account == pytest.approx(0.5)
+    assert (cfg.momentum_pct, cfg.breakout_pct, cfg.dip_pct, cfg.index_rsi2_pct) == (100, 0, 0, 0)  # momentum only
+    assert PortfolioConfig(50, 50).breakout_risk_pct_of_account == pytest.approx(0.5)
     with pytest.raises(ConfigError):
         PortfolioConfig.from_dict({"momentum_pct": 80, "breakout_pct": 40})
 
 
 def test_allocation_rows_amounts_and_bear_halving():
     rows = allocation_rows(PortfolioConfig(), 10_000, bear=False)
-    assert [r[0] for r in rows] == ["MOMENTUM TOP 20", "LEADER BREAKOUT"]
+    assert [r[0] for r in rows] == ["MOMENTUM TOP 20"] and rows[0][2] == "10,000" and "5.0% van je account" in rows[0][3]
+    rows = allocation_rows(PortfolioConfig(50, 50), 10_000, bear=False)
     assert [r[2] for r in rows] == ["5,000", "5,000"] and "0.50%" in rows[1][3]
     old = PortfolioConfig(momentum_pct=40, breakout_pct=0, dip_pct=40, index_rsi2_pct=20)
     rows = allocation_rows(old, 10_000, bear=False)
@@ -44,7 +45,7 @@ def test_todo_and_tab_render_every_system():
     assert "KOOP QQQ" in todo and "AAA" in todo and "2 LEADER DIPs" in todo and "1 LEADER BREAKOUT" in todo
     assert "slot van 25-09-2026" in todo
     default = build_todo_html(PortfolioConfig(), _book(), [], n_dips=0, bear=False, n_breakouts=3)
-    assert "LEADER DIP" not in default and "RSI(2)" not in default and "3 LEADER BREAKOUTs" in default
+    assert "LEADER DIP" not in default and "RSI(2)" not in default and "BREAKOUT" not in default and "AAA" in default
     tab = build_portfolio_tab_html(cfg, 10_000, _book(), [_sig("HOUDEN")], bear=False)
     assert "MOMENTUM TOP 20" in tab and "INDEX RSI(2)" in tab and "verkoop als slot &gt; 505.00" in tab
     assert "CCC" in tab
