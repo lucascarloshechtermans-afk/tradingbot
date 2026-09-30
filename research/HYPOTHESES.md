@@ -212,3 +212,19 @@ Filters (evaluated at each month-end): F0 none · F1 SPY > 200d SMA (default) ·
 Vol targeting (on top of F1): V1 scale the book to 20% annualised volatility using the
 book's own 126-day realised volatility (weight ≤ 1, no leverage) · V2 same with 63 days.
 Same adoption rule as round 10 (Sharpe, all four cells).
+
+## Round 10b results
+Vol targeting (20%, 63d) cut max drawdown in all four cells but tied the default Sharpe in
+DEV → not adopted (offered as an option). Filters F0/F2/F3 not adopted.
+
+# Round 11 — execution and diversification, technicals only (written 2026-09-30, before running)
+- X1 CLOSE ENTRY: leader breakouts bought at the CLOSE of the breakout day (+0.05% slippage;
+  in practice a market-on-close order when price is above the level ~10 min before the close)
+  instead of the next open. Same stop distance (2.5 ATR from the fill) and trailing exit.
+  Compare R per trade and one-account CAGR/maxDD per cell with the next-open default.
+- E1 ETF LEADER BREAKOUTS: universe = 24 ETFs (SPY QQQ IWM DIA MDY EFA EEM TLT IEF SHY GLD DBC
+  VNQ + 11 sector SPDRs). Leader = top 8 by 12-1 month return; 50-day closing-high breakout;
+  NO SPY filter (bonds/gold must be able to trade in bear markets); 2.5 ATR stop; 20-day
+  trailing exit; 0.5% risk, max 8. Periods 2006–2014 / 2015–2021 / 2022–2026. Compared with
+  (a) random entries in the same ETFs with the same exits and (b) as a third sleeve next to
+  the stock plan (does it lower drawdown / raise Sharpe?).
