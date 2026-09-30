@@ -62,3 +62,10 @@ def test_per_ticker_min_price_keeps_cheap_small_caps_out():
     assert "T29" in [t for t, *_ in rank_at(c, v, len(c) - 1, top_n=5)]
     ranked = [t for t, *_ in rank_at(c, v, len(c) - 1, top_n=5, min_price={"T29": 50.0})]
     assert "T29" not in ranked
+
+
+def test_next_rebalance_moves_on_after_a_completed_month_end():
+    c, v = _panel(end="2026-09-30")
+    up = pd.Series(np.linspace(100, 200, len(c)), index=c.index)
+    b = build_book(c, v, up, {}, top_n=5)
+    assert b.as_of == pd.Timestamp("2026-09-30") and b.next_rebalance == pd.Timestamp("2026-10-30")

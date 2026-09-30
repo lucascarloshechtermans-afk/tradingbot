@@ -164,7 +164,11 @@ def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series
     last_date = closes.index[-1] if len(closes) else None
     next_reb = None
     if last_date is not None:
-        next_reb = last_date if is_month_end(last_date) else (last_date + pd.offsets.BMonthEnd(0))
+        if is_month_end(last_date):
+            # today is a month-end: if today's list is already the official one, the next is next month's end
+            next_reb = last_date + pd.offsets.BMonthEnd(1) if as_of == last_date else last_date
+        else:
+            next_reb = last_date + pd.offsets.BMonthEnd(0)
     return MomentumBook(
         as_of=as_of, invested=invested, picks=official, exits=exits, preview_date=last_date, preview=preview,
         preview_in=sorted(pv_set - prev_now), preview_out=sorted(prev_now - pv_set),
