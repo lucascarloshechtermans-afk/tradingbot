@@ -12,6 +12,34 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 10 — robustness of the dip-free plan (`research/round10.py`, `round10b.py`)
+
+Adoption rule (pre-registered): better than the default in DEV and not worse in any
+validation cell. **Nothing passed; the defaults stay** — and they sit on a plateau
+(neighbouring settings give similar results), which argues against overfitting.
+
+Momentum book (CAGR / maxDD / Sharpe, DEV · VAL-T · VAL-U · FINAL):
+| variant | DEV | VAL-T | VAL-U | FINAL |
+|---|---|---|---|---|
+| **default top 20, monthly, SPY > 200d** | 21.0 / 34 / 0.93 | 13.0 / 35 / 0.53 | 20.1 / 35 / 0.90 | 25.4 / 38 / 0.82 |
+| top 10 | 22.4 / 35 / 0.85 | 20.5 / 39 / 0.66 | 20.2 / 40 / 0.81 | 42.2 / 37 / 1.05 |
+| top 30 | 19.1 / 33 / 0.93 | 12.8 / 31 / 0.55 | 18.6 / 32 / 0.91 | 20.3 / 34 / 0.75 |
+| buffer (keep while top 40) | 18.3 / 36 / 0.85 | 17.0 / 30 / 0.65 | 21.2 / 32 / 0.94 | 18.3 / 34 / 0.66 |
+| max 5 per sector | 20.2 / 35 / 0.91 | 12.4 / 31 / 0.53 | 19.5 / 37 / 0.91 | 24.1 / 27 / 0.83 |
+| rebalance every 10 sessions | 17.9 / 41 / 0.80 | 18.7 / 35 / 0.69 | 17.7 / 35 / 0.79 | 30.6 / 36 / 0.94 |
+| no market filter | 16.6 / 65 / 0.66 | 31.4 / 35 / 0.91 | 17.7 / 59 / 0.69 | 54.1 / 38 / 1.27 |
+| SPY 12m return > T-bill | 19.4 / 47 / 0.80 | 28.3 / 35 / 0.89 | 19.4 / 38 / 0.80 | 48.6 / 38 / 1.25 |
+| **vol target 20% (63d)** | 17.1 / 28 / 0.93 | 11.2 / 18 / 0.63 | 16.3 / 31 / 0.89 | 18.3 / 19 / 0.95 |
+
+Volatility targeting (scale the momentum book to 20% annualised volatility at each
+month-end, never above 100% invested) is the one risk-reducer worth knowing: lower
+max drawdown and a better worst year in all four cells, same or better Sharpe in
+three, but ~3–7%/yr less return — it ties the default in DEV, so it is not adopted.
+
+Leader breakout: top 30/100 leaders, 20/100-day breakouts, 10/50-day trailing exits
+and 2/3.5 ATR stops were each better in some cells and worse in others; a 50-day
+trailing exit raised R per trade everywhere but also the drawdown everywhere.
+
 ## Research round 9 — no dip buying: momentum + breakouts only (current default)
 
 The user wants technical buys only, no dips. `research/breakout9.py`:
