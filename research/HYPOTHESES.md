@@ -235,3 +235,14 @@ DEV → not adopted (offered as an option). Filters F0/F2/F3 not adopted.
   mixed. Adopted as the recommended execution (buy near the close when above the level).
 - E1 ETF leader breakouts: better than random ETF entries in 2006-14 and 2022-26, worse in
   2015-21; 1-4%/yr at account level. Not adopted.
+
+# Round 12 — improving the momentum-only book (written 2026-09-30, before running)
+Default: month-end top 20 by 12-1 return, SPY > 200d at month-end, equal weight.
+Adoption rule as round 10 (Sharpe better in DEV, not worse in VAL-T / VAL-U / FINAL).
+Scores: S1 6-1 month · S2 composite 3/6/12 months (skip 1) · S3 12-1 divided by 252-day vol ·
+S4 close / 252-day high (52-week-high proximity) · S5 average rank of 12-1 return and share of
+up days over 12 months ("smooth momentum").
+Rules: R1 buy only names above their 50-day SMA at the rebalance · R2 daily crash exit: SPY
+closes below its 200d → whole book to cash at the next open until the next month-end ·
+R3 per-stock exit: close below its 20-day lowest close → that slot to cash until month-end ·
+R4 two tranches (half rebalanced at month-end, half mid-month, ~10 sessions later).

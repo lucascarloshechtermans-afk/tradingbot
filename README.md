@@ -12,6 +12,30 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 12 — can the momentum-only book be improved? (`research/round12.py`, `round12b.py`)
+
+CAGR / max drawdown / Sharpe per cell (DEV · VAL-T · VAL-U · FINAL):
+| variant | DEV | VAL-T | VAL-U | FINAL |
+|---|---|---|---|---|
+| **default: 12-1 month, month-end** | 21.0 / 34 / 0.93 | 13.0 / 35 / 0.53 | 20.1 / 35 / 0.90 | 25.4 / 38 / 0.82 |
+| 6-1 month | 19.6 / 32 / 0.89 | 9.9 / 36 / 0.45 | 20.6 / 31 / 0.93 | 18.7 / 35 / 0.68 |
+| composite 3/6/12 | 20.2 / 35 / 0.88 | 17.7 / 35 / 0.65 | 24.2 / 35 / 1.02 | 24.2 / 39 / 0.79 |
+| 12-1 / volatility | 17.0 / 30 / 0.88 | 12.6 / 29 / 0.59 | 17.3 / 29 / 0.90 | 19.7 / 32 / 0.79 |
+| 52-week-high proximity | 8.0 / 27 / 0.62 | 2.5 / 17 / 0.25 | 9.3 / 22 / 0.70 | 4.5 / 20 / 0.37 |
+| smooth momentum | 12.3 / 30 / 0.72 | 15.4 / 26 / 0.72 | 13.8 / 27 / 0.78 | 10.1 / 30 / 0.51 |
+| only above 50-day SMA | 16.5 / 33 / 0.81 | 13.9 / 36 / 0.58 | 16.1 / 35 / 0.80 | 17.5 / 36 / 0.68 |
+| daily SPY crash exit | 19.1 / 25 / 0.90 | 6.8 / 35 / 0.37 | 17.2 / 30 / 0.83 | 21.7 / 38 / 0.76 |
+| per-stock 20-day-low exit | 9.2 / 24 / 0.66 | 7.4 / 21 / 0.44 | 9.5 / 29 / 0.70 | 13.1 / 25 / 0.64 |
+| two tranches (month-end + mid-month) | 19.0 / 29 / 0.86 | 20.3 / 35 / 0.73 | 18.9 / 28 / 0.86 | 35.4 / 37 / 1.05 |
+
+Nothing beats the default in DEV, so it stays. The big finding is **rebalance-day
+luck**: the same book rebalanced 0, 3, 6, 9, 12 or 15 sessions before month-end made
+17.3–21.0% (DEV), 13.0–33.4% (VAL-T), 16.4–20.1% (VAL-U) and 25.4–46.1% (FINAL) a year.
+Month-end happened to be the best schedule before 2022 and the worst after. The
+honest expectation is the average of the schedules (six tranches: 19.3 / 22.2 / 18.7 /
+35.4%), and splitting the book into tranches rebalanced on different days removes most
+of that luck without changing the expected return.
+
 ## Current default: momentum only
 
 After the final backtest the user chose **100% MOMENTUM TOP 20** (`momentum_pct: 100`,
