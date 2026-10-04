@@ -897,11 +897,12 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
 
 
 def print_niche_finds(book) -> None:
-    """Terminal list of the NICHE FINDS (not part of the tested plan)."""
+    """Terminal list of the NICHE FINDS (round 14: no edge -- follow only)."""
     if book is None or book.as_of is None:
         return
     print(f"--- NICHE FINDS: top {len(book.picks)} op 12-1 maand momentum, US-aandelen buiten de S&P 500 "
-          f"(lijst van {book.as_of:%d-%m-%Y}; NIET getest) ---")
+          f"(lijst van {book.as_of:%d-%m-%Y}) ---")
+    print("  Getest in ronde 14: GEEN voorsprong op een willekeurig klein aandeel en slechter dan SPY -- alleen volgen.")
     if not book.invested:
         print("  SPY sloot de maand onder zijn 200-daags: ook hier niets kopen.")
     for p in book.picks:
