@@ -382,6 +382,11 @@ class PortfolioConfig:
     # price or higher (research round 8: it LOWERED results in every test, see README)
     include_small_caps: bool = True
     small_cap_min_price: float = 50.0
+    # NICHE FINDS: the same month-end 12-1 momentum rule over ALL US-listed common stocks
+    # outside the S&P 500 (lesser-known names such as CDNA). Not part of the tested plan.
+    niche_enabled: bool = True
+    niche_top_n: int = 10
+    niche_min_price: float = 10.0
 
     @classmethod
     def from_dict(cls, raw: dict) -> "PortfolioConfig":
@@ -397,11 +402,14 @@ class PortfolioConfig:
             dip_max_positions=int(raw.get("dip_max_positions", 10)),
             include_small_caps=bool(raw.get("include_small_caps", True)),
             small_cap_min_price=float(raw.get("small_cap_min_price", 50.0)),
+            niche_enabled=bool(raw.get("niche_enabled", True)),
+            niche_top_n=int(raw.get("niche_top_n", 10)),
+            niche_min_price=float(raw.get("niche_min_price", 10.0)),
         )
         weights = (cfg.momentum_pct, cfg.breakout_pct, cfg.dip_pct, cfg.index_rsi2_pct)
         if min(weights) < 0 or sum(weights) > 100.0001:
             raise ConfigError(f"portfolio weights must be >= 0 and sum to at most 100 (got {weights})")
-        if cfg.momentum_top_n < 1 or cfg.dip_max_positions < 1 or cfg.breakout_max_positions < 1:
+        if cfg.momentum_top_n < 1 or cfg.dip_max_positions < 1 or cfg.breakout_max_positions < 1 or cfg.niche_top_n < 1:
             raise ConfigError("portfolio.momentum_top_n, breakout_max_positions and dip_max_positions must be >= 1")
         return cfg
 

@@ -129,6 +129,9 @@ portfolio:                   # README "Research rounds 6-9": price-only systems 
   dip_max_positions: 10
   include_small_caps: true     # + S&P SmallCap 600 in momentum / breakouts (tested: lowered results, see README round 8)
   small_cap_min_price: 50      # small caps only at this share price or higher
+  niche_enabled: true          # NICHE FINDS: same momentum rule over all US stocks outside the S&P 500 (not tested)
+  niche_top_n: 10
+  niche_min_price: 10          # and >= $10M traded per day (same liquidity floor as the main list)
 
 technical:                   # README "Technical analysis engine (ta/)": chart analysis only, no sizing/allocation
   enabled: true

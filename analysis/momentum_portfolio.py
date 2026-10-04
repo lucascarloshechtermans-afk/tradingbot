@@ -178,17 +178,17 @@ def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series
 
 
 def fetch_universe(tickers: list[str], cache=None, period: str = "15mo", batch: int = 100,
-                   latest_session: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+                   latest_session: pd.Timestamp | None = None, key: str = "momuni") -> tuple[pd.DataFrame, pd.DataFrame]:
     """Adjusted daily closes and volumes for the whole universe via batched
     yfinance downloads (one request per 100 tickers instead of 900). Cached
     as two frames in the scanner's DiskCache; refetched when the cache ends
     before `latest_session` (e.g. SPY's last bar), so a weekend run never
     ranks on a stale Thursday close."""
     if cache is not None:
-        c, v, miss = cache.get("momuni_close"), cache.get("momuni_volume"), cache.get("momuni_missing")
+        c, v, miss = cache.get(f"{key}_close"), cache.get(f"{key}_volume"), cache.get(f"{key}_missing")
         missing = set(miss.iloc[:, 0]) if miss is not None and miss.shape[1] else set()
         fresh = c is not None and len(c.index) and (latest_session is None or c.index[-1] >= naive_day(latest_session))
-        written = pd.Timestamp.now(tz="America/New_York") - pd.Timedelta(seconds=cache.age_seconds("momuni_close") or 0)
+        written = pd.Timestamp.now(tz="America/New_York") - pd.Timedelta(seconds=cache.age_seconds(f"{key}_close") or 0)
         if fresh and len(c.index):
             # cached while the last bar's session was still trading -> that bar was partial
             fresh = written.tz_localize(None) >= c.index[-1] + pd.Timedelta(hours=16, minutes=15)
@@ -218,7 +218,7 @@ def fetch_universe(tickers: list[str], cache=None, period: str = "15mo", batch: 
             df.index = df.index.tz_localize(None)
     c, v = drop_incomplete_daily(c), drop_incomplete_daily(v)  # never rank on today's live bar
     if cache is not None and not c.empty:
-        cache.set("momuni_close", c)
-        cache.set("momuni_volume", v)
-        cache.set("momuni_missing", pd.DataFrame(index=sorted(set(tickers) - set(c.columns))).reset_index())
+        cache.set(f"{key}_close", c)
+        cache.set(f"{key}_volume", v)
+        cache.set(f"{key}_missing", pd.DataFrame(index=sorted(set(tickers) - set(c.columns))).reset_index())
     return c, v

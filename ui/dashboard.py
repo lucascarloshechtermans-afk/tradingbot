@@ -323,6 +323,7 @@ def build_dashboard_html(
     forward: tuple | None = None,
     momentum_reads: dict | None = None,
     technical: tuple | None = None,
+    niche_book=None,
 ) -> str:
     """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
     'Ready to boom' tab."""
@@ -381,7 +382,7 @@ def build_dashboard_html(
         boom_rows_html=boom_rows_html or "<tr><td colspan=9>No pattern setups</td></tr>",
         boom_cards_html=render_setup_cards(pattern_setups) if pattern_setups else "",
         setup_css=SETUP_CSS,
-        decision_html=build_decision_html(portfolio_cfg, momentum_book, ta_reports, account_size),
+        decision_html=build_decision_html(portfolio_cfg, momentum_book, ta_reports, account_size, niche_book),
         decision_css=DECISION_CSS,
         # the decision card covers the momentum plan; the to-do list only matters when other systems are on
         overview_html=(build_todo_html(portfolio_cfg, momentum_book, index_signals, len(leader_dips), bear,

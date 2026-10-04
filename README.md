@@ -12,6 +12,23 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Niche finds — momentum outside the S&P 500 (not tested)
+
+The user wanted lesser-known names (e.g. CDNA, found by the external scanner's
+full-NASDAQ scan) instead of SNDK / MU. `find_niche_book` in `scanner.py` applies
+**the same month-end 12-1 momentum rule** as the MOMENTUM TOP 20 to all US-listed
+common stocks outside the S&P 500: about 4,600 NASDAQ, NYSE and NYSE American
+names from the official NASDAQ Trader symbol files (`data/us_listed.py`). ETFs,
+warrants, units, rights, preferreds, funds and SPACs are excluded, and a name needs
+a price of at least $10 and at least $10M traded per day. The top 10 appear first in
+the dashboard card "Instappen of niet?", with JA / NEE / NOG NIET like the main list.
+
+**Not tested.** A fair backtest needs the small companies that were delisted, and
+that data is not available here: the free data covers today's listings only, and
+the survivorship bias is much larger for small caps than the ~4–5%/yr in the
+S&P tests. Round 8 found that adding S&P 600 small caps lowered the momentum
+results. Config: `portfolio.niche_enabled`, `niche_top_n`, `niche_min_price`.
+
 ## Technical analysis engine (`ta/`) — multi-timeframe chart analysis
 
 A full technical read for every stock the scanner shows (the momentum list, next

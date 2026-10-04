@@ -516,6 +516,7 @@ class ScanRun:
     near_breakouts: list = field(default_factory=list)
     spy_history: pd.DataFrame | None = None
     momentum_reads: dict = field(default_factory=dict)   # ticker -> (ChartRead, daily) for the momentum list
+    niche_book: object | None = None   # NICHE FINDS: MomentumBook over US stocks outside the S&P 500
     # ta/ engine: [ta.engine.TechnicalReport] for the momentum list + scanner candidates, and ta.regime.Regime
     technical_reports: list = field(default_factory=list)
     technical_regime: object | None = None
@@ -583,6 +584,35 @@ def find_momentum_book(provider: DataProvider, config: AppConfig, spy: pd.DataFr
         return none
 
 
+def find_niche_book(provider: DataProvider, config: AppConfig, spy: pd.DataFrame | None):
+    """NICHE FINDS: the month-end 12-1 momentum rule over all US-listed common stocks
+    outside the S&P 500 (price >= niche_min_price, >= $10M traded per day). Same code
+    as the MOMENTUM TOP 20 (analysis/momentum_portfolio.build_book); NOT part of the
+    tested plan. Returns a MomentumBook (pick.sector holds the company name) or None."""
+    pc = config.portfolio
+    if not pc.niche_enabled or spy is None or spy.empty:
+        return None
+    import json
+    from pathlib import Path
+
+    from analysis.momentum_portfolio import build_book
+
+    try:
+        listed = provider.get_us_listed()
+        sp500 = set(json.load(open(Path(__file__).resolve().parent / "data" / "sp500_members.json"))["members"])
+        names = {t: nm.split(" - ")[0].split(" Common Stock")[0].strip() for t, nm in listed.items() if t not in sp500}
+        spy_close = _naive_close(spy)
+        closes, volumes = provider.get_universe_closes(sorted(names), latest_session=spy_close.index[-1], key="niche")
+        if closes.empty:
+            return None
+        return build_book(closes, volumes, spy_close, names, top_n=pc.niche_top_n, min_price=pc.niche_min_price)
+    except NotImplementedError:
+        logger.info("niche finds skipped: this data provider has no US listing / bulk download")
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("niche finds failed: %s", exc)
+    return None
+
+
 def analyze_momentum_picks(provider: DataProvider, config: AppConfig, book) -> dict:
     """Full chart read (daily EMAs, 4H 200 EMA, zones, patterns) for every stock in
     the momentum list and every name that would enter at the next rebalance.
@@ -607,12 +637,15 @@ def analyze_momentum_picks(provider: DataProvider, config: AppConfig, book) -> d
 
 
 def technical_names(book, breakouts: list, near_breakouts: list, trade_plans: list, pattern_setups: list,
-                    max_names: int) -> list[str]:
+                    max_names: int, niche_book=None) -> list[str]:
     """Names for the technical engine, most relevant first: the momentum list,
-    next month's entries, breakouts, then the scanner's own setups and patterns."""
+    next month's entries, the niche finds, breakouts, then the scanner's own
+    setups and patterns."""
     names: list[str] = []
     if book is not None:
         names += [p.ticker for p in book.picks] + list(book.preview_in)
+    if niche_book is not None:
+        names += [p.ticker for p in niche_book.picks] + list(niche_book.preview_in)
     names += [b.ticker for b, _r in breakouts + near_breakouts]
     names += [p.ticker for p in trade_plans if p.setup != "No confirmed setup"]
     names += [s.ticker for s, _r in pattern_setups]
@@ -843,8 +876,11 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     if config.portfolio.momentum_pct <= 0:
         book = None
     momentum_reads = analyze_momentum_picks(provider, config, book)
+    logger.info("niche finds: momentum over US stocks outside the S&P 500")
+    niche_book = find_niche_book(provider, config, benchmarks.get("spy"))
     ta_sectors = {**(mom_sectors or {}), **{t: c[0].sector for t, c in candidates.items()}}
-    ta_names = technical_names(book, breakouts, near_breakouts, trade_plans, pattern_setups, config.technical.max_names)
+    ta_names = technical_names(book, breakouts, near_breakouts, trade_plans, pattern_setups, config.technical.max_names,
+                               niche_book)
     logger.info("technical analysis (ta/ engine) for %d names", len(ta_names))
     ta_reports, ta_regime = run_technical_analysis(provider, config, ta_names, ta_sectors)
     return ScanRun(
@@ -854,8 +890,24 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         sector_by_ticker={t: c[0].sector for t, c in candidates.items()},
         momentum_book=book, index_signals=signals, momentum_closes=mom_closes,
         leader_breakouts=breakouts, near_breakouts=near_breakouts, spy_history=benchmarks.get("spy"),
-        momentum_reads=momentum_reads, technical_reports=ta_reports, technical_regime=ta_regime,
+        momentum_reads=momentum_reads, technical_reports=ta_reports, technical_regime=ta_regime, niche_book=niche_book,
     )
+
+
+def print_niche_finds(book) -> None:
+    """Terminal list of the NICHE FINDS (not part of the tested plan)."""
+    if book is None or book.as_of is None:
+        return
+    print(f"--- NICHE FINDS: top {len(book.picks)} op 12-1 maand momentum, US-aandelen buiten de S&P 500 "
+          f"(lijst van {book.as_of:%d-%m-%Y}; NIET getest) ---")
+    if not book.invested:
+        print("  SPY sloot de maand onder zijn 200-daags: ook hier niets kopen.")
+    for p in book.picks:
+        print(f"  {p.rank:>3}. {p.ticker:<6} {p.status:<7} 12-1m {p.mom_12_1:>+6.0f}%  laatste maand {p.ret_1m:>+6.1f}%  "
+              f"slot {p.close:>9.2f}  {(p.sector or '')[:40]}")
+    if book.preview_in:
+        print(f"  als de maand vandaag eindigde: erin {', '.join(book.preview_in)}; eruit {', '.join(book.preview_out) or '-'}")
+    print()
 
 
 def print_technical_summary(reports: list, regime, limit: int = 25) -> None:
@@ -1152,6 +1204,7 @@ def main(argv: list[str] | None = None) -> int:
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
     print_portfolio_plan(scan_run, config)
+    print_niche_finds(scan_run.niche_book)
     if config.portfolio.breakout_pct > 0:
         print_leader_breakouts(scan_run, config.portfolio.breakout_risk_pct_of_account)
     if config.portfolio.dip_pct > 0:
@@ -1219,6 +1272,7 @@ def main(argv: list[str] | None = None) -> int:
         forward=(fw_summary, fw_results, fw_momentum),
         momentum_reads=scan_run.momentum_reads,
         technical=(scan_run.technical_reports, scan_run.technical_regime),
+        niche_book=scan_run.niche_book,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

@@ -307,10 +307,43 @@ DECISION_CSS = (
     "")
 
 
-def build_decision_html(cfg, book, ta_reports: list | None = None, account_size: float | None = None) -> str:
+def _decision_table(rows: list[dict], names: dict | None = None) -> str:
+    names = names or {}
+    body = "".join(
+        f"<tr><td><a class='tk' href='#ta-{escape(r['ticker'])}' onclick=\"openTa('{escape(r['ticker'])}')\">{escape(r['ticker'])}</a>"
+        + (f"<div class='ch'>{escape(names[r['ticker']][:28])}</div>" if names.get(r["ticker"]) else "") + "</td>"
+        f"<td><span class='vd {r['cls']}'>{r['verdict']}</span></td><td>{escape(r['do'])}"
+        + (f"<div class='ch{' w' if r['warn'] else ''}'>{escape(r['chart'])}</div>" if r["chart"] else "")
+        + "</td></tr>" for r in rows)
+    return ("<table><thead><tr><th>Aandeel</th><th>Instappen?</th><th>Wat doen <span class='sm'>(grijs: grafiek, info)</span></th>"
+            f"</tr></thead><tbody>{body}</tbody></table>")
+
+
+def build_niche_html(niche, ta: dict, main_book=None) -> str:
+    """NICHE FINDS section: same month-end rule over US stocks outside the S&P 500. Not tested."""
+    if niche is None or niche.as_of is None:
+        return ""
+    rows = decision_rows(niche, ta)
+    in_main = {p.ticker for p in main_book.picks} if main_book is not None else set()
+    for r in rows:
+        if r["ticker"] in in_main:
+            r["do"] += " -- staat ook in de momentum top 20"
+    names = {p.ticker: p.sector for p in niche.picks + niche.preview}
+    return (
+        "<h3 style='margin:4px 0 2px'>Niche finds <span class='sm'>minder bekende aandelen</span></h3>"
+        f"<p class='sm'>Dezelfde maandregel (top {len(niche.picks)} op 12-1 maand momentum, SPY-filter), maar over alle "
+        f"Amerikaanse aandelen <b>buiten de S&amp;P 500</b> vanaf $10 en $10M omzet per dag "
+        f"({niche.eligible_count:,} kwamen in aanmerking). <b>Niet getest</b>: kleinere bedrijven schommelen harder, en een "
+        "eerlijke backtest kan niet zonder data van verdwenen aandelen. Zet er dus minder op in dan op de geteste lijst.</p>"
+        + _decision_table(rows, names))
+
+
+def build_decision_html(cfg, book, ta_reports: list | None = None, account_size: float | None = None,
+                        niche_book=None) -> str:
     """The first thing on the dashboard: enter or not, per stock."""
     if cfg.momentum_pct <= 0 or book is None:
-        return ""
+        niche = build_niche_html(niche_book, {r.ticker: r for r in (ta_reports or [])})
+        return f"<div class='card dec'><h2>Instappen of niet?</h2>{niche}</div>" if niche else ""
     if book.as_of is None:
         return "<div class='card dec'><h2>Instappen of niet?</h2><p>Nog geen maandlijst: te weinig data.</p></div>"
     ta = {r.ticker: r for r in (ta_reports or [])}
@@ -320,7 +353,7 @@ def build_decision_html(cfg, book, ta_reports: list | None = None, account_size:
     amount = f" (&asymp; {_money(account_size * per / 100)})" if account_size else ""
     if book.invested:
         mkt = (f"<b style='color:var(--green)'>Markt AAN</b> -- SPY sloot op {_date(book.as_of)} boven zijn 200-daags: "
-               f"belegd in de {len(book.picks)} aandelen hieronder, elk {per:.1f}% van je account{amount}.")
+               f"belegd in de momentum top {len(book.picks)} (onderaan), elk {per:.1f}% van je account{amount}.")
     else:
         mkt = (f"<b style='color:var(--red)'>Markt UIT</b> -- SPY sloot op {_date(book.as_of)} onder zijn 200-daags: "
                "alles in cash, nergens instappen.")
@@ -328,19 +361,15 @@ def build_decision_html(cfg, book, ta_reports: list | None = None, account_size:
     if book.spy_above_200_now is not None and book.spy_above_200_now != book.invested:
         now = (f"<p class='sm'>Let op: SPY staat nu {'boven' if book.spy_above_200_now else 'ONDER'} zijn 200-daags. "
                f"Dat telt pas bij het slot van {_date(book.next_rebalance)}.</p>")
-    body = "".join(
-        f"<tr><td><a class='tk' href='#ta-{escape(r['ticker'])}' onclick=\"openTa('{escape(r['ticker'])}')\">{escape(r['ticker'])}</a></td>"
-        f"<td><span class='vd {r['cls']}'>{r['verdict']}</span></td><td>{escape(r['do'])}"
-        + (f"<div class='ch{' w' if r['warn'] else ''}'>{escape(r['chart'])}</div>" if r["chart"] else "")
-        + "</td></tr>" for r in rows)
     return (
         "<div class='card dec'><h2>Instappen of niet?</h2>"
         f"<p class='sm'>Koersen t/m het slot van {_date(book.preview_date)}. Volgende beslismoment: slot van "
         f"<b>{_date(book.next_rebalance)}</b> (kopen/verkopen op de open daarna).</p>"
         f"<p class='mkt'>{mkt}</p>{now}"
-        "<table><thead><tr><th>Aandeel</th><th>Instappen?</th><th>Wat doen <span class='sm'>(grijs: grafiek, info)</span></th></tr></thead>"
-        f"<tbody>{body}</tbody></table>"
-        "<p class='sm'><b>Niet in deze tabel = niet instappen.</b> Chartpatronen, breakouts en de andere setups op dit dashboard "
+        + build_niche_html(niche_book, ta, book)
+        + "<h3 style='margin:16px 0 2px'>Momentum top 20 <span class='sm'>het geteste plan</span></h3>"
+        + _decision_table(rows) +
+        "<p class='sm'><b>Niet in deze tabellen = niet instappen.</b> Chartpatronen, breakouts en de andere setups op dit dashboard "
         "zijn info: in de tests deden ze het niet beter dan een willekeurig aandeel. Het advies volgt alleen de geteste "
         "maandregel; de kolom Grafiek verandert het advies niet (grafiekfilters verbeterden de lijst niet, README ronde 13 "
         "en de ta-validatie), maar laat zien waar je op moet letten. Klik op een ticker voor de volledige analyse.</p></div>")
