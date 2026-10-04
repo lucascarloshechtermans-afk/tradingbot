@@ -12,6 +12,56 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Technical analysis engine (`ta/`) — multi-timeframe chart analysis
+
+A full technical read for every stock the scanner shows (the momentum list, next
+month's entries, breakouts and the scanner's own setups), in the dashboard tab
+**"Technische analyse"** and in the terminal. It is **analysis only**: it does not
+size positions, set risk per trade or allocate money — the portfolio plan above is
+unchanged. Standalone: `python -m ta NVDA MRNA KO --html ta_report.html`.
+
+**No look-ahead.** Every indicator is causal (tested: `compute_indicators(df[:k])`
+equals the first k rows of `compute_indicators(df)`); a swing high/low only exists
+from the bar it is confirmed (`known_at = i + order`); weekly/monthly drop the
+unfinished week/month; 4H/1H are cut at the last completed daily close; the
+scanner drops today's partial daily bar (`data/sessions.py`).
+
+| module | what it does |
+|---|---|
+| `ta/core.py` | SMA 10/20/50/100/200, EMA 9/21/34/50/200, slopes, RSI 7/14/21, MACD, ROC 5/10/20/60, Stochastic, StochRSI, ADX/±DI, ATR, Bollinger, Keltner + squeeze, HV20 + percentile, RVOL, OBV, A/D, CMF. Missing volume → volume indicators marked unavailable, never faked. |
+| `ta/swings.py`, `ta/structure.py` | confirmed swings labelled HH/HL/LH/LL/EH/EL; BOS and CHoCH as a causal state machine; trend class (strong/weak up/down, consolidation, potential reversal up/down) from MA alignment, structure, SMA50 slope, ADX/DI and range width; trend stage (early/established/mature) and exhaustion flags. |
+| `ta/levels.py` | S/R **zones** (not lines) from daily + weekly swings and BOS levels; scored on directional reactions, recency, reaction size, weekly confluence, role flips (support↔resistance only after ≥2 prior opposite reactions), volume and round numbers (secondary). |
+| `ta/patterns.py` | bull/bear flags, pennants, ascending/descending/symmetric triangles, wedges, channels, ranges/flat bases (rectangles), double tops & bottoms, (inverse) head & shoulders, (inverted) cup & handle, VCP, rounded bottom, break & retest (no triple tops/bottoms) — each with boundaries, trigger, invalidation, measured target, age, volume, trend context and status *forming / near trigger / breakout / confirmed / failed*. Bearish versions come from the mirrored chart. |
+| `ta/momentum.py`, `ta/volume.py`, `ta/volatility.py` | momentum state and acceleration, regular + hidden RSI/MACD divergences **only between confirmed swings**, overbought read in trend context; up/down volume, OBV/AD trend and divergence, pullback volume contraction, climax volume, breakout volume vs base; squeeze, contraction, NR4/NR7, inside-bar runs. |
+| `ta/candles.py` | 17 candlestick shapes (engulfing, hammer, hanging man, shooting star, inverted hammer, morning/evening star, 3 dojis, piercing, dark cloud, inside/outside bar, marubozu), scored by **context**: at a zone / key EMA, after a move, with/against the trend, volume, size, confirmation by the next bar. |
+| `ta/liquidity.py` | equal highs/lows (liquidity pools), sweeps, failed breakouts/breakdowns, reclaims, displacement candles, fair value gaps (open / retested / filled). |
+| `ta/setups.py` | 14 setup types (bullish/bearish pullback, early/confirmed breakout, breakout retest, failed breakout/breakdown, support bounce, resistance rejection, trend continuation, reversal, volatility squeeze, momentum reversal, breakdown) with levels, evidence, conflicts, trigger, invalidation and timeframes that agree/disagree. Status ladder *in ontwikkeling → getriggerd → bevestigd* (second close beyond the level, a volume thrust, a higher low or a confirming candle) or *mislukt* — never "confirmed" on the trigger bar. Named confluence combos are attached. |
+| `ta/timeframes.py`, `ta/engine.py` | monthly / weekly / daily / 4H / 1H frames and the MTF confluence (weights 1 / 2 / 3 / 1.5 / 0.5). |
+| `ta/relstrength.py`, `ta/regime.py` | RS vs SPY, QQQ and the sector ETF over 5/20/60/120 days, RS-line slope/new high/breakout; technical market regime (trending bullish/bearish, range-bound, potential transition; volatility expanding/contracting) with a note on what that means for breakouts. |
+| `ta/scoring.py` | transparent 0–100 score from **families** (trend 18, price action 14, S/R 12, momentum 12, volume 10, volatility 6, candles 5, MTF 13, RS 10 — configurable under `technical: weights:`). RSI+MACD+ROC are one momentum family, so correlated oscillators count once; a family without data is dropped and the rest renormalised. Quality, maturity, confirmation status and conflicts are reported separately. **The score is not a probability of profit.** |
+| `ui/ta_chart.py`, `ui/ta_report.py` | interactive SVG chart with toggles (MAs, Bollinger, zones, patterns, setup levels, swings, BOS/CHoCH, volume/RVOL, RSI, MACD, ADX, ATR); every drawn object has a hover title saying why it is there. |
+| `ta/evaluate.py` | historical validation (below). |
+
+Config (`config.example.yaml`, section `technical:`): `enabled`, `history_period`
+(daily history per stock, default 5y), `hourly_top_n` (names that also get 4H/1H,
+default 25), `max_names` (default 60), `weights`.
+
+### Historical validation of the technical signals (`ta/evaluate.py`)
+
+`python -m ta.evaluate --tickers 120 --stride 10` runs the **same engine** at every
+10th session on 120 random S&P 1000 members (2008–2026), each time on data up to
+that close only, and measures every setup from the **next open**: returns after
+5/10/20/40 sessions (signed by direction), the excess over the same-day average of
+all sampled stocks, hit rate, MFE/MAE within 20 sessions (% and ATR), frequency,
+and splits by setup × status, market regime, volatility, sector and score bucket —
+reported separately for **train ≤ 2014, validation 2015–2019, out-of-sample 2020+**.
+Nothing is fitted to these numbers. A look-ahead test checks that cutting all data
+after the signal does not change a single signal. 4H/1H history is only ~2 years
+at yfinance, so the historical numbers are daily-timeframe signals (with weekly and
+monthly confluence); the universe is today's index members (survivorship bias).
+
+_Results of the first full run follow in the next commit (the run takes ~40 minutes)._
+
 ## Research round 13 — resistance and chart patterns as filters (`research/round13.py`)
 
 10,526 chart analyses (zones from `analysis.chart_read.find_zones`, patterns from
