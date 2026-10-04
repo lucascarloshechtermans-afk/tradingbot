@@ -64,7 +64,23 @@ def test_decision_card_shows_niche_finds_first():
     base = dict(as_of=pd.Timestamp("2026-09-30"), invested=True, exits=[], preview_in=[], preview=[],
                 next_rebalance=pd.Timestamp("2026-10-30"), preview_date=pd.Timestamp("2026-10-02"), spy_above_200_now=True)
     main = NS(picks=mk(["SNDK", "VICR"], "BLIJFT"), **base)
-    niche = NS(picks=mk(["CDNA", "VICR"], "NIEUW"), eligible_count=1234, **base)
+    niche = NS(picks=mk(["CDNA", "VICR"], "NIEUW"), eligible_count=1234, **{**base, "exits": ["OLDBIO"]})
     html = build_decision_html(load_config().portfolio, main, [], 10_000, niche)
     assert html.index("Niche finds") < html.index("Momentum top 20") and "CDNA Inc." in html
     assert "staat ook in de momentum top 20" in html and "Niet getest" in html
+    assert "nu niet meer (heb je ze, dan verkopen): OLDBIO" in html and "openTa('OLDBIO')" not in html
+
+
+def test_trend_quality_filters_drop_one_day_jumps_and_names_far_below_their_high():
+    from analysis.momentum_portfolio import rank_at
+    n = 300
+    idx = pd.bdate_range("2025-06-02", periods=n)
+    steady = 20 * np.exp(0.004 * np.arange(n))                       # trend: gain spread over many days
+    jump = np.r_[np.full(100, 20.0), np.full(n - 100, 60.0)]         # +200% in one day (trial news)
+    faded = np.r_[20 * np.exp(0.012 * np.arange(200)), np.linspace(20 * np.exp(0.012 * 199), 60, n - 200)]
+    c = pd.DataFrame({"STDY": steady, "JUMP": jump, "FADE": faded}, index=idx)
+    v = pd.DataFrame(1e6, index=idx, columns=c.columns)
+    raw = [t for t, *_ in rank_at(c, v, n - 1, 10)]
+    assert set(raw) == {"STDY", "JUMP", "FADE"}                      # main-list rule: unchanged
+    assert [t for t, *_ in rank_at(c, v, n - 1, 10, max_jump=0.33)] == [t for t in raw if t != "JUMP"]
+    assert "FADE" not in [t for t, *_ in rank_at(c, v, n - 1, 10, near_high=0.75)]

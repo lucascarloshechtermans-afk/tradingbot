@@ -605,7 +605,9 @@ def find_niche_book(provider: DataProvider, config: AppConfig, spy: pd.DataFrame
         closes, volumes = provider.get_universe_closes(sorted(names), latest_session=spy_close.index[-1], key="niche")
         if closes.empty:
             return None
-        return build_book(closes, volumes, spy_close, names, top_n=pc.niche_top_n, min_price=pc.niche_min_price)
+        return build_book(closes, volumes, spy_close, names, top_n=pc.niche_top_n, min_price=pc.niche_min_price,
+                          near_high=pc.niche_near_high_pct / 100 if pc.niche_near_high_pct > 0 else None,
+                          max_jump=pc.niche_max_jump_share if pc.niche_max_jump_share < 1 else None)
     except NotImplementedError:
         logger.info("niche finds skipped: this data provider has no US listing / bulk download")
     except Exception as exc:  # noqa: BLE001 - must never break the scan

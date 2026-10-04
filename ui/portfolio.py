@@ -323,7 +323,10 @@ def build_niche_html(niche, ta: dict, main_book=None) -> str:
     """NICHE FINDS section: same month-end rule over US stocks outside the S&P 500. Not tested."""
     if niche is None or niche.as_of is None:
         return ""
-    rows = decision_rows(niche, ta)
+    # names that left the niche list get one small line, not a red row each (you most likely never held them)
+    rows = [r for r in decision_rows(niche, ta) if r["ticker"] not in set(niche.exits)]
+    gone = (f"<p class='sm'>Vorige maand nog in de niche-lijst, nu niet meer (heb je ze, dan verkopen): "
+            f"{escape(', '.join(niche.exits))}.</p>" if niche.exits else "")
     in_main = {p.ticker for p in main_book.picks} if main_book is not None else set()
     for r in rows:
         if r["ticker"] in in_main:
@@ -333,9 +336,10 @@ def build_niche_html(niche, ta: dict, main_book=None) -> str:
         "<h3 style='margin:4px 0 2px'>Niche finds <span class='sm'>minder bekende aandelen</span></h3>"
         f"<p class='sm'>Dezelfde maandregel (top {len(niche.picks)} op 12-1 maand momentum, SPY-filter), maar over alle "
         f"Amerikaanse aandelen <b>buiten de S&amp;P 500</b> vanaf $10 en $10M omzet per dag "
-        f"({niche.eligible_count:,} kwamen in aanmerking). <b>Niet getest</b>: kleinere bedrijven schommelen harder, en een "
+        f"({niche.eligible_count:,} kwamen in aanmerking), alleen met een echte trend: binnen 25% van de 52-weekse top "
+        "en niet het grootste deel van de winst op één dag (zoals een biotech-sprong op studienieuws). <b>Niet getest</b>: kleinere bedrijven schommelen harder, en een "
         "eerlijke backtest kan niet zonder data van verdwenen aandelen. Zet er dus minder op in dan op de geteste lijst.</p>"
-        + _decision_table(rows, names))
+        + _decision_table(rows, names) + gone)
 
 
 def build_decision_html(cfg, book, ta_reports: list | None = None, account_size: float | None = None,

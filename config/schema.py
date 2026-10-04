@@ -387,6 +387,10 @@ class PortfolioConfig:
     niche_enabled: bool = True
     niche_top_n: int = 10
     niche_min_price: float = 10.0
+    # trend-quality filters for the niche list (0 / 1 switch them off): within X% of the
+    # 52-week high, and no more than this share of the gain made on one single day
+    niche_near_high_pct: float = 75.0
+    niche_max_jump_share: float = 0.33
 
     @classmethod
     def from_dict(cls, raw: dict) -> "PortfolioConfig":
@@ -405,6 +409,8 @@ class PortfolioConfig:
             niche_enabled=bool(raw.get("niche_enabled", True)),
             niche_top_n=int(raw.get("niche_top_n", 10)),
             niche_min_price=float(raw.get("niche_min_price", 10.0)),
+            niche_near_high_pct=float(raw.get("niche_near_high_pct", 75.0)),
+            niche_max_jump_share=float(raw.get("niche_max_jump_share", 0.33)),
         )
         weights = (cfg.momentum_pct, cfg.breakout_pct, cfg.dip_pct, cfg.index_rsi2_pct)
         if min(weights) < 0 or sum(weights) > 100.0001:

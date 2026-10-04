@@ -23,11 +23,24 @@ warrants, units, rights, preferreds, funds and SPACs are excluded, and a name ne
 a price of at least $10 and at least $10M traded per day. The top 10 appear first in
 the dashboard card "Instappen of niet?", with JA / NEE / NOG NIET like the main list.
 
+Without further filters the list was mostly small biotechs that jumped once on
+trial news (+500% to +800%) and were already falling (−16% to −28% the last month).
+Two filters from the literature therefore apply **to the niche list only**:
+- the close must be within 25% of the 52-week high (George & Hwang);
+- the best single day must have made less than a third of the 12-month gain
+  (one news gap is not a trend; "frog in the pan", Da et al.).
+
+With both filters CDNA ranks #10 instead of #30. Round 12 found that comparable
+filters (52-week-high proximity, only above the 50-day) lowered the main list's
+results, so the MOMENTUM TOP 20 keeps the plain rule. Switch the filters off with
+`niche_near_high_pct: 0` / `niche_max_jump_share: 1`.
+
 **Not tested.** A fair backtest needs the small companies that were delisted, and
 that data is not available here: the free data covers today's listings only, and
 the survivorship bias is much larger for small caps than the ~4–5%/yr in the
 S&P tests. Round 8 found that adding S&P 600 small caps lowered the momentum
-results. Config: `portfolio.niche_enabled`, `niche_top_n`, `niche_min_price`.
+results. Config: `portfolio.niche_enabled`, `niche_top_n`, `niche_min_price`,
+`niche_near_high_pct`, `niche_max_jump_share`.
 
 ## Technical analysis engine (`ta/`) — multi-timeframe chart analysis
 

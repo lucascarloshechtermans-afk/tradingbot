@@ -111,8 +111,14 @@ def month_end_rows(index: pd.DatetimeIndex) -> list[int]:
 
 
 def rank_at(closes: pd.DataFrame, volumes: pd.DataFrame, row: int, top_n: int = TOP_N,
-            min_price=None) -> list[tuple[str, float, float, float]]:
-    """[(ticker, mom_12_1 %, ret_1m %, close)] best first, using data up to `row`."""
+            min_price=None, near_high: float | None = None,
+            max_jump: float | None = None) -> list[tuple[str, float, float, float]]:
+    """[(ticker, mom_12_1 %, ret_1m %, close)] best first, using data up to `row`.
+    Optional trend-quality filters (used by the untested NICHE list only; round 12
+    found comparable filters lowered the main list's results):
+      near_high  close >= near_high x the 252-day closing high (George & Hwang)
+      max_jump   the best single day made < max_jump of the 12-1 month log gain
+                 (one news gap is not a trend; 'frog in the pan', Da et al.)"""
     if row < LOOKBACK:
         return []
     c = closes.iloc[: row + 1]
@@ -122,6 +128,12 @@ def rank_at(closes: pd.DataFrame, volumes: pd.DataFrame, row: int, top_n: int = 
     mom = c.iloc[-1 - SKIP] / c.iloc[-1 - LOOKBACK] - 1
     r1m = last / c.iloc[-1 - SKIP] - 1
     ok = (last >= _min_price(closes, min_price)) & (dv >= MIN_DOLLAR_VOLUME) & (count >= LOOKBACK + 1) & mom.notna() & np.isfinite(mom)
+    if near_high is not None:
+        ok &= last >= near_high * c.iloc[-LOOKBACK:].max()
+    if max_jump is not None:
+        gain = np.log(c.iloc[-1 - SKIP] / c.iloc[-1 - LOOKBACK])
+        best_day = np.log(c.iloc[-LOOKBACK:-SKIP]).diff().max()
+        ok &= (gain > 0) & (best_day < max_jump * gain)
     ranked = mom[ok].sort_values(ascending=False).iloc[:top_n]
     return [(t, float(m * 100), float(r1m[t] * 100), float(last[t])) for t, m in ranked.items()]
 
@@ -134,7 +146,8 @@ def eligible_count_at(closes: pd.DataFrame, volumes: pd.DataFrame, row: int, min
 
 
 def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series, sectors: dict[str, str | None],
-               top_n: int = TOP_N, min_price=None) -> MomentumBook:
+               top_n: int = TOP_N, min_price=None, near_high: float | None = None,
+               max_jump: float | None = None) -> MomentumBook:
     """closes/volumes: date x ticker (split+dividend adjusted closes)."""
     closes = closes.sort_index()
     volumes = volumes.reindex_like(closes)
@@ -149,8 +162,8 @@ def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series
 
     as_of, official, exits, invested = None, [], [], False
     if ends:
-        cur = rank_at(closes, volumes, ends[-1], top_n, min_price)
-        prev_rows = rank_at(closes, volumes, ends[-2], top_n, min_price) if len(ends) >= 2 else []
+        cur = rank_at(closes, volumes, ends[-1], top_n, min_price, near_high, max_jump)
+        prev_rows = rank_at(closes, volumes, ends[-2], top_n, min_price, near_high, max_jump) if len(ends) >= 2 else []
         prev = {t for t, *_ in prev_rows}
         as_of = closes.index[ends[-1]]
         invested = bool(spy_ok.iloc[ends[-1]])
@@ -158,7 +171,7 @@ def build_book(closes: pd.DataFrame, volumes: pd.DataFrame, spy_close: pd.Series
         exits = sorted(prev - {t for t, *_ in cur})
     last_row = len(closes) - 1
     prev_now = {p.ticker for p in official}
-    pv_rows = rank_at(closes, volumes, last_row, top_n, min_price)
+    pv_rows = rank_at(closes, volumes, last_row, top_n, min_price, near_high, max_jump)
     preview = picks(pv_rows, prev_now)
     pv_set = {t for t, *_ in pv_rows}
     last_date = closes.index[-1] if len(closes) else None
