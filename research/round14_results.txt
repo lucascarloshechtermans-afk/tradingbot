@@ -12,3 +12,17 @@ N4 = N3 top 20                       | DEV    4.3%  44.8%  0.30 | VAL   -4.1%  4
 N3b live rule, today's S&P500 out    | DEV    4.6%  54.4%  0.30 | VAL   -7.0%  61.6%  0.02 | OOS   -5.2%  53.3%  0.12
 R1 main list: today's S&P 500+400 top 20 | DEV   12.7%  34.4%  0.64 | VAL   23.4%  22.4%  0.93 | OOS   49.2%  37.3%  1.27
 R2 N1 (F1 only) top 20               | DEV    7.3%  40.5%  0.41 | VAL    7.3%  41.6%  0.38 | OOS    8.5%  31.9%  0.41
+
+# Q4: research/round14b.py
+4800 picks, 996 tickers
+flagged minus unflagged picks, next-month excess vs the month's pick average (%), t-stat, share flagged
+B2 W1_resistance  | DEV  +0.69% t  +1.2 ( 53% flagged) | VAL  +1.04% t  +0.7 ( 58% flagged) | OOS  +1.29% t  +0.9 ( 57% flagged)
+B2 W2_downtrend   | DEV  +0.62% t  +1.0 ( 33% flagged) | VAL  +0.85% t  +0.5 ( 36% flagged) | OOS  +0.22% t  +0.1 ( 33% flagged)
+B2 W3_exhausted   | DEV  -0.15% t  -0.1 (  9% flagged) | VAL  -4.95% t  -1.6 (  9% flagged) | OOS  -0.75% t  -0.4 ( 12% flagged)
+B2 any_warning    | DEV  +0.78% t  +1.2 ( 74% flagged) | VAL  -0.86% t  -0.4 ( 78% flagged) | OOS  -2.36% t  -1.4 ( 79% flagged)
+B2 score rank-corr   | DEV IC -0.000 t  -0.0 | VAL IC -0.025 t  -0.6 | OOS IC +0.057 t  +1.7
+N3 W1_resistance  | DEV  +0.54% t  +0.6 ( 57% flagged) | VAL  +0.97% t  +0.4 ( 57% flagged) | OOS  +3.82% t  +1.8 ( 52% flagged)
+N3 W2_downtrend   | DEV  +0.59% t  +0.6 ( 32% flagged) | VAL  -2.84% t  -1.3 ( 28% flagged) | OOS  -0.26% t  -0.1 ( 27% flagged)
+N3 W3_exhausted   | DEV  +2.06% t  +1.3 ( 11% flagged) | VAL  -4.72% t  -1.1 ( 11% flagged) | OOS  -4.32% t  -1.5 ( 11% flagged)
+N3 any_warning    | DEV  +1.31% t  +1.2 ( 76% flagged) | VAL  +0.35% t  +0.1 ( 76% flagged) | OOS  -0.34% t  -0.1 ( 72% flagged)
+N3 score rank-corr   | DEV IC +0.071 t  +2.2 | VAL IC -0.084 t  -1.2 | OOS IC +0.094 t  +1.6

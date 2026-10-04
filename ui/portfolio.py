@@ -239,8 +239,8 @@ def build_forward_html(summ: dict | None, results: list, momentum: pd.DataFrame 
 # --------------------------------------------------------------------------- #
 
 def chart_flags(rep) -> tuple[bool, str]:
-    """(warning?, short text) from a ta/ TechnicalReport. Information only: research round 13
-    and the ta/ validation found no chart filter that improved the momentum list."""
+    """(warning?, short text) from a ta/ TechnicalReport. Information only: research rounds 13
+    and 14 (Q4) found that none of these warnings predicted the next month of a momentum pick."""
     if rep is None or not rep.daily.ok or rep.score is None:
         return False, "geen grafiekanalyse"
     fa, p = rep.daily, rep.primary
@@ -303,7 +303,7 @@ DECISION_CSS = (
     ".vd{display:inline-block;min-width:74px;text-align:center;font-weight:800;font-size:13px;padding:4px 8px;border-radius:6px}"
     ".vd.yes{background:rgba(63,185,80,.18);color:var(--green)}.vd.no{background:rgba(248,81,73,.18);color:var(--red)}"
     ".vd.wait{background:rgba(210,153,34,.18);color:var(--amber)}.dec .ch{color:var(--ink-soft);font-size:12px}"
-    ".dec .ch.w{color:var(--amber)}.dec .tk{font-weight:700;font-size:15px}"
+    ".dec .ch.w{color:var(--ink-soft)}.dec .tk{font-weight:700;font-size:15px}"
     "")
 
 
@@ -379,5 +379,6 @@ def build_decision_html(cfg, book, ta_reports: list | None = None, account_size:
         + "<div style='margin-top:18px'>" + build_niche_html(niche_book, ta, book) + "</div>" +
         "<p class='sm'><b>Niet in deze tabellen = niet instappen.</b> Chartpatronen, breakouts en de andere setups op dit dashboard "
         "zijn info: in de tests deden ze het niet beter dan een willekeurig aandeel. Het advies volgt alleen de geteste "
-        "maandregel; de kolom Grafiek verandert het advies niet (grafiekfilters verbeterden de lijst niet, README ronde 13 "
-        "en de ta-validatie), maar laat zien waar je op moet letten. Klik op een ticker voor de volledige analyse.</p></div>")
+        "maandregel. De grijze grafiekregel verandert het advies niet: in ronde 14 voorspelden de waarschuwingen "
+        "(weerstand vlak erboven, dagtrend omlaag, overstrekt) en de technische score niets over de volgende maand; "
+        "aandelen met weerstand vlak erboven deden het zelfs iets beter. Klik op een ticker voor de volledige analyse.</p></div>")

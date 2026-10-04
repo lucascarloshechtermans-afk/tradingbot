@@ -48,6 +48,13 @@ CAGR / max drawdown / Sharpe:
   yesterday's winners. The ~4–5%/yr haircut in the plan's notes may be too small. The
   main list stays the plan (it is still the only tested rule with an edge over SPY in
   VAL/OOS here), but expect less than the backtest.
+- **Q4 failed: the dashboard warnings do not predict anything.** For 4,800 month-end
+  picks the full `ta/` engine was run on data up to that close. Picks with a resistance
+  zone within 1 ATR did slightly *better* than the month's other picks
+  (+0.7 / +1.0 / +1.3% large caps, t ≤ 1.2). A daily downtrend and "overextended" showed no
+  consistent sign. The 0–100 technical score had no rank correlation with the next month
+  (large caps IC 0.00 / −0.03 / +0.06). The warnings stay on the dashboard as grey
+  information with that note; none of them changes the advice.
 - **Diagnostic (after the pre-registration):** the same top-20 rule on the 900 most
   traded stocks chosen point-in-time (a size match for the S&P 500+400) gave Sharpe 0.48 /
   0.33 / 0.56, below SPY in every period. Within that universe, today's S&P members gave

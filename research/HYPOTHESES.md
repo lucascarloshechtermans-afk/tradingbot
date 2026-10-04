@@ -302,6 +302,10 @@ even those favour N0 (it would have held more of the missing collapses).
   0.44 / 0.25 / 0.16 (DEV lower) -> dashboard: niche list = VOLGEN (follow), "no edge".
 - Q2: F1 vs N0 0.31>0.30, 0.40>-0.06, 0.19>-0.53 -> kept. F2 vs N0 0.26<0.30 -> off.
 - Q3: N4 vs N3 DEV 0.30>0.25 but VAL 0.01<0.14; N3 lower in DEV -> undecided -> top 20.
+- Q4 FAILED: no warning worse with |t| >= 2 in DEV. Large caps W1 resistance +0.69 / +1.04 /
+  +1.29% (better, n.s.), W2 downtrend +0.62 / +0.85 / +0.22, W3 exhausted -0.15 / -4.95 / -0.75
+  (DEV t -0.1); score IC 0.000 / -0.025 / +0.057. Niche: score IC +0.071 (t 2.2) / -0.084 / +0.094
+  -> sign flips in VAL, fails. Dashboard: warnings grey, "no measurable effect".
 - Post-hoc diagnostic (not pre-registered): the main rule on the 900 most traded stocks chosen
   point-in-time: 0.48 / 0.33 / 0.56; today's S&P members within it 0.60 / 0.93 / 1.14; the
   rest 0.43 / 0.10 / 0.07 -> the main list's edge is tied to today's S&P membership.
