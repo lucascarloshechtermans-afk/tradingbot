@@ -330,3 +330,17 @@ SPY > 200d at month-end, equal weight, 0.10% per side. Periods as round 14.
 - SPY 0.80 / 0.66 / 1.40 · P0 today's members 0.98 / 0.67 / 1.33 · P1 point-in-time 0.48 / 0.22 / 0.78.
 - FAILED (0 of 3 periods): the momentum edge does not survive point-in-time membership.
   Survivorship estimate P0-P1: 12.2 / 10.8 / 27.5 %-points CAGR per year.
+
+# Round 16 — wait for a positive reaction at resistance before buying (written 2026-10-04, before running)
+User rule: only say KOPEN for a momentum pick when it has reacted positively at the resistance
+above it, otherwise it can reverse there. Test on the month-end top 20 of P1 (point-in-time S&P 500
+members, round 15) and of R1 (today's S&P 500+400 list, the live universe; hindsight). At each
+month-end the ta/ engine (light, data up to that close) finds the nearest zone with zone.high >
+close and zone.low - close <= 1 ATR ("at resistance"). Those picks:
+- A (now): buy at the next open, hold to the next month-end close.
+- B (user rule): buy at the open after the SECOND consecutive close above zone.high inside the
+  month; never confirmed → that slot stays in cash. Other picks as A.
+- B1 (looser, secondary): one close above zone.high.
+Pass: B's book (equal weight over the 20 slots, monthly) has a higher Sharpe than A in DEV and
+not lower in VAL and OOS, in P1. Either way the dashboard follows the user's rule (WACHT until
+confirmed); if it fails, the dashboard says waiting did not help in the test.

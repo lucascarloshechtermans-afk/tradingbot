@@ -98,3 +98,34 @@ def test_dashboard_states_the_round15_result_above_the_list():
     html = build_decision_html(cfg, book, [], 10_000)
     assert "onderzoeksronde 15" in html and html.index("onderzoeksronde 15") < html.index("SNDK")
     assert "houdt geen stand" in build_portfolio_tab_html(cfg, 10_000, None, [], False)
+
+
+def test_wait_for_two_closes_above_the_resistance_before_buying():
+    from types import SimpleNamespace as NS
+
+    from ui.portfolio import decision_rows, resistance_gate
+
+    def rep(closes, zone):
+        df = pd.DataFrame({"close": closes})
+        z = NS(low=zone[0], high=zone[1])
+        return NS(ticker="AAA", primary=None, score=None,
+                  daily=NS(ok=True, atr=2.0, close=closes[-1], df=df, zones=[z], trend=NS(direction=1, exhaustion=[])))
+    assert resistance_gate(rep([97.0, 98.0], (99.0, 100.0))) == (99.0, 100.0)    # just under: wait
+    assert resistance_gate(rep([99.0, 101.0], (99.0, 100.0))) is not None         # 1 close above: still wait
+    assert resistance_gate(rep([101.0, 102.0], (99.0, 100.0))) is None            # 2 closes above: buy
+    assert resistance_gate(rep([90.0, 91.0], (99.0, 100.0))) is None              # > 1 ATR below the zone: free
+    base = dict(as_of=pd.Timestamp("2026-09-30"), invested=True, exits=[], preview_in=[], preview=[],
+                next_rebalance=pd.Timestamp("2026-10-30"), preview_date=pd.Timestamp("2026-10-02"), spy_above_200_now=True)
+    book = NS(picks=[NS(ticker="AAA", status="NIEUW", sector="x")], **base)
+    r = rep([97.0, 98.0], (99.0, 100.0))
+    r.daily.trend = NS(direction=1, exhaustion=[], label_nl="x")
+    rows = decision_rows(book, {"AAA": None}, wait_for_break=True)
+    assert rows[0]["verdict"] == "JA"                                           # no chart data: plan rule only
+    import ui.portfolio as up
+    orig = up.chart_flags
+    up.chart_flags = lambda rep: (False, "")
+    try:
+        rows = decision_rows(book, {"AAA": r}, wait_for_break=True)
+    finally:
+        up.chart_flags = orig
+    assert rows[0]["verdict"] == "WACHT" and "2 slotkoersen boven 100.00" in rows[0]["do"]

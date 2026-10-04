@@ -384,6 +384,8 @@ class PortfolioConfig:
     small_cap_min_price: float = 50.0
     # NICHE FINDS: the same month-end 12-1 momentum rule over ALL US-listed common stocks
     # outside the S&P 500 (lesser-known names such as CDNA). Not part of the tested plan.
+    # user's rule: a momentum pick with resistance within 1 ATR above is WACHT until two closes above it
+    wait_for_resistance_break: bool = True
     niche_enabled: bool = True
     niche_top_n: int = 20          # round 14 Q3: top 10 vs 20 undecided -> 20 (more spread)
     niche_min_price: float = 10.0
@@ -406,6 +408,7 @@ class PortfolioConfig:
             dip_max_positions=int(raw.get("dip_max_positions", 10)),
             include_small_caps=bool(raw.get("include_small_caps", True)),
             small_cap_min_price=float(raw.get("small_cap_min_price", 50.0)),
+            wait_for_resistance_break=bool(raw.get("wait_for_resistance_break", True)),
             niche_enabled=bool(raw.get("niche_enabled", True)),
             niche_top_n=int(raw.get("niche_top_n", 20)),
             niche_min_price=float(raw.get("niche_min_price", 10.0)),

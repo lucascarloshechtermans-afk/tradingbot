@@ -38,6 +38,8 @@ def _spark(series: pd.Series | None, w: int = 120, h: int = 26) -> str:
             f"<polyline fill='none' stroke='{color}' stroke-width='1.5' points='{pts}'/></svg>")
 
 
+ROUND16_NOTE = "Effect in de test: zie README ronde 16 (wordt ingevuld na de test)."
+
 HINDSIGHT_NOTE = (
     "<p class='nt'><b>Belangrijk (onderzoeksronde 15):</b> de oude backtest gebruikte de S&amp;P-leden van <i>vandaag</i> en "
     "hield zo aandelen vast voordat ze in de index kwamen (CVNA, TSLA, LULU, AXON...). Met de ledenlijst van toen versloeg deze "
@@ -266,9 +268,26 @@ def chart_flags(rep) -> tuple[bool, str]:
     return bool(warn), ("⚠ " + "; ".join(warn) if warn else "✓ grafiek in lijn") + f" -- {setup}, score {rep.score.total:.0f}"
 
 
-def decision_rows(book, ta_by_ticker: dict | None = None) -> list[dict]:
-    """One row per stock that matters this month: verdict (JA / NEE / NOG NIET), what to do,
-    and the chart note. The verdict follows ONLY the tested month-end rule."""
+def resistance_gate(rep) -> tuple[float, float] | None:
+    """The zone the user wants a stock to break before buying: the nearest S/R zone whose top is
+    above the close and whose bottom is within 1 ATR of it (research round 16). None = free to buy."""
+    if rep is None or not rep.daily.ok or not rep.daily.atr > 0:
+        return None
+    fa = rep.daily
+    c = fa.df["close"].to_numpy()
+    c1, c2 = c[-1], (c[-2] if len(c) > 1 else c[-1])
+    # zones at or just above the price that have not yet had two closes above them
+    near = [z for z in fa.zones if z.low - c1 <= fa.atr and z.high > min(c1, c2) and not (c1 > z.high and c2 > z.high)]
+    if not near:
+        return None
+    z = min(near, key=lambda z: z.low)
+    return float(z.low), float(z.high)
+
+
+def decision_rows(book, ta_by_ticker: dict | None = None, wait_for_break: bool = False) -> list[dict]:
+    """One row per stock that matters this month: verdict (JA / WACHT / NEE / NOG NIET), what to do,
+    and the chart note. wait_for_break (the user's rule): a pick with a resistance zone within 1 ATR
+    above is WACHT until it has closed twice above that zone."""
     ta_by_ticker = ta_by_ticker or {}
     if book is None or book.as_of is None:
         return []
@@ -279,6 +298,12 @@ def decision_rows(book, ta_by_ticker: dict | None = None) -> list[dict]:
         if not book.invested:
             rows.append({"ticker": p.ticker, "verdict": "NEE", "cls": "no",
                          "do": "Niet kopen: markt uit (alles cash)", "chart": chart, "warn": warn})
+        elif wait_for_break and (gate := resistance_gate(ta_by_ticker.get(p.ticker))) is not None:
+            lo, hi = gate
+            rows.append({"ticker": p.ticker, "verdict": "WACHT", "cls": "wait",
+                         "do": f"Weerstand {lo:,.2f}-{hi:,.2f} vlak erboven: pas kopen na 2 slotkoersen boven {hi:,.2f}"
+                               + ("" if p.status == "NIEUW" else " (heb je hem al: houden)"),
+                         "chart": chart, "warn": warn, "gate": hi})
         elif p.status == "NIEUW":
             rows.append({"ticker": p.ticker, "verdict": "JA", "cls": "yes",
                          "do": "Kopen (nieuw deze maand)", "chart": chart, "warn": warn})
@@ -353,6 +378,7 @@ def build_niche_html(niche, ta: dict, main_book=None) -> str:
 
 def build_decision_html(cfg, book, ta_reports: list | None = None, account_size: float | None = None,
                         niche_book=None) -> str:
+    wait = getattr(cfg, "wait_for_resistance_break", False)
     """The first thing on the dashboard: enter or not, per stock."""
     if cfg.momentum_pct <= 0 or book is None:
         niche = build_niche_html(niche_book, {r.ticker: r for r in (ta_reports or [])})
@@ -360,7 +386,7 @@ def build_decision_html(cfg, book, ta_reports: list | None = None, account_size:
     if book.as_of is None:
         return "<div class='card dec'><h2>Instappen of niet?</h2><p>Nog geen maandlijst: te weinig data.</p></div>"
     ta = {r.ticker: r for r in (ta_reports or [])}
-    rows = decision_rows(book, ta)
+    rows = decision_rows(book, ta, wait)
     n = max(cfg.momentum_top_n, 1)
     per = cfg.momentum_pct / n
     amount = f" (&asymp; {_money(account_size * per / 100)})" if account_size else ""
@@ -380,6 +406,9 @@ def build_decision_html(cfg, book, ta_reports: list | None = None, account_size:
         f"<b>{_date(book.next_rebalance)}</b> (kopen/verkopen op de open daarna).</p>"
         f"<p class='mkt'>{mkt}</p>{now}" + HINDSIGHT_NOTE
         + "<h3 style='margin:12px 0 2px'>Momentum top 20 <span class='sm'>jouw plan -- zie de waarschuwing hierboven</span></h3>"
+        + ("<p class='sm'><b>WACHT</b> = weerstand binnen 1 ATR boven de koers: pas kopen als hij er twee slotkoersen boven "
+           "blijft (jouw regel: eerst een positieve reactie op de weerstand, anders kan hij daar omdraaien). " + ROUND16_NOTE + "</p>"
+           if wait else "")
         + _decision_table(rows)
         + "<div style='margin-top:18px'>" + build_niche_html(niche_book, ta, book) + "</div>" +
         "<p class='sm'><b>Niet in deze tabellen = niet instappen.</b> Chartpatronen, breakouts en de andere setups op dit dashboard "

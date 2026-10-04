@@ -896,6 +896,24 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     )
 
 
+def print_entry_check(scan_run: ScanRun, config: AppConfig) -> None:
+    """The user's rule for the momentum list: buy only once a pick has closed twice above the
+    resistance just above it (dashboard 'Instappen of niet?')."""
+    book = scan_run.momentum_book
+    if book is None or book.as_of is None or not book.invested or not config.portfolio.wait_for_resistance_break:
+        return
+    from ui.portfolio import decision_rows
+
+    rows = decision_rows(book, {r.ticker: r for r in scan_run.technical_reports}, True)
+    wait = [r for r in rows if r["verdict"] == "WACHT"]
+    buy = [r["ticker"] for r in rows if r["verdict"] == "JA"]
+    print("--- Instap-check: pas kopen na 2 slotkoersen boven de weerstand vlak erboven ---")
+    print(f"  JA (geen weerstand binnen 1 ATR, of al 2x erboven gesloten): {', '.join(buy) or '-'}")
+    for r in wait:
+        print(f"  WACHT {r['ticker']:<6} kopen pas na 2 slotkoersen boven {r['gate']:,.2f}")
+    print()
+
+
 def print_niche_finds(book) -> None:
     """Terminal list of the NICHE FINDS (round 14: no edge -- follow only)."""
     if book is None or book.as_of is None:
@@ -1210,6 +1228,7 @@ def main(argv: list[str] | None = None) -> int:
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
     print_portfolio_plan(scan_run, config)
+    print_entry_check(scan_run, config)
     print_niche_finds(scan_run.niche_book)
     if config.portfolio.breakout_pct > 0:
         print_leader_breakouts(scan_run, config.portfolio.breakout_risk_pct_of_account)
