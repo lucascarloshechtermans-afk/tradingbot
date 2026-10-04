@@ -64,3 +64,16 @@ def test_trend_labels():
     sw = find_swings(df, 3, ind["atr"])
     ev, st = structure_events(df, sw)
     assert assess_trend(df, ind, sw, ev, st).label == "consolidation"
+
+
+def test_flat_top_swing_is_dated_at_its_first_bar_and_never_moves():
+    from ta.swings import find_swings
+    highs = [10, 10.5, 11, 11.5, 11, 10.8, 10.9, 11.2, 11.6, 12.0, 12.0, 11.4, 11.2, 11.0, 11.1, 11.3]
+    closes = [h - 0.3 for h in highs]
+    df = frame(closes, spread=0.0)
+    df["high"] = highs
+    full = [(s.i, s.known_at) for s in find_swings(df, order=3) if s.kind == "H"]
+    assert (9, 12) in full and all(i != 10 for i, _ in full)
+    for k in range(8, len(df) + 1):     # every prefix reports a subset of the full list, never a moved swing
+        part = {(s.i, s.known_at) for s in find_swings(df.iloc[:k], order=3) if s.kind == "H"}
+        assert part == {x for x in full if x[1] < k}

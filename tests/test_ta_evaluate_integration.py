@@ -25,9 +25,11 @@ def test_forward_enters_next_open_and_signs_by_direction():
 
 
 def test_chronological_splits():
-    assert split_of(pd.Timestamp("2014-12-31")) == "train"
+    assert split_of(pd.Timestamp("2014-09-30")) == "train"
+    assert split_of(pd.Timestamp("2014-12-15")) == "purged"     # 40-session outcome would land in 2015
     assert split_of(pd.Timestamp("2015-01-02")) == "validation"
-    assert split_of(pd.Timestamp("2019-12-31")) == "validation"
+    assert split_of(pd.Timestamp("2019-09-30")) == "validation"
+    assert split_of(pd.Timestamp("2019-12-31")) == "purged"
     assert split_of(pd.Timestamp("2020-01-02")) == "oos"
 
 
@@ -37,6 +39,28 @@ def _sample_inputs(n=720):
     dates = [df.index[400], df.index[560]]
     regimes = {d: classify_regime(spy[spy.index <= d]) for d in dates}
     return df, spy, dates, regimes
+
+
+def test_engine_receives_no_bar_after_the_signal_date(monkeypatch):
+    import ta.engine as eng
+
+    seen = []
+    real = eng.analyze
+
+    def spy_analyze(ticker, daily, hourly=None, benchmarks=None, regime=None, **kw):
+        seen.append((daily.index[-1], max(s.index[-1] for s in (benchmarks or {}).values())))
+        return real(ticker, daily, hourly, benchmarks, regime, **kw)
+
+    monkeypatch.setattr(eng, "analyze", spy_analyze)
+    df, spy, dates, regimes = _sample_inputs()
+    _work(("X", df, "Tech", spy["close"], regimes, dates))
+    assert [s[0] for s in seen] == dates and all(b <= d for d, b in seen)
+
+
+def test_outcomes_unknown_at_the_end_are_nan_not_partial():
+    df = frame(list(np.linspace(100, 120, 60)), spread=0.0)
+    out = forward(df, len(df) - 3, 1, 1.0)
+    assert np.isnan(out["ret20"]) and np.isnan(out["mfe"]) and np.isnan(out["mae"])
 
 
 def test_evaluation_signals_use_only_data_up_to_the_signal_date():
@@ -55,8 +79,12 @@ def test_summary_reports_every_split_and_group():
     rows = _work(("X", df, "Tech", spy["close"], regimes, dates))
     res = pd.DataFrame(rows)
     res = pd.concat([res.assign(date=pd.Timestamp(y), ticker=f"T{y}") for y in ("2010-06-01", "2017-06-01", "2023-06-01")])
-    out = summarize(res)
+    unknown = res.iloc[:3].assign(ret20=np.nan, date=pd.Timestamp("2023-06-01"), ticker="T2023-06-01")
+    out = summarize(pd.concat([res, unknown]), stride=160)
     assert "SETUPS" in out and "Frequentie" in out and "MFE/MAE" in out
+    for split in ("train", "validation", "oos"):
+        assert split in out
+    assert "3 aandelen" in out    # header counts only rows with a known 20-session outcome
 
 
 def test_technical_config_parsing_and_weights_reach_the_score():
@@ -120,3 +148,13 @@ def test_dashboard_has_the_technical_tab():
     assert 'data-tab="ta"' in html and "id='ta-AAA'" in html and "function openTa" in html
     assert "openTa('AAA')" in ta_card_line(rep)
     assert "Geen technische analyse" in build_dashboard_html([], {}, [], [], 0, 0.0)
+
+
+def test_terminal_summary_skips_reports_without_a_daily_analysis(capsys):
+    from scanner import print_technical_summary
+    good = analyze("AAA", frame(uptrend(400)))
+    short = analyze("NEW", frame(uptrend(60)))
+    assert not short.daily.ok
+    print_technical_summary([short, good], None)
+    out = capsys.readouterr().out
+    assert "AAA" in out and "NEW" not in out

@@ -46,6 +46,9 @@ def main(argv: list[str] | None = None) -> int:
             bm[etf] = drop_incomplete_daily(get(etf, period="10y"))["Close"]
         r = analyze(t, daily, hourly, bm, regime)
         reports.append(r)
+        if not r.daily.ok or r.score is None:
+            print(f"\n=== {t}: geen analyse -- {r.daily.note or 'te weinig data'}")
+            continue
         print(f"\n=== {t}  slot {r.close:,.2f} ({r.as_of:%d-%m-%Y})  score {r.score.total:.0f}/100 "
               f"({'long' if r.direction > 0 else 'short'})  trend: {r.daily.trend.label_nl}")
         for s in sorted(r.setups, key=lambda s: -s.quality):

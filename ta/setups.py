@@ -109,8 +109,6 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
     last_high = next((s for s in reversed(known) if s.kind == "H"), None)
     bull_pats = [p for p in fa.patterns if p.direction == "bull"]
     bear_pats = [p for p in fa.patterns if p.direction == "bear"]
-    bull_c = [x for x in fa.candles if x.direction == "bull" and x.significance != "low"]
-    bear_c = [x for x in fa.candles if x.direction == "bear" and x.significance != "low"]
     events = fa.liquidity.events if fa.liquidity else []
     compression = bool(vo.squeeze_on or vo.contraction or vo.nr7 or vo.inside_bars >= 1
                        or (np.isfinite(vo.range10_atr) and vo.range10_atr <= 4))

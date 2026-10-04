@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 from ta.core import compute_indicators
 from ta.levels import find_zones
@@ -56,3 +57,20 @@ def test_overbought_in_uptrend_is_not_called_bearish():
     m = assess_momentum(ind, find_swings(df, 3), len(df) - 1, trend_direction=1)
     assert m.state in ("bullish", "strong_bullish")
     assert any("geen verkoopsignaal" in n for n in m.notes)
+
+
+def test_weekly_zone_input_drops_the_unfinished_week():
+    from ta.levels import _weekly
+    df = frame(list(np.linspace(100, 120, 23)), start="2026-02-02")   # ends Wednesday 2026-03-04
+    assert df.index[-1].weekday() == 2
+    assert _weekly(df).index[-1] == pd.Timestamp("2026-02-27")
+    assert _weekly(df.iloc[:-3]).index[-1] == pd.Timestamp("2026-02-27")   # ends on a Friday: kept
+
+
+def test_mtf_family_dropped_when_only_the_daily_chart_exists():
+    from ta.engine import analyze
+    from tests.ta_helpers import uptrend
+    rep = analyze("IPO", frame(uptrend(150, 3)))
+    mtf = next(c for c in rep.score.contributions if c.family == "mtf")
+    assert mtf.sub is None and mtf.weight == 0 and mtf.points == 0
+    assert abs(sum(c.weight for c in rep.score.contributions) - 100) < 0.5

@@ -860,6 +860,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
 
 def print_technical_summary(reports: list, regime, limit: int = 25) -> None:
     """Terminal summary of the ta/ engine (full reports: dashboard tab 'Technische analyse')."""
+    reports = [r for r in reports if r.daily.ok and r.score is not None]
     if not reports:
         return
     print(f"--- Technische analyse: {len(reports)} aandelen (score = eensgezindheid van het technische beeld, geen winstkans) ---")

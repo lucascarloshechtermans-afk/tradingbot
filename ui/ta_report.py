@@ -177,7 +177,8 @@ TA_CSS = CHART_CSS + (
     ".tat{width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0}.tat th,.tat td{text-align:left;padding:4px 6px;"
     "border-bottom:1px solid var(--line,#ddd);vertical-align:top}.tat tr.sub td{font-size:12px;color:var(--ink-soft,#666);"
     "border-bottom:2px solid var(--line,#ddd)}.tasec{margin:6px 0}.tasec>summary{cursor:pointer;font-weight:600;font-size:13px}"
-    ".tasec>div{padding:4px 0 4px 12px;font-size:12.5px}")
+    ".tasec>div{padding:4px 0 4px 12px;font-size:12.5px}"
+    ".ov details.tasec>summary:before{content:'\\25B6'}.ov details.tasec[open]>summary:before{content:'\\25BC'}")
 TA_JS = ("function openTa(t){var b=document.querySelector('[data-tab=ta]');if(b)b.click();var e=document.getElementById('ta-'+t);"
          "if(e){e.open=true;e.scrollIntoView({behavior:'smooth',block:'start'});}}")
 

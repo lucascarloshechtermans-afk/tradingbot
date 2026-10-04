@@ -92,12 +92,17 @@ def test_no_setup_is_confirmed_on_its_trigger_bar_and_levels_sit_on_the_right_si
         prev: dict = {}
         for k in range(200, len(df)):
             cur = {}
-            for st in classify(analyze_frame(df.iloc[:k + 1], "daily")):
+            fa = analyze_frame(df.iloc[:k + 1], "daily")
+            for st in classify(fa):
                 key = (st.kind, st.direction)
                 cur[key] = st.status
-                # zone setups are exempt: zones are re-scored every bar, so a candle that was already
-                # confirmed by a later bar can become 'at a zone' only now (not a trigger-bar confirmation)
-                if st.status == "confirmed" and st.kind not in ("support_bounce", "resistance_rejection"):
+                if st.status == "confirmed" and st.kind in ("support_bounce", "resistance_rejection"):
+                    # zones are re-scored every bar, so this setup can appear at once as confirmed;
+                    # what must hold: its candle printed BEFORE this bar and a later bar confirmed it
+                    d = "bull" if st.direction > 0 else "bear"
+                    assert any(x.direction == d and x.confirmation == "confirmed" and x.date < df.index[k]
+                               for x in fa.candles), (k, key)
+                elif st.status == "confirmed":
                     assert prev.get(key) != "developing", (k, key)
                 if st.status in ("triggered", "confirmed") and st.invalidation_price is not None and \
                         np.isfinite(st.invalidation_price):

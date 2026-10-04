@@ -13,7 +13,10 @@ Results are split chronologically: train <= 2014, validation 2015-2019,
 out-of-sample >= 2020, and grouped by setup x status, market regime, volatility
 bucket, sector and score bucket. Nothing is optimised here. 4H/1H history is
 only ~2 years at the data source, so historical results are daily-timeframe
-results (weekly/monthly confluence included).
+results (weekly/monthly confluence included). The universe and the sector
+labels are TODAY's S&P 1000 membership: survivorship bias (delisted losers are
+missing) and current GICS sectors -- compare signals with the same-day
+baseline (excess), not with zero.
 
     python -m ta.evaluate --tickers 120 --stride 10 --out ta_eval.pkl
 """
@@ -34,7 +37,14 @@ SPLITS = (("train", None, "2014-12-31"), ("validation", "2015-01-01", "2019-12-3
 WINDOW = 650   # bars handed to the engine per sample (enough for monthly/weekly structure and SMA200)
 
 
+PURGE_DAYS = 60   # calendar days before a split boundary whose 40-session outcome would reach into the next split
+
+
 def split_of(date: pd.Timestamp) -> str:
+    """train / validation / oos, or 'purged' for samples whose outcome window crosses into the next split."""
+    for _name, a, _b in SPLITS[1:]:
+        if pd.Timestamp(a) - pd.Timedelta(days=PURGE_DAYS) <= date < pd.Timestamp(a):
+            return "purged"
     for name, a, b in SPLITS:
         if (a is None or date >= pd.Timestamp(a)) and (b is None or date <= pd.Timestamp(b)):
             return name
@@ -55,11 +65,14 @@ def forward(df: pd.DataFrame, t: int, direction: int, atr: float) -> dict | None
         j = t + hz
         out[f"ret{hz}"] = (c[j] / entry - 1) * 100 * direction if j < n else np.nan
         out[f"raw{hz}"] = (c[j] / entry - 1) * 100 if j < n else np.nan
-    seg = slice(t + 1, min(t + 21, n))
-    hi, low = np.nanmax(h[seg]), np.nanmin(lo[seg])
-    up, dn = (hi / entry - 1) * 100, (low / entry - 1) * 100
-    out["mfe"], out["mae"] = (up, dn) if direction > 0 else (-dn, -up)
     atr_pct = atr / c[t] * 100 if np.isfinite(atr) and c[t] > 0 else np.nan
+    if t + 20 < n:     # excursions only over a FULL 20-session window (a partial one is biased toward 0)
+        seg = slice(t + 1, t + 21)
+        hi, low = np.nanmax(h[seg]), np.nanmin(lo[seg])
+        up, dn = (hi / entry - 1) * 100, (low / entry - 1) * 100
+        out["mfe"], out["mae"] = (up, dn) if direction > 0 else (-dn, -up)
+    else:
+        out["mfe"] = out["mae"] = np.nan
     out["mfe_atr"], out["mae_atr"] = out["mfe"] / atr_pct, out["mae"] / atr_pct
     out["atr_pct"] = atr_pct
     return out
@@ -120,16 +133,22 @@ def load_data(n_tickers: int, start: str, seed: int = 20261004) -> tuple[dict, d
     return frames, {t: members.get(t) for t in frames}, spy
 
 
-def summarize(res: pd.DataFrame) -> str:
+def summarize(res: pd.DataFrame, stride: int | None = None) -> str:
+    """Tables per group and split. Rows whose 20-session outcome is not known yet are
+    left out of n / hit rate / means alike (they would count as losses in a hit rate)."""
     res = res.copy()
+    if stride is None:   # sessions between sample dates, for the exposure (frequency) denominator
+        d = pd.Series(sorted(res["date"].unique()))
+        stride = int(max(round(d.diff().dt.days.median() * 252 / 365.25), 1)) if len(d) > 1 else 1
     res["split"] = res["date"].map(split_of)
     base = res[res.kind == "_all"].groupby("date")[[f"raw{h}" for h in HORIZONS]].mean()
     for h in HORIZONS:
         res[f"excess{h}"] = res[f"ret{h}"] - res["direction"] * res["date"].map(base[f"raw{h}"])
+    expo_yrs = (res.kind == "_all").sum() * stride / 252    # ticker-years actually sampled
+    res = res[res["ret20"].notna() & (res["split"] != "purged")]
     sig = res[~res.kind.isin(["_all", "_primary"])]
-    lines = []
-    yrs = (res.date.max() - res.date.min()).days / 365.25
-    n_tk = res.ticker.nunique()
+    lines = [f"Steekproef: {res.ticker.nunique()} aandelen, {res.date.nunique()} datums, stride {stride} sessies, "
+             f"{expo_yrs:,.0f} aandeel-jaren; alleen signalen met een bekende 20-daagse uitkomst."]
 
     def table(df, keys, title):
         g = df.groupby(keys + ["split"])
@@ -144,12 +163,15 @@ def summarize(res: pd.DataFrame) -> str:
     prim = res[res.kind == "_primary"].copy()
     prim["score_bucket"] = pd.cut(prim["score"], [0, 45, 55, 65, 75, 101], labels=["<45", "45-55", "55-65", "65-75", "75+"])
     table(prim[prim.direction > 0], ["score_bucket"], "HOOFDSETUP long, per scorebucket")
-    table(sig[sig.status.isin(["triggered", "confirmed"]) & (sig.direction > 0)], ["regime"], "Long-signalen per marktregime")
-    sig = sig.assign(vol=pd.cut(sig["atr_pct"], [0, 2, 4, 100], labels=["ATR<2%", "ATR 2-4%", "ATR>4%"]))
-    table(sig[sig.status.isin(["triggered", "confirmed"]) & (sig.direction > 0)], ["vol"], "Long-signalen per volatiliteit")
-    table(sig[sig.status.isin(["triggered", "confirmed"]) & (sig.direction > 0)], ["sector"], "Long-signalen per sector")
-    freq = sig[sig.status.isin(["triggered", "confirmed"])].groupby("kind").size() / max(n_tk, 1) / max(yrs, 1e-9)
-    lines.append("\n== Frequentie (getriggerd/bevestigd per aandeel per jaar, bij deze steekproef-stride)\n" + freq.round(2).to_string())
+    # one row per stock-day: several setups on the same stock-day are ONE trade in these splits
+    longs = sig[sig.status.isin(["triggered", "confirmed"]) & (sig.direction > 0)].drop_duplicates(["ticker", "date"])
+    table(longs, ["regime"], "Long-signalen per marktregime (1 per aandeel-dag)")
+    longs = longs.assign(vol=pd.cut(longs["atr_pct"], [0, 2, 4, 100], labels=["ATR<2%", "ATR 2-4%", "ATR>4%"]))
+    table(longs, ["vol"], "Long-signalen per volatiliteit (1 per aandeel-dag)")
+    table(longs, ["sector"], "Long-signalen per sector (1 per aandeel-dag, sector = huidige GICS)")
+    freq = sig[sig.status.isin(["triggered", "confirmed"])].groupby("kind").size() / max(expo_yrs, 1e-9)
+    lines.append(f"\n== Frequentie (getriggerd/bevestigd per aandeel per jaar; elke {stride}e sessie bekeken, een setup die "
+                 f"langer dan {stride} sessies leeft kan dubbel tellen)\n" + freq.round(2).to_string())
     mm = sig[sig.status.isin(["triggered", "confirmed"])].groupby("kind")[["mfe", "mae", "mfe_atr", "mae_atr"]].mean().round(2)
     lines.append("\n== MFE/MAE binnen 20 dagen (%, en in ATR)\n" + mm.to_string())
     return "\n".join(lines)
@@ -182,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {k}/{len(jobs)} tickers done, {len(rows)} records", flush=True)
     res = pd.DataFrame(rows)
     res.to_pickle(args.out)
-    print(summarize(res))
+    print(summarize(res, args.stride))
     return 0
 
 
