@@ -325,6 +325,9 @@ def build_niche_html(niche, ta: dict, main_book=None) -> str:
         return ""
     # names that left the niche list get one small line, not a red row each (you most likely never held them)
     rows = [r for r in decision_rows(niche, ta) if r["ticker"] not in set(niche.exits)]
+    for r in rows:    # round 14: no edge in the test -> follow, never a tested buy
+        if r["verdict"] == "JA":
+            r.update(verdict="VOLGEN", cls="wait", do="Volgen, geen geteste koop" + (" (nieuw in de lijst)" if "nieuw" in r["do"] else ""))
     gone = (f"<p class='sm'>Vorige maand nog in de niche-lijst, nu niet meer (heb je ze, dan verkopen): "
             f"{escape(', '.join(niche.exits))}.</p>" if niche.exits else "")
     in_main = {p.ticker for p in main_book.picks} if main_book is not None else set()
@@ -336,9 +339,10 @@ def build_niche_html(niche, ta: dict, main_book=None) -> str:
         "<h3 style='margin:4px 0 2px'>Niche finds <span class='sm'>minder bekende aandelen</span></h3>"
         f"<p class='sm'>Dezelfde maandregel (top {len(niche.picks)} op 12-1 maand momentum, SPY-filter), maar over alle "
         f"Amerikaanse aandelen <b>buiten de S&amp;P 500</b> vanaf $10 en $10M omzet per dag "
-        f"({niche.eligible_count:,} kwamen in aanmerking), alleen met een echte trend: binnen 25% van de 52-weekse top "
-        "en niet het grootste deel van de winst op één dag (zoals een biotech-sprong op studienieuws). <b>Niet getest</b>: kleinere bedrijven schommelen harder, en een "
-        "eerlijke backtest kan niet zonder data van verdwenen aandelen. Zet er dus minder op in dan op de geteste lijst.</p>"
+        f"({niche.eligible_count:,} kwamen in aanmerking), alleen binnen 25% van hun 52-weekse top. "
+        "<b>Getest in ronde 14 (2011-2026): geen voorsprong.</b> Deze lijst deed het niet beter dan een willekeurig klein "
+        "aandeel en slechter dan SPY (Sharpe 0,41 / 0,38 / 0,41 tegen SPY 0,80 / 0,66 / 1,40), met dalingen tot ~40%, "
+        "terwijl de test kleine aandelen zelfs bevoordeelt. Alleen om te volgen; de geteste koop staat in de momentum top 20.</p>"
         + _decision_table(rows, names) + gone)
 
 
@@ -357,7 +361,7 @@ def build_decision_html(cfg, book, ta_reports: list | None = None, account_size:
     amount = f" (&asymp; {_money(account_size * per / 100)})" if account_size else ""
     if book.invested:
         mkt = (f"<b style='color:var(--green)'>Markt AAN</b> -- SPY sloot op {_date(book.as_of)} boven zijn 200-daags: "
-               f"belegd in de momentum top {len(book.picks)} (onderaan), elk {per:.1f}% van je account{amount}.")
+               f"belegd in de momentum top {len(book.picks)} hieronder, elk {per:.1f}% van je account{amount}.")
     else:
         mkt = (f"<b style='color:var(--red)'>Markt UIT</b> -- SPY sloot op {_date(book.as_of)} onder zijn 200-daags: "
                "alles in cash, nergens instappen.")
@@ -370,9 +374,9 @@ def build_decision_html(cfg, book, ta_reports: list | None = None, account_size:
         f"<p class='sm'>Koersen t/m het slot van {_date(book.preview_date)}. Volgende beslismoment: slot van "
         f"<b>{_date(book.next_rebalance)}</b> (kopen/verkopen op de open daarna).</p>"
         f"<p class='mkt'>{mkt}</p>{now}"
-        + build_niche_html(niche_book, ta, book)
-        + "<h3 style='margin:16px 0 2px'>Momentum top 20 <span class='sm'>het geteste plan</span></h3>"
-        + _decision_table(rows) +
+        + "<h3 style='margin:12px 0 2px'>Momentum top 20 <span class='sm'>het geteste plan</span></h3>"
+        + _decision_table(rows)
+        + "<div style='margin-top:18px'>" + build_niche_html(niche_book, ta, book) + "</div>" +
         "<p class='sm'><b>Niet in deze tabellen = niet instappen.</b> Chartpatronen, breakouts en de andere setups op dit dashboard "
         "zijn info: in de tests deden ze het niet beter dan een willekeurig aandeel. Het advies volgt alleen de geteste "
         "maandregel; de kolom Grafiek verandert het advies niet (grafiekfilters verbeterden de lijst niet, README ronde 13 "

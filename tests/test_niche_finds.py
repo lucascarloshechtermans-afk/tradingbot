@@ -56,7 +56,7 @@ def test_niche_book_excludes_the_sp500_and_uses_its_own_cache():
     assert find_niche_book(prov, cfg, spy) is None
 
 
-def test_decision_card_shows_niche_finds_first():
+def test_decision_card_shows_the_tested_list_first_and_niche_as_follow_only():
     from types import SimpleNamespace as NS
 
     from ui.portfolio import build_decision_html
@@ -66,8 +66,9 @@ def test_decision_card_shows_niche_finds_first():
     main = NS(picks=mk(["SNDK", "VICR"], "BLIJFT"), **base)
     niche = NS(picks=mk(["CDNA", "VICR"], "NIEUW"), eligible_count=1234, **{**base, "exits": ["OLDBIO"]})
     html = build_decision_html(load_config().portfolio, main, [], 10_000, niche)
-    assert html.index("Niche finds") < html.index("Momentum top 20") and "CDNA Inc." in html
-    assert "staat ook in de momentum top 20" in html and "Niet getest" in html
+    assert html.index("Momentum top 20") < html.index("Niche finds") and "CDNA Inc." in html
+    assert "staat ook in de momentum top 20" in html and "geen voorsprong" in html
+    assert "VOLGEN" in html and html.index("VOLGEN") > html.index("Niche finds")
     assert "nu niet meer (heb je ze, dan verkopen): OLDBIO" in html and "openTa('OLDBIO')" not in html
 
 

@@ -12,7 +12,44 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
-## Niche finds — momentum outside the S&P 500 (not tested)
+## Research round 14 — niche momentum and the dashboard warnings (`research/round14.py`, `round14b.py`)
+
+Pre-registered in `research/HYPOTHESES.md`. The data is today's ~4,750 US-listed common
+stocks, daily since 2010; delisted names are missing, which flatters every small-cap
+result. "Niche" means outside the 500 most traded stocks at that date (a point-in-time
+proxy for the S&P 500). Costs are 0.30% per side for niche books and 0.10% for
+large-cap books. Full table in `research/round14_results.txt`.
+
+CAGR / max drawdown / Sharpe:
+
+| | DEV 2011–18 | VAL 2019–22 | OOS 2023–26 |
+|---|---|---|---|
+| SPY | 11.1% / 19% / 0.80 | 13.1% / 34% / 0.66 | 21.9% / 19% / 1.40 |
+| random niche stock (equal weight, SPY filter) | 5.6% / 27% / 0.44 | 2.9% / 28% / 0.25 | 1.2% / 18% / 0.16 |
+| niche momentum top 10, no filter | 4.7% / 60% / 0.30 | −9.9% / 67% / −0.06 | **−29.1% / 77% / −0.53** |
+| + within 25% of the 52-week high (F1) | 4.7% / 52% / 0.31 | 8.3% / 51% / 0.40 | −1.1% / 37% / 0.19 |
+| + no one-day jump (F2) | 3.4% / 59% / 0.26 | −12.5% / 67% / −0.14 | −7.4% / 53% / 0.05 |
+| + F1 + F2 (the first live version) | 3.2% / 55% / 0.25 | −1.3% / 43% / 0.14 | 14.4% / 43% / 0.53 |
+| F1 only, top 20 (**live now**) | 7.3% / 41% / 0.41 | 7.3% / 42% / 0.38 | 8.5% / 32% / 0.41 |
+| reference: main list (today's S&P 500+400, top 20) | 12.7% / 34% / 0.64 | 23.4% / 22% / 0.93 | 49.2% / 37% / 1.27 |
+| reference: top 20 of the 500 most traded (point-in-time) | 10.4% / 39% / 0.52 | 8.8% / 61% / 0.41 | 25.0% / 42% / 0.71 |
+
+- **Q1 failed.** Niche momentum did not beat a random small stock (DEV Sharpe 0.25 vs
+  0.44), and every niche variant did far worse than SPY. Without filters it was a
+  disaster: it buys biotech-style jumps just before they collapse. The dashboard now
+  shows the niche list as **VOLGEN** (follow only), not as a buy.
+- **Q2:** F1 (near the 52-week high) beat no filter in all three periods, so it stays.
+  F2 (no one-day jump) did not, so it is now off.
+- **Q3:** top 10 vs top 20 was undecided, so it is top 20 (more spread).
+- **The main list's backtest depends on the universe.** The same rule on today's
+  S&P 500+400 members (0.64 / 0.93 / 1.27) did much better than on the 500 most traded
+  stocks chosen point-in-time (0.52 / 0.41 / 0.71, max drawdown 61%). Part of that gap is
+  the survivorship bias of using today's index members: today's members are partly
+  yesterday's winners. The ~4–5%/yr haircut in the plan's notes may be too small. The
+  main list stays the plan (it is still the only tested rule with an edge over SPY in
+  VAL/OOS here), but expect less than the backtest.
+
+## Niche finds — momentum outside the S&P 500 (tested in round 14: no edge)
 
 The user wanted lesser-known names (e.g. CDNA, found by the external scanner's
 full-NASDAQ scan) instead of SNDK / MU. `find_niche_book` in `scanner.py` applies
@@ -20,22 +57,24 @@ full-NASDAQ scan) instead of SNDK / MU. `find_niche_book` in `scanner.py` applie
 common stocks outside the S&P 500: about 4,600 NASDAQ, NYSE and NYSE American
 names from the official NASDAQ Trader symbol files (`data/us_listed.py`). ETFs,
 warrants, units, rights, preferreds, funds and SPACs are excluded, and a name needs
-a price of at least $10 and at least $10M traded per day. The top 10 appear first in
-the dashboard card "Instappen of niet?", with JA / NEE / NOG NIET like the main list.
+a price of at least $10 and at least $10M traded per day. The top 20 appear in the
+dashboard card "Instappen of niet?" under the main list, marked VOLGEN (follow) rather
+than JA, because round 14 found no edge.
 
 Without further filters the list was mostly small biotechs that jumped once on
 trial news (+500% to +800%) and were already falling (−16% to −28% the last month).
-Two filters from the literature therefore apply **to the niche list only**:
-- the close must be within 25% of the 52-week high (George & Hwang);
-- the best single day must have made less than a third of the 12-month gain
-  (one news gap is not a trend; "frog in the pan", Da et al.).
+Two filters from the literature were tried **on the niche list only**:
+- the close within 25% of the 52-week high (George & Hwang): it helped in all three
+  round-14 periods, so it is **on**;
+- the best single day below a third of the 12-month gain (one news gap is not a
+  trend; "frog in the pan", Da et al.): it did not help, so it is **off**
+  (`niche_max_jump_share: 0.33` switches it back on).
 
-With both filters CDNA ranks #10 instead of #30. Round 12 found that comparable
-filters (52-week-high proximity, only above the 50-day) lowered the main list's
-results, so the MOMENTUM TOP 20 keeps the plain rule. Switch the filters off with
-`niche_near_high_pct: 0` / `niche_max_jump_share: 1`.
+Round 12 found that comparable filters (52-week-high proximity, only above the
+50-day) lowered the main list's results, so the MOMENTUM TOP 20 keeps the plain rule.
 
-**Not tested.** A fair backtest needs the small companies that were delisted, and
+**Round 14 tested it (above): no edge over a random small stock.** It is shown to follow,
+not to buy. A fully fair backtest would also need the small companies that were delisted, and
 that data is not available here: the free data covers today's listings only, and
 the survivorship bias is much larger for small caps than the ~4–5%/yr in the
 S&P tests. Round 8 found that adding S&P 600 small caps lowered the momentum

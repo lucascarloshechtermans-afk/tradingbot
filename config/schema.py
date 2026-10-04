@@ -385,12 +385,12 @@ class PortfolioConfig:
     # NICHE FINDS: the same month-end 12-1 momentum rule over ALL US-listed common stocks
     # outside the S&P 500 (lesser-known names such as CDNA). Not part of the tested plan.
     niche_enabled: bool = True
-    niche_top_n: int = 10
+    niche_top_n: int = 20          # round 14 Q3: top 10 vs 20 undecided -> 20 (more spread)
     niche_min_price: float = 10.0
     # trend-quality filters for the niche list (0 / 1 switch them off): within X% of the
     # 52-week high, and no more than this share of the gain made on one single day
-    niche_near_high_pct: float = 75.0
-    niche_max_jump_share: float = 0.33
+    niche_near_high_pct: float = 75.0    # round 14 Q2: helped in all three periods -> kept
+    niche_max_jump_share: float = 1.0    # round 14 Q2: did not help -> off (0.33 to switch on)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "PortfolioConfig":
@@ -407,10 +407,10 @@ class PortfolioConfig:
             include_small_caps=bool(raw.get("include_small_caps", True)),
             small_cap_min_price=float(raw.get("small_cap_min_price", 50.0)),
             niche_enabled=bool(raw.get("niche_enabled", True)),
-            niche_top_n=int(raw.get("niche_top_n", 10)),
+            niche_top_n=int(raw.get("niche_top_n", 20)),
             niche_min_price=float(raw.get("niche_min_price", 10.0)),
             niche_near_high_pct=float(raw.get("niche_near_high_pct", 75.0)),
-            niche_max_jump_share=float(raw.get("niche_max_jump_share", 0.33)),
+            niche_max_jump_share=float(raw.get("niche_max_jump_share", 1.0)),
         )
         weights = (cfg.momentum_pct, cfg.breakout_pct, cfg.dip_pct, cfg.index_rsi2_pct)
         if min(weights) < 0 or sum(weights) > 100.0001:

@@ -262,3 +262,37 @@ the last 500 bars, analysis.patterns.detect_patterns):
 Pass: sign as predicted with |t| ≥ 2 in DEV (research ≤2021) and the same sign in VAL-T, VAL-U,
 FINAL. A passing feature becomes a rule (skip / replace the pick); otherwise it is shown on the
 dashboard as information only.
+
+# Round 14 — NICHE momentum: does it work, and do the two filters help? (written 2026-10-04, before running)
+The user wants lesser-known names (e.g. CDNA) instead of SNDK / MU. Live rule: month-end top 10 by
+12-1 return over US common stocks outside the S&P 500, price >= $10, >= $10M/day, SPY > 200d at
+month-end, equal weight; niche-only filters F1 close >= 0.75 x 252-day high, F2 best single day
+< 1/3 of the 12-1 month log gain.
+Data: today's NASDAQ Trader listings (~5,100 names), daily since 2010 (yfinance). Two biases, in
+opposite directions: delisted names are missing (flatters every small-cap result, raw momentum
+the most: it buys run-ups that later collapse), and today's S&P 500 members were often small
+before (excluding them historically would remove the biggest winners). So "niche at date t" is
+defined point-in-time: NOT among the 500 largest by 20-day dollar volume at t (proxy for the
+S&P 500). Costs 0.30% per side for niche books (wider spreads), 0.10% for the large-cap book.
+Periods: DEV 2011-07..2018-12 · VAL 2019-01..2022-12 · OOS 2023-01..2026-09.
+Variants: N0 raw niche top 10 · N1 + F1 · N2 + F2 · N3 + F1 + F2 (live default) · N4 = N3 top 20.
+Benchmarks: B0 SPY · B1 equal-weight all eligible niche stocks (the "random niche stock"),
+monthly · B2 the same 12-1 top 20 over the 500 largest (large-cap momentum, same data).
+Questions and pass rules (Sharpe, per period):
+- Q1 Is niche momentum better than a random niche stock? N3 Sharpe > B1 in DEV, and not lower in
+  VAL and OOS → otherwise the niche list is labelled "no edge" on the dashboard.
+- Q2 Do the filters help? N1, N2, N3 each vs N0: Sharpe higher in DEV and not lower in VAL / OOS
+  → filter kept; otherwise removed (default off).
+- Q3 Top 10 vs top 20 (N3 vs N4): the one with the higher DEV Sharpe that is not lower in VAL /
+  OOS; tie → top 20 (more spread).
+Because of survivorship, absolute CAGRs are not trusted; only same-data comparisons count, and
+even those favour N0 (it would have held more of the missing collapses).
+- Q4 Do the dashboard's chart warnings matter? For every pick of B2 (large-cap top 20) and N3
+  (niche top 10) at each month-end with SPY > 200d, run ta.engine.analyze on the daily data up to
+  that close (light mode, same code as the live dashboard) and record the warnings of
+  ui/portfolio.chart_flags: W1 resistance zone within 1 ATR above, W2 daily trend down,
+  W3 trend exhausted/overextended, plus the 0-100 technical score. Outcome = return from the next
+  open to the next month-end close MINUS the average of that month's picks of the same book.
+  Pass: flagged picks worse with |t| >= 2 in DEV and the same sign in VAL and OOS (score: rank
+  correlation > 0 with the same rule) → the warning becomes a rule (skip the name); otherwise the
+  dashboard says the warning had no measurable effect.
