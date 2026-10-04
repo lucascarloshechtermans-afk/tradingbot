@@ -56,4 +56,9 @@ def test_todo_and_tab_render_every_system():
 def test_dashboard_has_portfolio_tab():
     html = build_dashboard_html([], {}, [], [], 0, 0.0, portfolio_cfg=PortfolioConfig(), momentum_book=_book(),
                                 index_signals=[_sig()], market_state={"spy_below_200": False})
-    assert 'data-tab="portfolio"' in html and "Vandaag te doen" in html and "Portefeuilleplan" in html
+    # momentum only: the 'Instappen of niet?' card replaces the to-do list
+    assert 'data-tab="portfolio"' in html and "Instappen of niet?" in html and "Portefeuilleplan" in html
+    assert "Vandaag te doen" not in html
+    mixed = build_dashboard_html([], {}, [], [], 0, 0.0, portfolio_cfg=PortfolioConfig(momentum_pct=50, breakout_pct=50),
+                                 momentum_book=_book(), index_signals=[_sig()], market_state={"spy_below_200": False})
+    assert "Vandaag te doen" in mixed and "Instappen of niet?" in mixed

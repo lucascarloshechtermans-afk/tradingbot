@@ -232,3 +232,115 @@ def build_forward_html(summ: dict | None, results: list, momentum: pd.DataFrame 
         + ("<p><b>Momentum-maandlijsten</b> (gelijk gewogen, slot tot slot, tegenover SPY)</p><table><thead><tr><th>Lijst van</th>"
            "<th>Tot</th><th>Stand</th><th>Lijst</th><th>SPY</th></tr></thead><tbody>" + mom_rows + "</tbody></table>" if mom_rows else "")
         + "</div>")
+
+
+# --------------------------------------------------------------------------- #
+# "Instappen of niet?" -- one decision per stock, from the TESTED monthly rule
+# --------------------------------------------------------------------------- #
+
+def chart_flags(rep) -> tuple[bool, str]:
+    """(warning?, short text) from a ta/ TechnicalReport. Information only: research round 13
+    and the ta/ validation found no chart filter that improved the momentum list."""
+    if rep is None or not rep.daily.ok or rep.score is None:
+        return False, "geen grafiekanalyse"
+    fa, p = rep.daily, rep.primary
+    warn = []
+    above = [z for z in fa.zones if z.low > fa.close]
+    if above and fa.atr > 0:
+        z = min(above, key=lambda z: z.low)
+        room = (z.low - fa.close) / fa.atr
+        if room <= 1:
+            warn.append(f"weerstand vlak erboven ({z.low:,.2f}, {room:.1f} ATR)")
+    if fa.trend.direction < 0:
+        warn.append(f"dagtrend omlaag ({fa.trend.label_nl})")
+    elif p is not None and p.direction < 0 and p.status in ("triggered", "confirmed"):
+        warn.append(f"grafiek wijst omlaag ({p.name_nl})")
+    if fa.trend.exhaustion:
+        warn.append("overstrekt")
+    setup = f"{p.name_nl} ({p.status_nl})" if p is not None else "geen setup"
+    return bool(warn), ("⚠ " + "; ".join(warn) if warn else "✓ grafiek in lijn") + f" -- {setup}, score {rep.score.total:.0f}"
+
+
+def decision_rows(book, ta_by_ticker: dict | None = None) -> list[dict]:
+    """One row per stock that matters this month: verdict (JA / NEE / NOG NIET), what to do,
+    and the chart note. The verdict follows ONLY the tested month-end rule."""
+    ta_by_ticker = ta_by_ticker or {}
+    if book is None or book.as_of is None:
+        return []
+    nxt = _date(book.next_rebalance)
+    rows = []
+    for p in book.picks:
+        warn, chart = chart_flags(ta_by_ticker.get(p.ticker))
+        if not book.invested:
+            rows.append({"ticker": p.ticker, "verdict": "NEE", "cls": "no",
+                         "do": "Niet kopen: markt uit (alles cash)", "chart": chart, "warn": warn})
+        elif p.status == "NIEUW":
+            rows.append({"ticker": p.ticker, "verdict": "JA", "cls": "yes",
+                         "do": "Kopen (nieuw deze maand)", "chart": chart, "warn": warn})
+        else:
+            rows.append({"ticker": p.ticker, "verdict": "JA", "cls": "yes",
+                         "do": "Houden (nog niet in bezit? kopen)", "chart": chart, "warn": warn})
+    back = set(book.preview_in)
+    for t in book.exits:
+        rows.append({"ticker": t, "verdict": "NEE", "cls": "no",
+                     "do": "Verkopen (uit de lijst)" + (
+                         f"; komt mogelijk terug op {nxt}, pas dan weer kopen"
+                         if t in back else ""), "chart": "", "warn": False})
+    held = {p.ticker for p in book.picks} | set(book.exits)
+    for t in book.preview_in:
+        if t not in held:
+            warn, chart = chart_flags(ta_by_ticker.get(t))
+            rows.append({"ticker": t, "verdict": "NOG NIET", "cls": "wait",
+                         "do": f"Nu niet; komt mogelijk in de lijst op {nxt}",
+                         "chart": chart, "warn": warn})
+    return rows
+
+
+DECISION_CSS = (
+    ".dec h2{margin:0 0 4px;font-size:20px}.dec .mkt{font-size:15px;margin:6px 0 12px}"
+    ".dec table{width:100%;border-collapse:collapse}.dec td,.dec th{padding:7px 8px;border-bottom:1px solid var(--line);"
+    "vertical-align:top;text-align:left}.dec th{cursor:default}"
+    ".vd{display:inline-block;min-width:74px;text-align:center;font-weight:800;font-size:13px;padding:4px 8px;border-radius:6px}"
+    ".vd.yes{background:rgba(63,185,80,.18);color:var(--green)}.vd.no{background:rgba(248,81,73,.18);color:var(--red)}"
+    ".vd.wait{background:rgba(210,153,34,.18);color:var(--amber)}.dec .ch{color:var(--ink-soft);font-size:12px}"
+    ".dec .ch.w{color:var(--amber)}.dec .tk{font-weight:700;font-size:15px}"
+    "")
+
+
+def build_decision_html(cfg, book, ta_reports: list | None = None, account_size: float | None = None) -> str:
+    """The first thing on the dashboard: enter or not, per stock."""
+    if cfg.momentum_pct <= 0 or book is None:
+        return ""
+    if book.as_of is None:
+        return "<div class='card dec'><h2>Instappen of niet?</h2><p>Nog geen maandlijst: te weinig data.</p></div>"
+    ta = {r.ticker: r for r in (ta_reports or [])}
+    rows = decision_rows(book, ta)
+    n = max(cfg.momentum_top_n, 1)
+    per = cfg.momentum_pct / n
+    amount = f" (&asymp; {_money(account_size * per / 100)})" if account_size else ""
+    if book.invested:
+        mkt = (f"<b style='color:var(--green)'>Markt AAN</b> -- SPY sloot op {_date(book.as_of)} boven zijn 200-daags: "
+               f"belegd in de {len(book.picks)} aandelen hieronder, elk {per:.1f}% van je account{amount}.")
+    else:
+        mkt = (f"<b style='color:var(--red)'>Markt UIT</b> -- SPY sloot op {_date(book.as_of)} onder zijn 200-daags: "
+               "alles in cash, nergens instappen.")
+    now = ""
+    if book.spy_above_200_now is not None and book.spy_above_200_now != book.invested:
+        now = (f"<p class='sm'>Let op: SPY staat nu {'boven' if book.spy_above_200_now else 'ONDER'} zijn 200-daags. "
+               f"Dat telt pas bij het slot van {_date(book.next_rebalance)}.</p>")
+    body = "".join(
+        f"<tr><td><a class='tk' href='#ta-{escape(r['ticker'])}' onclick=\"openTa('{escape(r['ticker'])}')\">{escape(r['ticker'])}</a></td>"
+        f"<td><span class='vd {r['cls']}'>{r['verdict']}</span></td><td>{escape(r['do'])}"
+        + (f"<div class='ch{' w' if r['warn'] else ''}'>{escape(r['chart'])}</div>" if r["chart"] else "")
+        + "</td></tr>" for r in rows)
+    return (
+        "<div class='card dec'><h2>Instappen of niet?</h2>"
+        f"<p class='sm'>Koersen t/m het slot van {_date(book.preview_date)}. Volgende beslismoment: slot van "
+        f"<b>{_date(book.next_rebalance)}</b> (kopen/verkopen op de open daarna).</p>"
+        f"<p class='mkt'>{mkt}</p>{now}"
+        "<table><thead><tr><th>Aandeel</th><th>Instappen?</th><th>Wat doen <span class='sm'>(grijs: grafiek, info)</span></th></tr></thead>"
+        f"<tbody>{body}</tbody></table>"
+        "<p class='sm'><b>Niet in deze tabel = niet instappen.</b> Chartpatronen, breakouts en de andere setups op dit dashboard "
+        "zijn info: in de tests deden ze het niet beter dan een willekeurig aandeel. Het advies volgt alleen de geteste "
+        "maandregel; de kolom Grafiek verandert het advies niet (grafiekfilters verbeterden de lijst niet, README ronde 13 "
+        "en de ta-validatie), maar laat zien waar je op moet letten. Klik op een ticker voor de volledige analyse.</p></div>")

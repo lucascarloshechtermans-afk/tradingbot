@@ -28,7 +28,16 @@ PAGE_TEMPLATE = """<!doctype html>
   {setup_css}
   {overview_css}
   {ta_css}
+  {decision_css}
+  details.bg>summary {{ cursor: pointer; }}
   .tabs {{ display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }}
+  .tabs {{ overflow-x: auto; }} .tab {{ white-space: nowrap; }}
+  @media (max-width: 700px) {{
+    body {{ padding: 12px; }}
+    table {{ display: block; overflow-x: auto; }}
+    .dec table {{ display: table; }}
+    .dec td, .dec th {{ padding: 6px 4px; }}
+  }}
   .tab {{ padding: 8px 16px; cursor: pointer; color: var(--ink-soft); border-bottom: 2px solid transparent; font-size: 14px; }}
   .tab.active {{ color: var(--ink); border-bottom-color: var(--blue); }}
   .panel {{ display: none; }}
@@ -81,34 +90,31 @@ PAGE_TEMPLATE = """<!doctype html>
   </div>
 
   <div id="dashboard" class="panel active">
-    {overview_html}
-    <div class="card">
-      <div class="grid">
+    {decision_html}
+    <details class="card bg" id="details-per-stock">
+      <summary><b>Details per aandeel</b> <span class="sm">grafiek, steun/weerstand en uitleg voor elk aandeel in de lijst -- klik</span></summary>
+      {overview_html}
+    </details>
+    <details class="card bg">
+      <summary><b>Achtergrond</b> <span class="sm">marktregime, sectoren, oude strategie-setups en chartpatronen -- info, niet gevalideerd</span></summary>
+      <div class="grid" style="margin-top:12px">
         <div class="stat"><div class="label">Market Regime</div><div class="value"><span class="badge {regime_class}">{regime_label}</span></div></div>
         <div class="stat"><div class="label">Regime Score</div><div class="value">{regime_score}</div></div>
         <div class="stat"><div class="label">Oude strategie-setups (info)</div><div class="value">{setup_count}</div></div>
         <div class="stat"><div class="label">Universe Scanned</div><div class="value">{universe_size}</div></div>
       </div>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Market regime factors</h3>
+      <h3>Market regime factors</h3>
       <ul class="plain">{regime_factors_html}</ul>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Sector strength</h3>
+      <h3>Sector strength</h3>
       <table><thead><tr><th>Rank</th><th>ETF</th><th>5D Perf</th><th>1M Perf</th><th>3M Perf</th><th>RS vs SPY</th><th>Volatility</th><th>Trend</th></tr></thead>
       <tbody>{sector_rows_html}</tbody></table>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Other strategy setups (not validated -- info only)</h3>
+      <h3>Other strategy setups (not validated -- info only)</h3>
       <table><thead><tr><th>Rank</th><th>Ticker</th><th>Score</th><th>Setup</th></tr></thead>
       <tbody>{top_setups_html}</tbody></table>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Chart patterns (info only)</h3>
+      <h3>Chart patterns (info only)</h3>
       <table><thead><tr><th>#</th><th>Ticker</th><th>Score</th><th>Status</th><th>Pattern</th><th>Trigger</th><th>Stop</th><th>Target</th><th>R:R</th></tr></thead>
       <tbody>{boom_rows_html}</tbody></table>
-    </div>
+    </details>
   </div>
 
   <div id="portfolio" class="panel">
@@ -153,7 +159,10 @@ function openCard(t) {{
   document.querySelector('[data-tab=dashboard]').click();
   for (const id of ['ov-mo-' + t, 'ov-bo-' + t, 'ov-' + t, 'ov-nb-' + t, 'ov-alert-' + t, 'ov-pat-' + t]) {{
     const el = document.getElementById(id);
-    if (el) {{ el.open = true; el.scrollIntoView({{behavior: 'smooth', block: 'start'}}); return; }}
+    if (el) {{
+      for (let p = el; p; p = p.parentElement) {{ if (p.tagName === 'DETAILS') p.open = true; }}
+      el.scrollIntoView({{behavior: 'smooth', block: 'start'}}); return;
+    }}
   }}
 }}
 const SCAN_DATA = {scan_data_json};
@@ -322,7 +331,7 @@ def build_dashboard_html(
     from ui.chart_svg import SETUP_CSS, render_setup_cards
     from config.schema import PortfolioConfig
     from ui.overview import OVERVIEW_CSS, build_overview_html
-    from ui.portfolio import build_forward_html, build_portfolio_tab_html, build_todo_html
+    from ui.portfolio import DECISION_CSS, build_decision_html, build_forward_html, build_portfolio_tab_html, build_todo_html
     from ui.ta_report import TA_CSS, TA_JS, ta_card_line, ta_tab
     ta_reports, ta_regime = technical or ([], None)
     ta_html = (ta_tab(ta_reports, ta_regime) if ta_reports else
@@ -372,8 +381,13 @@ def build_dashboard_html(
         boom_rows_html=boom_rows_html or "<tr><td colspan=9>No pattern setups</td></tr>",
         boom_cards_html=render_setup_cards(pattern_setups) if pattern_setups else "",
         setup_css=SETUP_CSS,
-        overview_html=build_todo_html(portfolio_cfg, momentum_book, index_signals, len(leader_dips), bear,
-                                      n_breakouts=len(leader_breakouts or []))
+        decision_html=build_decision_html(portfolio_cfg, momentum_book, ta_reports, account_size),
+        decision_css=DECISION_CSS,
+        # the decision card covers the momentum plan; the to-do list only matters when other systems are on
+        overview_html=(build_todo_html(portfolio_cfg, momentum_book, index_signals, len(leader_dips), bear,
+                                       n_breakouts=len(leader_breakouts or []))
+                       if (portfolio_cfg.breakout_pct > 0 or portfolio_cfg.dip_pct > 0 or portfolio_cfg.index_rsi2_pct > 0
+                           or momentum_book is None) else "")
         + build_overview_html(leader_dips, dip_alerts, pattern_setups, sector_ranked,
                               sector_by_ticker or {}, market_state or {},
                               dip_risk_pct=portfolio_cfg.dip_risk_pct_of_account,

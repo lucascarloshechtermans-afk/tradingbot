@@ -158,3 +158,25 @@ def test_terminal_summary_skips_reports_without_a_daily_analysis(capsys):
     print_technical_summary([short, good], None)
     out = capsys.readouterr().out
     assert "AAA" in out and "NEW" not in out
+
+
+def test_decision_rows_follow_only_the_monthly_rule():
+    from types import SimpleNamespace as NS
+
+    from ui.portfolio import build_decision_html, decision_rows
+    picks = [NS(ticker="AAA", status="NIEUW"), NS(ticker="BBB", status="BLIJFT")]
+    book = NS(as_of=pd.Timestamp("2026-09-30"), invested=True, picks=picks, exits=["OLD"], preview_in=["NEW1", "AAA", "OLD"],
+              next_rebalance=pd.Timestamp("2026-10-30"), preview_date=pd.Timestamp("2026-10-02"), spy_above_200_now=True)
+    down = analyze("BBB", frame([20000 / x for x in uptrend(400)]))    # a falling chart only adds a warning
+    rows = {r["ticker"]: r for r in decision_rows(book, {"BBB": down})}
+    assert rows["AAA"]["verdict"] == "JA" and "Kopen" in rows["AAA"]["do"]
+    assert rows["BBB"]["verdict"] == "JA" and rows["BBB"]["warn"] and "⚠" in rows["BBB"]["chart"]
+    assert rows["OLD"]["verdict"] == "NEE" and "Verkopen" in rows["OLD"]["do"] and "terug" in rows["OLD"]["do"]
+    assert [r["ticker"] for r in decision_rows(book)].count("OLD") == 1   # one row, not sell + 'not yet'
+    assert rows["NEW1"]["verdict"] == "NOG NIET" and list(rows).count("AAA") == 1
+    cash = NS(**{**book.__dict__, "invested": False})
+    assert all(r["verdict"] == "NEE" for r in decision_rows(cash) if r["ticker"] in ("AAA", "BBB", "OLD"))
+    cfg = load_config().portfolio
+    html = build_decision_html(cfg, book, [down], 10_000)
+    assert "Instappen of niet?" in html and "Markt AAN" in html and "openTa('BBB')" in html
+    assert build_decision_html(cfg, None) == ""
