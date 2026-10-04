@@ -414,6 +414,37 @@ class PortfolioConfig:
         return self.dip_pct / 100 * self.dip_risk_pct_of_sleeve
 
 
+TECHNICAL_FAMILIES = ("trend", "price_action", "sr", "momentum", "volume", "volatility", "candles", "mtf", "rs")
+
+
+@dataclass
+class TechnicalConfig:
+    """The multi-timeframe technical-analysis engine (ta/). Analysis only: it
+    describes and scores charts, it never sizes positions or allocates money.
+    weights: relative weight per indicator FAMILY in the 0-100 technical score
+    (missing families keep the defaults from ta/scoring.py; 0 switches one off)."""
+    enabled: bool = True
+    history_period: str = "5y"     # daily history per analysed stock (weekly/monthly need >= 2y)
+    hourly_top_n: int = 25         # how many names also get the 4H/1H analysis (slower: one intraday download each)
+    max_names: int = 60            # cap on names analysed per scan
+    weights: dict[str, float] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, raw: dict) -> "TechnicalConfig":
+        weights = {str(k): float(v) for k, v in (raw.get("weights") or {}).items()}
+        unknown = set(weights) - set(TECHNICAL_FAMILIES)
+        if unknown:
+            raise ConfigError(f"technical.weights: unknown families {sorted(unknown)}; allowed {list(TECHNICAL_FAMILIES)}")
+        if any(v < 0 for v in weights.values()):
+            raise ConfigError("technical.weights must be >= 0")
+        cfg = cls(enabled=bool(raw.get("enabled", True)), history_period=str(raw.get("history_period", "5y")),
+                  hourly_top_n=int(raw.get("hourly_top_n", 25)), max_names=int(raw.get("max_names", 60)),
+                  weights=weights)
+        if cfg.hourly_top_n < 0 or cfg.max_names < 1:
+            raise ConfigError("technical.hourly_top_n must be >= 0 and technical.max_names >= 1")
+        return cfg
+
+
 @dataclass
 class AppConfig:
     universe: UniverseConfig = field(default_factory=UniverseConfig)
@@ -425,6 +456,7 @@ class AppConfig:
     backtesting: BacktestConfig = field(default_factory=BacktestConfig)
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
     portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
+    technical: TechnicalConfig = field(default_factory=TechnicalConfig)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "AppConfig":
@@ -438,6 +470,7 @@ class AppConfig:
             backtesting=BacktestConfig.from_dict(raw.get("backtesting", {})),
             alerts=AlertsConfig.from_dict(raw.get("alerts", {})),
             portfolio=PortfolioConfig.from_dict(raw.get("portfolio", {})),
+            technical=TechnicalConfig.from_dict(raw.get("technical", {})),
         )
 
 

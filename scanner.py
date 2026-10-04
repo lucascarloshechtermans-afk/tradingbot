@@ -516,6 +516,9 @@ class ScanRun:
     near_breakouts: list = field(default_factory=list)
     spy_history: pd.DataFrame | None = None
     momentum_reads: dict = field(default_factory=dict)   # ticker -> (ChartRead, daily) for the momentum list
+    # ta/ engine: [ta.engine.TechnicalReport] for the momentum list + scanner candidates, and ta.regime.Regime
+    technical_reports: list = field(default_factory=list)
+    technical_regime: object | None = None
 
 
 def _naive_close(df: pd.DataFrame) -> pd.Series:
@@ -601,6 +604,74 @@ def analyze_momentum_picks(provider: DataProvider, config: AppConfig, book) -> d
         except Exception as exc:  # noqa: BLE001 - one chart must never break the scan
             logger.warning("momentum chart read failed for %s: %s", t, exc)
     return out
+
+
+def technical_names(book, breakouts: list, near_breakouts: list, trade_plans: list, pattern_setups: list,
+                    max_names: int) -> list[str]:
+    """Names for the technical engine, most relevant first: the momentum list,
+    next month's entries, breakouts, then the scanner's own setups and patterns."""
+    names: list[str] = []
+    if book is not None:
+        names += [p.ticker for p in book.picks] + list(book.preview_in)
+    names += [b.ticker for b, _r in breakouts + near_breakouts]
+    names += [p.ticker for p in trade_plans if p.setup != "No confirmed setup"]
+    names += [s.ticker for s, _r in pattern_setups]
+    return list(dict.fromkeys(names))[:max_names]
+
+
+def run_technical_analysis(provider: DataProvider, config: AppConfig, names: list[str],
+                           sectors: dict[str, str | None]) -> tuple[list, object | None]:
+    """ta/ engine over `names` in two passes: daily/weekly/monthly for every name,
+    then 4H/1H for the first `technical.hourly_top_n` names (in `names` order).
+    Chart analysis only -- nothing here sizes or allocates. ([TechnicalReport], Regime)."""
+    tc = config.technical
+    if not tc.enabled or not names:
+        return [], None
+    from sector.rotation import SECTOR_ETF_MAP
+    from ta.engine import analyze
+    from ta.regime import classify_regime
+    from ui.overview import GICS_TO_YAHOO
+
+    def hist(t: str) -> pd.DataFrame:
+        return provider.get_history(t, period=tc.history_period)
+
+    try:
+        spy = hist("SPY")
+        regime = classify_regime(spy)
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("technical analysis skipped: no SPY history (%s)", exc)
+        return [], None
+    bench_cache: dict[str, pd.Series | None] = {"SPY": spy["close"]}
+
+    def bench(t: str) -> pd.Series | None:
+        if t not in bench_cache:
+            try:
+                bench_cache[t] = hist(t)["close"]
+            except Exception:  # noqa: BLE001
+                bench_cache[t] = None
+        return bench_cache[t]
+
+    weights = tc.weights or None
+    reports, inputs = {}, {}
+    for t in names:
+        try:
+            daily = hist(t)
+            sec = (sectors.get(t) or "").replace(" (small cap)", "")
+            bm = {k: v for k, v in (("SPY", bench("SPY")), ("QQQ", bench("QQQ"))) if v is not None}
+            etf = SECTOR_ETF_MAP.get(GICS_TO_YAHOO.get(sec, sec))
+            if etf and bench(etf) is not None:
+                bm[etf] = bench(etf)
+            inputs[t] = (daily, bm)
+            reports[t] = analyze(t, daily, None, bm, regime, weights=weights)
+        except Exception as exc:  # noqa: BLE001 - one chart must never break the scan
+            logger.warning("technical analysis failed for %s: %s", t, exc)
+    for t in [t for t in names if t in reports][:tc.hourly_top_n]:
+        try:
+            hourly = provider.get_history(t, period="730d", interval="1h")
+            reports[t] = analyze(t, inputs[t][0], hourly, inputs[t][1], regime, weights=weights)
+        except Exception as exc:  # noqa: BLE001 - keep the daily-only report
+            logger.info("no 4H/1H analysis for %s: %s", t, exc)
+    return [reports[t] for t in names if t in reports], regime
 
 
 def find_breakouts(provider: DataProvider, config: AppConfig, closes, volumes, spy: pd.DataFrame | None,
@@ -772,6 +843,10 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     if config.portfolio.momentum_pct <= 0:
         book = None
     momentum_reads = analyze_momentum_picks(provider, config, book)
+    ta_sectors = {**(mom_sectors or {}), **{t: c[0].sector for t, c in candidates.items()}}
+    ta_names = technical_names(book, breakouts, near_breakouts, trade_plans, pattern_setups, config.technical.max_names)
+    logger.info("technical analysis (ta/ engine) for %d names", len(ta_names))
+    ta_reports, ta_regime = run_technical_analysis(provider, config, ta_names, ta_sectors)
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
@@ -779,8 +854,25 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         sector_by_ticker={t: c[0].sector for t, c in candidates.items()},
         momentum_book=book, index_signals=signals, momentum_closes=mom_closes,
         leader_breakouts=breakouts, near_breakouts=near_breakouts, spy_history=benchmarks.get("spy"),
-        momentum_reads=momentum_reads,
+        momentum_reads=momentum_reads, technical_reports=ta_reports, technical_regime=ta_regime,
     )
+
+
+def print_technical_summary(reports: list, regime, limit: int = 25) -> None:
+    """Terminal summary of the ta/ engine (full reports: dashboard tab 'Technische analyse')."""
+    if not reports:
+        return
+    print(f"--- Technische analyse: {len(reports)} aandelen (score = eensgezindheid van het technische beeld, geen winstkans) ---")
+    if regime is not None:
+        print(f"  Marktregime: {regime.label_nl} -- {regime.breakout_context()}")
+    print(f"  {'TICKER':<7}{'SCORE':>5}  {'HOOFDSETUP':<26}{'STATUS':<30}{'TREND (dag)':<30}{'TRIGGER':>10}{'INVALIDATIE':>13}")
+    for r in sorted(reports, key=lambda r: -r.score.total)[:limit]:
+        p = r.primary
+        trig = f"{p.trigger_price:.2f}" if p is not None and p.trigger_price is not None else "-"
+        inv = f"{p.invalidation_price:.2f}" if p is not None and p.invalidation_price is not None else "-"
+        print(f"  {r.ticker:<7}{r.score.total:>5.0f}  {(p.name_nl if p else '-'):<26}{(p.status_nl if p else '-')[:29]:<30}"
+              f"{r.daily.trend.label_nl[:29]:<30}{trig:>10}{inv:>13}")
+    print()
 
 
 def print_scan_results(trade_plans: list[TradePlan], min_score: float = 65.0) -> None:
@@ -1078,6 +1170,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {i:<3}{s.ticker:<7}{s.score:>4.0f}  {s.status:<17}{s.names[:40]:<41}trigger {s.trigger:.2f}  stop {s.stop:.2f}  target {s.target:.2f}")
         print()
     print_no_trade_summary(scan_run.no_trade)
+    print_technical_summary(scan_run.technical_reports, scan_run.technical_regime)
 
     fw_summary, fw_results, fw_momentum = (None, [], None)
     if not args.dry_run:
@@ -1124,6 +1217,7 @@ def main(argv: list[str] | None = None) -> int:
         near_breakouts=scan_run.near_breakouts,
         forward=(fw_summary, fw_results, fw_momentum),
         momentum_reads=scan_run.momentum_reads,
+        technical=(scan_run.technical_reports, scan_run.technical_regime),
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

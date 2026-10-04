@@ -372,9 +372,11 @@ RESISTANCE_NOTE = ("Getest (research round 13, 7.000 momentum-aandelen 2008-2026
                    "Informatie, geen reden om over te slaan.")
 
 
-def momentum_cards(book, reads: dict, pct_per_stock: float) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+def momentum_cards(book, reads: dict, pct_per_stock: float,
+                   ta_lines: dict[str, str] | None = None) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     """Analysis cards for the MOMENTUM TOP 20 (setups) and the names that would enter
-    at the next rebalance (possible setups). reads: ticker -> (ChartRead, daily)."""
+    at the next rebalance (possible setups). reads: ticker -> (ChartRead, daily);
+    ta_lines: ticker -> one-line summary of the ta/ engine report (with a link to it)."""
     if book is None:
         return [], []
     setups, possible = [], []
@@ -385,6 +387,8 @@ def momentum_cards(book, reads: dict, pct_per_stock: float) -> tuple[list[tuple[
         read, daily = reads[p.ticker]
         why = [f"<b>Momentum</b>: #{p.rank} van {len(book.picks) or 20} -- {p.mom_12_1:+.0f}% van 12 tot 1 maand geleden; "
                f"laatste maand {p.ret_1m:+.1f}%."]
+        if ta_lines and p.ticker in ta_lines:
+            why.append(ta_lines[p.ticker])
         why += explain_chart(read) + _patterns_nl(daily)
         room_atr, room_pct = resistance_room(read, daily)
         missing = []

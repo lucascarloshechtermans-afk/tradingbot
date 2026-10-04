@@ -130,6 +130,22 @@ portfolio:                   # README "Research rounds 6-9": price-only systems 
   include_small_caps: true     # + S&P SmallCap 600 in momentum / breakouts (tested: lowered results, see README round 8)
   small_cap_min_price: 50      # small caps only at this share price or higher
 
+technical:                   # README "Technical analysis engine (ta/)": chart analysis only, no sizing/allocation
+  enabled: true
+  history_period: "5y"         # daily history per analysed stock
+  hourly_top_n: 25             # this many names also get the 4H / 1H analysis
+  max_names: 60                # cap on names analysed per scan
+  weights:                     # relative weight per indicator FAMILY in the 0-100 technical score
+    trend: 18
+    price_action: 14
+    sr: 12                     # support / resistance
+    momentum: 12
+    volume: 10
+    volatility: 6
+    candles: 5
+    mtf: 13                    # multi-timeframe agreement
+    rs: 10                     # relative strength vs SPY / QQQ / sector ETF
+
 earnings:
   avoid_earnings: true
   buffer_days: 5

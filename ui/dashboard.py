@@ -27,6 +27,7 @@ PAGE_TEMPLATE = """<!doctype html>
   .badge.high_volatility {{ background: rgba(248,81,73,.25); color: var(--red); }}
   {setup_css}
   {overview_css}
+  {ta_css}
   .tabs {{ display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }}
   .tab {{ padding: 8px 16px; cursor: pointer; color: var(--ink-soft); border-bottom: 2px solid transparent; font-size: 14px; }}
   .tab.active {{ color: var(--ink); border-bottom-color: var(--blue); }}
@@ -73,6 +74,7 @@ PAGE_TEMPLATE = """<!doctype html>
   <div class="tabs">
     <div class="tab active" data-tab="dashboard">Dashboard</div>
     <div class="tab" data-tab="portfolio">Portefeuille</div>
+    <div class="tab" data-tab="ta">Technische analyse</div>
     <div class="tab" data-tab="scanner">Scanner</div>
     <div class="tab" data-tab="boom">Ready to boom</div>
     <div class="tab" data-tab="watchlist">Watchlist</div>
@@ -113,6 +115,10 @@ PAGE_TEMPLATE = """<!doctype html>
     {portfolio_html}
   </div>
 
+  <div id="ta" class="panel">
+    {ta_html}
+  </div>
+
   <div id="boom" class="panel">
     <div class="card"><p style="margin:0;color:var(--ink-soft)"><strong>Info / confirmation only, not a validated setup.</strong>
     Bullish chart patterns that broke out today / 1-3 days ago or sit just under their trigger. On the scanner's own candidates a
@@ -142,6 +148,7 @@ PAGE_TEMPLATE = """<!doctype html>
   </div>
 
 <script>
+{ta_js}
 function openCard(t) {{
   document.querySelector('[data-tab=dashboard]').click();
   for (const id of ['ov-mo-' + t, 'ov-bo-' + t, 'ov-' + t, 'ov-nb-' + t, 'ov-alert-' + t, 'ov-pat-' + t]) {{
@@ -306,6 +313,7 @@ def build_dashboard_html(
     near_breakouts: list | None = None,
     forward: tuple | None = None,
     momentum_reads: dict | None = None,
+    technical: tuple | None = None,
 ) -> str:
     """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
     'Ready to boom' tab."""
@@ -315,6 +323,11 @@ def build_dashboard_html(
     from config.schema import PortfolioConfig
     from ui.overview import OVERVIEW_CSS, build_overview_html
     from ui.portfolio import build_forward_html, build_portfolio_tab_html, build_todo_html
+    from ui.ta_report import TA_CSS, TA_JS, ta_card_line, ta_tab
+    ta_reports, ta_regime = technical or ([], None)
+    ta_html = (ta_tab(ta_reports, ta_regime) if ta_reports else
+               "<div class='card'><p>Geen technische analyse in deze run (technical.enabled uit, of geen data).</p></div>")
+    ta_lines = {r.ticker: ta_card_line(r) for r in ta_reports if r.daily.ok}
     generated_at = generated_at or datetime.now()
     portfolio_cfg = portfolio_cfg or PortfolioConfig()
     index_signals = index_signals or []
@@ -366,11 +379,14 @@ def build_dashboard_html(
                               dip_risk_pct=portfolio_cfg.dip_risk_pct_of_account,
                               leader_breakouts=leader_breakouts, near_breakouts=near_breakouts,
                               breakout_risk_pct=portfolio_cfg.breakout_risk_pct_of_account,
-                              momentum=((momentum_book, momentum_reads, portfolio_cfg.momentum_pct / max(portfolio_cfg.momentum_top_n, 1))
+                              momentum=((momentum_book, momentum_reads, portfolio_cfg.momentum_pct / max(portfolio_cfg.momentum_top_n, 1), ta_lines)
                                         if momentum_book is not None and momentum_reads else None)),
         portfolio_html=build_portfolio_tab_html(portfolio_cfg, account_size, momentum_book, index_signals, bear,
                                                 momentum_closes) + build_forward_html(*(forward or (None, [], None))),
         overview_css=OVERVIEW_CSS,
+        ta_css=TA_CSS,
+        ta_js=TA_JS,
+        ta_html=ta_html,
         scan_data_json=json.dumps(scan_rows),
         watchlist_data_json=json.dumps(watchlist_entries),
     )
