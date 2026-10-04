@@ -13,7 +13,17 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from indicators.trend import confirmed_swing_highs, confirmed_swing_lows
+
+
+def _swing_mask(x: np.ndarray, order: int, high: bool) -> np.ndarray:
+    """Bar i is a swing high when it is the highest of i-order .. i+order and
+    STRICTLY higher than the `order` bars before it, so a flat top counts at its
+    FIRST bar. Everything needed is known at bar i + order (no later bar can
+    move or remove the swing)."""
+    v = pd.Series(x if high else -x)
+    win = v.rolling(2 * order + 1, center=True).max()
+    before = v.shift(1).rolling(order).max()
+    return ((v == win) & (v > before)).to_numpy()
 
 
 @dataclass
@@ -31,8 +41,8 @@ def find_swings(df: pd.DataFrame, order: int = 3, atr: pd.Series | None = None, 
     previous swing of the same kind (equal within equal_tol_atr * ATR)."""
     if len(df) < 2 * order + 1:
         return []
-    hi_mask = confirmed_swing_highs(df["high"], order).to_numpy()
-    lo_mask = confirmed_swing_lows(df["low"], order).to_numpy()
+    hi_mask = _swing_mask(df["high"].to_numpy(dtype=float), order, True)
+    lo_mask = _swing_mask(df["low"].to_numpy(dtype=float), order, False)
     n = len(df)
     out: list[Swing] = []
     for i in np.flatnonzero(hi_mask):

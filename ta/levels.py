@@ -60,6 +60,8 @@ def _weekly(df: pd.DataFrame) -> pd.DataFrame:
     idx = df.index.tz_localize(None) if getattr(df.index, "tz", None) is not None else df.index
     d = df.set_axis(idx)
     w = d.resample("W-FRI").agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+    if len(w) and len(idx) and idx[-1].weekday() != 4:   # closed weeks only: drop the unfinished current week
+        w = w.iloc[:-1]
     return w
 
 

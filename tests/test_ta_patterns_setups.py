@@ -38,13 +38,13 @@ def _breakout(df):
     return next((s for s in classify(fa) if s.kind == "confirmed_breakout"), None), fa
 
 
-def test_breakout_is_not_confirmed_on_one_close_without_volume():
+def test_breakout_is_never_confirmed_on_the_trigger_bar():
     s, _ = _breakout(_box([113], [1e6]))
     assert s is not None and s.status == "triggered"
     s2, _ = _breakout(_box([113, 114], [1e6, 1e6]))
     assert s2.status == "confirmed"           # second close above the level
-    s3, _ = _breakout(_box([113.5], [3e6]))   # one close, but a volume thrust closing in the top third
-    assert s3.status == "confirmed"
+    s3, _ = _breakout(_box([113.5], [3e6]))   # one close with a volume thrust: evidence, still not confirmed
+    assert s3.status == "triggered" and any("volume-uitbraak" in e for e in s3.evidence)
 
 
 def test_failed_breakout_when_price_closes_back_inside():
@@ -52,6 +52,10 @@ def test_failed_breakout_when_price_closes_back_inside():
     fa = analyze_frame(df, "daily")
     kinds = {s.kind: s for s in classify(fa)}
     assert "confirmed_breakout" not in kinds or kinds["confirmed_breakout"].status != "confirmed"
+    fb = kinds.get("failed_breakout")
+    if fb is not None:   # a failed long is reported as a short with SHORT-side levels
+        assert fb.direction == -1 and fb.invalidation_price > df["close"].iloc[-1]
+        assert "boven" in fb.invalidation and not any("momentum bevestigt (" in e for e in fb.evidence)
 
 
 def test_score_is_explained_and_correlated_oscillators_count_once():
@@ -74,3 +78,29 @@ def test_score_is_explained_and_correlated_oscillators_count_once():
 def test_engine_handles_short_and_missing_data():
     rep = analyze("TINY", frame(list(np.linspace(10, 12, 50))))
     assert rep.primary is None and rep.setups == [] and "te weinig" in rep.notes[0]
+
+
+def test_no_setup_is_confirmed_on_its_trigger_bar_and_levels_sit_on_the_right_side():
+    """Walk synthetic series bar by bar: a setup never jumps from 'developing' straight
+    to 'confirmed' (that would be confirmation on the trigger bar), and a live setup's
+    invalidation lies on the losing side of the close."""
+    from tests.ta_helpers import uptrend
+    rng = np.random.default_rng(7)
+    series = [uptrend(330, seed=1), list(100 * np.exp(np.cumsum(rng.normal(0, 0.02, 330))))]
+    for closes in series:
+        df = frame(closes, spread=0.006, vol=list(rng.uniform(0.5e6, 2e6, len(closes))))
+        prev: dict = {}
+        for k in range(200, len(df)):
+            cur = {}
+            for st in classify(analyze_frame(df.iloc[:k + 1], "daily")):
+                key = (st.kind, st.direction)
+                cur[key] = st.status
+                # zone setups are exempt: zones are re-scored every bar, so a candle that was already
+                # confirmed by a later bar can become 'at a zone' only now (not a trigger-bar confirmation)
+                if st.status == "confirmed" and st.kind not in ("support_bounce", "resistance_rejection"):
+                    assert prev.get(key) != "developing", (k, key)
+                if st.status in ("triggered", "confirmed") and st.invalidation_price is not None and \
+                        np.isfinite(st.invalidation_price):
+                    c = df["close"].iloc[k]
+                    assert (st.invalidation_price <= c) if st.direction > 0 else (st.invalidation_price >= c), (k, key, st.invalidation)
+            prev = cur

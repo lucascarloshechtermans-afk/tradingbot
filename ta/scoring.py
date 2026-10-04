@@ -140,8 +140,12 @@ def score(report, weights: dict[str, float] | None = None) -> TechnicalScore:
     else:
         subs["candles"] = (40.0, "geen relevante kaars")
 
-    subs["mtf"] = (report.mtf.score, f"{len(report.mtf.agree)} timeframes mee ({', '.join(report.mtf.agree) or '-'}), "
-                   f"{len(report.mtf.disagree)} tegen ({', '.join(report.mtf.disagree) or '-'})")
+    others = [r for tf, r in report.mtf.rows.items() if tf != "daily" and r.get("ok")]
+    if not others:
+        subs["mtf"] = (None, "alleen de daggrafiek beschikbaar -- familie weggelaten (zou de dagtrend dubbel tellen)")
+    else:
+        subs["mtf"] = (report.mtf.score, f"{len(report.mtf.agree)} timeframes mee ({', '.join(report.mtf.agree) or '-'}), "
+                       f"{len(report.mtf.disagree)} tegen ({', '.join(report.mtf.disagree) or '-'})")
 
     if report.rs is not None and report.rs.results:
         subs["rs"] = (_flip((report.rs.score + 100) / 2, d), f"familiescore {report.rs.score:+.0f}")
@@ -155,7 +159,7 @@ def score(report, weights: dict[str, float] | None = None) -> TechnicalScore:
     for k in DEFAULT_WEIGHTS:
         s, why = subs.get(k, (None, ""))
         if s is None or k not in avail:
-            contribs.append(Contribution(k, None, w.get(k, 0), 0.0, why))
+            contribs.append(Contribution(k, None, 0.0, 0.0, why))   # dropped: no weight
             continue
         pts = s * avail[k] / tot_w
         total += pts

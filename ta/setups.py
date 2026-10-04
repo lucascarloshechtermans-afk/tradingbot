@@ -75,16 +75,20 @@ def _recent_cross(c: np.ndarray, level: float, up: bool, within: int) -> int | N
 
 def _post_break_status(fa: FrameAnalysis, j: int, level: float, up: bool) -> str:
     c = fa.df["close"].to_numpy()
-    h, lo = fa.df["high"].to_numpy(), fa.df["low"].to_numpy()
     sgn = 1 if up else -1
     post = c[j:]
     if (sgn * (post - level) < 0).any():
         return "failed"
-    if len(post) >= 2:
-        return "confirmed"
+    # confirmation needs a bar AFTER the trigger bar (a second close beyond the level);
+    # a volume thrust on the trigger bar is evidence, not confirmation
+    return "confirmed" if len(post) >= 2 else "triggered"
+
+
+def _volume_thrust(fa: FrameAnalysis, j: int, up: bool) -> bool:
+    c, h, lo = (fa.df[k].to_numpy() for k in ("close", "high", "low"))
     rv = breakout_volume_ratio(fa.df, j)
-    upper_third = (c[j] - lo[j]) >= (2 / 3) * (h[j] - lo[j]) if up else (h[j] - c[j]) >= (2 / 3) * (h[j] - lo[j])
-    return "confirmed" if np.isfinite(rv) and rv >= 1.5 and upper_third else "triggered"
+    third = (c[j] - lo[j]) >= (2 / 3) * (h[j] - lo[j]) if up else (h[j] - c[j]) >= (2 / 3) * (h[j] - lo[j])
+    return bool(np.isfinite(rv) and rv >= 1.5 and third)
 
 
 def classify(fa: FrameAnalysis) -> list[Setup]:
@@ -131,7 +135,9 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
                 x for x, ok in (("squeeze", vo.squeeze_on), ("volatiliteit krimpt", vo.contraction), ("NR7", vo.nr7),
                                 (f"{vo.inside_bars} inside bar(s)", vo.inside_bars >= 1),
                                 (f"10-daagse range {vo.range10_atr:.1f} ATR", np.isfinite(vo.range10_atr) and vo.range10_atr <= 4)) if ok)]
-            inv = sup.low if sup is not None and close - sup.low < 3 * atr else swing_low_px
+            lows_below = [x.price for x in reversed(known) if x.kind == "L" and x.price < close]
+            inv = sup.low if sup is not None and close - sup.low < 3 * atr else (
+                lows_below[0] if lows_below else float(lo[-10:].min()))
             add(Setup("early_breakout", 1, "developing", {"trigger": trig, "invalidatie": inv}, ev,
                       trigger=f"slot boven {trig:,.2f}", trigger_price=trig, invalidation=f"slot onder {inv:,.2f}",
                       invalidation_price=inv, families={"price_action", "sr", "volatility"}))
@@ -160,18 +166,33 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
             ev.append(f"momentum bevestigt ({nl(m.state)}, RSI14 {rsi14:.0f})")
         else:
             conf.append(f"momentum bevestigt niet ({nl(m.state)})")
-        kind = "failed_breakout" if st == "failed" else "confirmed_breakout"
-        add(Setup(kind, -1 if st == "failed" else 1, "triggered" if st == "failed" else st, {"breakout": lvl, "invalidatie": inv},
-                  ev, conf, trigger=f"tweede slot boven {lvl:,.2f} of volume-uitbraak", trigger_price=lvl,
-                  invalidation=(f"slot terug onder {lvl:,.2f} = mislukte breakout; structureel ongeldig onder {inv:,.2f}"
-                                if np.isfinite(inv) and inv < lvl else f"slot terug onder {lvl:,.2f}"),
-                  invalidation_price=inv if np.isfinite(inv) and inv < lvl else lvl,
-                  families={"price_action", "sr", "volume", "momentum"}))
+        if st == "failed":
+            # the long failed: a SHORT with its own levels (first close back under, top of the attempt)
+            k = j + int(np.flatnonzero(c[j:] < lvl)[0])
+            top = float(h[j:k + 1].max())
+            if close <= top:
+                fst = "confirmed" if k < t and close < lvl else "triggered"
+                add(Setup("failed_breakout", -1, fst, {"niveau": lvl, "top": top},
+                          [f"Brak boven {what} ({lvl:,.2f}) op {df.index[j]:%d-%m} en sloot er op {df.index[k]:%d-%m} weer onder"]
+                          + [x for x in conf if "volume" in x],
+                          [x for x in ev[1:] if "momentum" in x],
+                          trigger=f"slot terug onder {lvl:,.2f} (gebeurd op {df.index[k]:%d-%m}); bevestigd bij een volgend slot eronder",
+                          trigger_price=lvl, invalidation=f"slot boven de top van de poging ({top:,.2f})",
+                          invalidation_price=top, families={"price_action", "sr"}))
+        else:
+            if st == "triggered" and _volume_thrust(fa, j, True):
+                ev.append("volume-uitbraak op de triggerdag (RVOL >= 1.5, slot in het bovenste derde) -- bevestiging volgt bij het volgende slot")
+            add(Setup("confirmed_breakout", 1, st, {"breakout": lvl, "invalidatie": inv},
+                      ev, conf, trigger=f"slot boven {lvl:,.2f}; bevestigd bij een tweede slot erboven", trigger_price=lvl,
+                      invalidation=(f"slot terug onder {lvl:,.2f} = mislukte breakout; structureel ongeldig onder {inv:,.2f}"
+                                    if np.isfinite(inv) and inv < lvl else f"slot terug onder {lvl:,.2f}"),
+                      invalidation_price=inv if np.isfinite(inv) and inv < lvl else lvl,
+                      families={"price_action", "sr", "volume", "momentum"}))
 
     # 3 breakout retest
     for p in bull_pats:
         if p.name == "break & retest" and p.status != "failed":
-            st = "confirmed" if p.status in ("confirmed", "breakout") else "developing"
+            st = {"confirmed": "confirmed", "breakout": "triggered"}.get(p.status, "developing")
             ev = [f"Breakout boven de zone, daarna hertest van de bovenkant ({p.lines[0][1]:,.2f}) zonder slot eronder"]
             if last_low is not None and last_low.label in ("HL", "EL") and last_low.i > df.index.get_loc(p.start):
                 ev.append(f"hogere bodem op {last_low.date:%d-%m} ({last_low.price:,.2f})")
@@ -195,12 +216,17 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
             if v.available and v.pullback_contraction is not None:
                 (ev if v.pullback_contraction else conf).append(
                     "volume droogt op in de pullback" if v.pullback_contraction else "volume krimpt niet in de pullback")
-            turn = c[-1] > h[-2]
+            # the turn: the latest bar (within 5) that closed above the previous bar's high
+            turns = [k for k in range(max(t - 4, last_high.i + 1, 1), t + 1) if c[k] > h[k - 1]]
             hl = last_low is not None and last_low.label in ("HL", "EL") and last_low.i > last_high.i
-            st = "confirmed" if (turn and hl) else ("triggered" if turn else "developing")
+            if turns and close > h[turns[-1] - 1]:
+                k = turns[-1]
+                trig = float(h[k - 1])
+                st = "triggered" if k == t else "confirmed"     # confirmed = a later close still above the trigger
+            else:
+                trig, st = float(h[-1]), "developing"
             if hl:
                 ev.append(f"hogere bodem bevestigd op {last_low.date:%d-%m}")
-            trig = float(h[-1]) if not turn else float(h[-2])
             inv = min(lo[-5:].min(), sup.low if sup is not None else lo[-5:].min())
             add(Setup("bullish_pullback", 1, st, {"trigger": trig, "invalidatie": inv, "EMA21": ema21}, ev, conf,
                       trigger=f"slot boven de top van de vorige kaars ({trig:,.2f})", trigger_price=trig,
@@ -222,25 +248,35 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
     if tr.label == "strong_uptrend" and tr.continuation and m.state in ("bullish", "strong_bullish") and \
             np.isfinite(tr.dist_atr["ema21"]) and tr.dist_atr["ema21"] <= 2.5:
         e = tr.last_event
-        add(Setup("trend_continuation", 1, "confirmed",
+        held = bool((c[e.i:] > e.level).all())          # every close since the BOS stayed above the level
+        tc_st = ("confirmed" if held and e.i < t else "triggered" if close > e.level and (held or c[-2] <= e.level)
+                 else "developing" if close <= e.level else "triggered")
+        add(Setup("trend_continuation", 1, tc_st,
                   {"BOS-niveau": e.level, "EMA21": ema21, "invalidatie": swing_low_px},
                   [f"Bullish BOS op {e.date:%d-%m} (slot boven {e.level:,.2f}) in een sterke uptrend",
                    f"momentum {nl(m.state)}, koers {tr.dist_atr['ema21']:.1f} ATR boven de EMA21 (niet overstrekt)"],
-                  [x for x in tr.exhaustion], trigger="al gebeurd (BOS)", trigger_price=e.level,
+                  [x for x in tr.exhaustion] + (["koers terug onder het BOS-niveau"] if close <= e.level else []),
+                  trigger=f"BOS boven {e.level:,.2f} ({'vandaag' if e.i == t else 'gebeurd'}); bevestigd bij een volgend slot erboven",
+                  trigger_price=e.level,
                   invalidation=f"slot onder de laatste swing low {swing_low_px:,.2f}", invalidation_price=swing_low_px,
                   families={"trend", "momentum"}))
 
     # 7 momentum reversal
     for dv in m.divergences:
         if dv.kind == "regular_bull" and dv.bars_ago <= 15 and np.isfinite(ema21) and close < ema21 + atr:
-            st = "confirmed" if (tr.last_event and tr.last_event.kind == "CHoCH" and tr.last_event.direction == "bull"
-                                 and t - tr.last_event.i <= 10) else ("triggered" if close > ema21 else "developing")
+            ch = tr.last_event if (tr.last_event and tr.last_event.kind == "CHoCH" and tr.last_event.direction == "bull"
+                                   and 0 < t - tr.last_event.i <= 10) else None
+            st = ("failed" if close < dv.b.price else
+                  "confirmed" if ch is not None and close > ema21 else ("triggered" if close > ema21 else "developing"))
             add(Setup("momentum_reversal", 1, st, {"swing low": dv.b.price, "EMA21": ema21}, [dv.describe()],
                       trigger=f"slot boven de EMA21 ({ema21:,.2f}), daarna een bullish CHoCH", trigger_price=ema21,
                       invalidation=f"slot onder {dv.b.price:,.2f}", invalidation_price=dv.b.price, families={"momentum"}))
             break
         if dv.kind == "regular_bear" and dv.bars_ago <= 15 and np.isfinite(ema21) and close > ema21 - atr:
-            st = "triggered" if close < ema21 else "developing"
+            ch = tr.last_event if (tr.last_event and tr.last_event.kind == "CHoCH" and tr.last_event.direction == "bear"
+                                   and 0 < t - tr.last_event.i <= 10) else None
+            st = ("failed" if close > dv.b.price else
+                  "confirmed" if ch is not None and close < ema21 else ("triggered" if close < ema21 else "developing"))
             add(Setup("momentum_reversal", -1, st, {"swing high": dv.b.price, "EMA21": ema21}, [dv.describe()],
                       trigger=f"slot onder de EMA21 ({ema21:,.2f})", trigger_price=ema21,
                       invalidation=f"slot boven {dv.b.price:,.2f}", invalidation_price=dv.b.price, families={"momentum"}))
@@ -262,9 +298,8 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
     # 9 support bounce / 10 resistance rejection
     for z in fa.zones:
         if z.role in ("support", "flip_support", "at") and (lo[-3:] <= z.high + 0.3 * atr).any() and close > z.high:
-            cs = [x for x in bull_c if any("zone" in cx for cx in x.context)]
-            st = "confirmed" if cs and (cs[-1].confirmation == "confirmed" or c[-1] > h[-2]) else (
-                "triggered" if cs else "developing")
+            cs = [x for x in fa.candles if x.direction == "bull" and any("zone" in cx for cx in x.context)]
+            st = "confirmed" if cs and cs[-1].confirmation == "confirmed" else ("triggered" if cs else "developing")
             ev = [f"Koers raakte {z.describe()} en sloot erboven"] + [f"{x.name_nl} ({x.significance}): {', '.join(x.context[:2])}" for x in cs[-1:]]
             add(Setup("support_bounce", 1, st, {"zone laag": z.low, "zone hoog": z.high}, ev,
                       [] if cs else ["nog geen bullish bevestigingskaars op de zone"],
@@ -273,7 +308,7 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
             break
     for z in fa.zones:
         if z.role in ("resistance", "flip_resistance", "at") and (h[-3:] >= z.low - 0.3 * atr).any() and close < z.low:
-            cs = [x for x in bear_c if any("zone" in cx for cx in x.context)]
+            cs = [x for x in fa.candles if x.direction == "bear" and any("zone" in cx for cx in x.context)]
             st = "confirmed" if cs and cs[-1].confirmation == "confirmed" else ("triggered" if cs else "developing")
             add(Setup("resistance_rejection", -1, st, {"zone laag": z.low, "zone hoog": z.high},
                       [f"Koers raakte {z.describe()} en sloot eronder"] + [f"{x.name_nl} ({x.significance})" for x in cs[-1:]],
@@ -301,25 +336,32 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
         if t - e.i > 5:
             continue
         if e.kind in ("failed_breakout", "sweep_high") and not any(s.kind == "failed_breakout" for s in out):
-            st = "confirmed" if c[-1] < lo[e.i] and e.i < t else "triggered"
-            add(Setup("failed_breakout", -1, st, {"niveau": e.level, "top": float(h[e.i:].max())}, [e.note],
+            top = float(h[e.i:t].max()) if e.i < t else float(h[e.i])   # the sweep's top, not today's bar
+            st = "failed" if close > top else ("confirmed" if c[-1] < lo[e.i] and e.i < t else "triggered")
+            add(Setup("failed_breakout", -1, st, {"niveau": e.level, "top": top}, [e.note],
                       trigger=f"slot onder de low van {e.date:%d-%m} ({lo[e.i]:,.2f})", trigger_price=float(lo[e.i]),
-                      invalidation=f"slot boven {h[e.i:].max():,.2f}", invalidation_price=float(h[e.i:].max()),
+                      invalidation=f"slot boven {top:,.2f}", invalidation_price=top,
                       families={"price_action", "sr"}))
         if e.kind in ("failed_breakdown", "sweep_low") and not any(s.kind == "failed_breakdown" for s in out):
-            st = "confirmed" if c[-1] > h[e.i] and e.i < t else "triggered"
+            bottom = float(lo[e.i:t].min()) if e.i < t else float(lo[e.i])
+            st = "failed" if close < bottom else ("confirmed" if c[-1] > h[e.i] and e.i < t else "triggered")
             ev = [e.note] + (["in een opwaartse structuur"] if tr.state == "up" else [])
-            add(Setup("failed_breakdown", 1, st, {"niveau": e.level, "bodem": float(lo[e.i:].min())}, ev,
+            add(Setup("failed_breakdown", 1, st, {"niveau": e.level, "bodem": bottom}, ev,
                       trigger=f"slot boven de high van {e.date:%d-%m} ({h[e.i]:,.2f})", trigger_price=float(h[e.i]),
-                      invalidation=f"slot onder {lo[e.i:].min():,.2f}", invalidation_price=float(lo[e.i:].min()),
+                      invalidation=f"slot onder {bottom:,.2f}", invalidation_price=bottom,
                       families={"price_action", "sr"}))
 
     # 14 potential trend reversal
     if tr.label in ("potential_reversal_up", "potential_reversal_down"):
         d = 1 if tr.label.endswith("up") else -1
         e = tr.last_event
+        sma_prev = float(ind["sma50"].iloc[-2]) if n > 1 else np.nan
         cond = (close > sma50 and ind.last("sma50_slope") >= 0) if d > 0 else (close < sma50 and ind.last("sma50_slope") <= 0)
-        add(Setup("potential_trend_reversal", d, "confirmed" if cond and tr.alignment * d >= 2 else "developing",
+        sl_prev = float(ind["sma50_slope"].iloc[-2]) if n > 1 else np.nan
+        prev = (c[-2] > sma_prev and sl_prev >= 0) if d > 0 else (c[-2] < sma_prev and sl_prev <= 0)
+        broken = (close < e.level) if d > 0 else (close > e.level)
+        pr_st = "failed" if broken else ("confirmed" if cond and prev else ("triggered" if cond else "developing"))
+        add(Setup("potential_trend_reversal", d, pr_st,
                   {"CHoCH-niveau": e.level, "SMA50": sma50}, tr.reasons[:1],
                   [f"MA-volgorde nog {tr.alignment:+d}/4"] if tr.alignment * d < 2 else [],
                   trigger=f"slot {'boven' if d > 0 else 'onder'} de SMA50 met een {'stijgende' if d > 0 else 'dalende'} SMA50",
@@ -339,19 +381,22 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
 
     _combos(fa, out)
     for s in out:
-        if s.status in ("triggered", "confirmed") and s.direction > 0 and tr.exhaustion:
+        if s.status in ("triggered", "confirmed") and tr.exhaustion and tr.direction == s.direction:
             s.conflicts += [f"trend overstrekt: {x}" for x in tr.exhaustion]
-        if s.direction > 0 and m.divergences and any(d.kind == "regular_bear" and d.bars_ago <= 15 for d in m.divergences):
-            s.conflicts.append("recente bearish divergentie")
+        against = "regular_bear" if s.direction > 0 else "regular_bull"
+        if any(d.kind == against and d.bars_ago <= 15 for d in m.divergences):
+            s.conflicts.append(f"recente {'bearish' if s.direction > 0 else 'bullish'} divergentie")
         if s.direction > 0 and res is not None and s.kind not in ("early_breakout", "confirmed_breakout") and res.low - close <= 0.75 * atr:
             s.conflicts.append(f"weerstand vlak erboven ({res.low:,.2f}, {(res.low - close) / atr:.1f} ATR)")
+        if s.direction < 0 and sup is not None and s.kind != "breakdown" and close - sup.high <= 0.75 * atr:
+            s.conflicts.append(f"steun vlak eronder ({sup.high:,.2f}, {(close - sup.high) / atr:.1f} ATR)")
         for e in events:
             still = (close < e.level) if s.direction > 0 else (close > e.level)
             if still and len(fa.df) - 1 - e.i <= 3 and ((s.direction > 0 and e.kind in ("sweep_high", "failed_breakout")) or
                                                         (s.direction < 0 and e.kind in ("sweep_low", "failed_breakdown"))):
                 s.conflicts.append(e.note)
                 break
-        if v.available and v.climax and s.direction > 0 and tr.direction > 0:
+        if v.available and v.climax and tr.direction == s.direction != 0:
             s.conflicts.append("climax-volume: vaak einde van een beweging")
     return out
 
@@ -365,7 +410,8 @@ def _combos(fa: FrameAnalysis, setups: list[Setup]) -> None:
     hl = any(s.kind == "L" and s.label in ("HL", "EL") for s in known[-3:])
     for s in setups:
         if s.kind == "confirmed_breakout":
-            if any(p.name == "bull flag" for p in fa.patterns if p.direction == "bull") and tr.label == "strong_uptrend":
+            if any(p.name == "bull flag" and p.status in ("breakout", "confirmed") for p in fa.patterns) and \
+                    tr.label == "strong_uptrend":
                 s.combos.append("Bull flag + sterke uptrend + breakout" + (" + volume-expansie" if v.available and v.rvol >= 1.3 else ""))
             if (vo.squeeze_on or vo.squeeze_fired == "up" or vo.contraction) and v.available and v.rvol >= 1.5:
                 s.combos.append("Volatiliteits-squeeze + weerstand-breakout + volume-expansie")
