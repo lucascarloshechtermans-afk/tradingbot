@@ -85,3 +85,16 @@ def test_trend_quality_filters_drop_one_day_jumps_and_names_far_below_their_high
     assert set(raw) == {"STDY", "JUMP", "FADE"}                      # main-list rule: unchanged
     assert [t for t, *_ in rank_at(c, v, n - 1, 10, max_jump=0.33)] == [t for t in raw if t != "JUMP"]
     assert "FADE" not in [t for t, *_ in rank_at(c, v, n - 1, 10, near_high=0.75)]
+
+
+def test_dashboard_states_the_round15_result_above_the_list():
+    from types import SimpleNamespace as NS
+
+    from ui.portfolio import build_decision_html, build_portfolio_tab_html
+    base = dict(as_of=pd.Timestamp("2026-09-30"), invested=True, exits=[], preview_in=[], preview=[],
+                next_rebalance=pd.Timestamp("2026-10-30"), preview_date=pd.Timestamp("2026-10-02"), spy_above_200_now=True)
+    book = NS(picks=[NS(ticker="SNDK", status="BLIJFT", sector="IT")], **base)
+    cfg = load_config().portfolio
+    html = build_decision_html(cfg, book, [], 10_000)
+    assert "onderzoeksronde 15" in html and html.index("onderzoeksronde 15") < html.index("SNDK")
+    assert "houdt geen stand" in build_portfolio_tab_html(cfg, 10_000, None, [], False)

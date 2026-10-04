@@ -309,3 +309,24 @@ even those favour N0 (it would have held more of the missing collapses).
 - Post-hoc diagnostic (not pre-registered): the main rule on the 900 most traded stocks chosen
   point-in-time: 0.48 / 0.33 / 0.56; today's S&P members within it 0.60 / 0.93 / 1.14; the
   rest 0.43 / 0.10 / 0.07 -> the main list's edge is tied to today's S&P membership.
+
+# Round 15 — the main list with POINT-IN-TIME S&P 500 membership (written 2026-10-04, before running)
+Round 14 showed the main list's edge is tied to today's S&P membership. Point-in-time S&P 500
+membership is rebuilt from Wikipedia's change table (revision of 2026-05-23, 395 changes; the
+reconstruction gives 503-511 members every year since 2010, so it is near complete), undoing
+every change after each month-end. Prices of names removed since 2010 are fetched from
+yfinance; a removed ticker counts only if its data covers its removal date (a reused ticker
+belongs to another company). Coverage = share of point-in-time members with prices at each
+month-end, reported. Rule as live: month-end top 20 by 12-1 return, price >= $5, >= $10M/day,
+SPY > 200d at month-end, equal weight, 0.10% per side. Periods as round 14.
+- P0 today's S&P 500 members (hindsight) · P1 point-in-time S&P 500 members with prices.
+- Survivorship estimate = P0 minus P1 (CAGR, Sharpe).
+- Pass ("the momentum edge is real"): P1 Sharpe >= SPY Sharpe in at least 2 of the 3 periods.
+  Fail → the dashboard and README say the plan did not beat SPY once hindsight is removed.
+(S&P 400 has no usable change history here, so this tests the S&P 500 part only.)
+
+## Round 15 results
+- Coverage of point-in-time members with prices: DEV 75%, VAL 89%, OOS 96% (delisted names missing).
+- SPY 0.80 / 0.66 / 1.40 · P0 today's members 0.98 / 0.67 / 1.33 · P1 point-in-time 0.48 / 0.22 / 0.78.
+- FAILED (0 of 3 periods): the momentum edge does not survive point-in-time membership.
+  Survivorship estimate P0-P1: 12.2 / 10.8 / 27.5 %-points CAGR per year.

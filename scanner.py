@@ -1045,6 +1045,9 @@ def print_portfolio_plan(scan_run: ScanRun, config: AppConfig) -> None:
     print(f"=== PORTFOLIO PLAN {' / '.join(parts)} -- price data only ===")
     for name, pct, amount, rule in allocation_rows(pc, config.risk.account_size, bear):
         print(f"  {name:<22}{pct:>5}  {amount:>10}  {rule}")
+    if pc.momentum_pct > 0:
+        print("  LET OP (onderzoeksronde 15): met de S&P-ledenlijst van toen versloeg de momentum top 20 SPY in geen enkele")
+        print("  periode (Sharpe 0,48 / 0,22 / 0,78 tegen SPY 0,80 / 0,66 / 1,40). De oude 22%/jaar was kennis achteraf.")
     book = scan_run.momentum_book
     if pc.momentum_pct > 0:
         print()

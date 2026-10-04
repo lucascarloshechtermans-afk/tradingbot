@@ -38,11 +38,16 @@ def _spark(series: pd.Series | None, w: int = 120, h: int = 26) -> str:
             f"<polyline fill='none' stroke='{color}' stroke-width='1.5' points='{pts}'/></svg>")
 
 
+HINDSIGHT_NOTE = (
+    "<p class='nt'><b>Belangrijk (onderzoeksronde 15):</b> de oude backtest gebruikte de S&amp;P-leden van <i>vandaag</i> en "
+    "hield zo aandelen vast voordat ze in de index kwamen (CVNA, TSLA, LULU, AXON...). Met de ledenlijst van toen versloeg deze "
+    "momentum top 20 SPY in geen enkele periode: Sharpe 0,48 / 0,22 / 0,78 tegen SPY 0,80 / 0,66 / 1,40 (2011-18 / 2019-22 / "
+    "2023-26). Een gewoon S&amp;P 500-indexfonds deed het in die test beter. Getest op het S&amp;P 500-deel; README ronde 15.</p>")
+
 BACKTEST_NOTE = {
-    (100.0, 0.0): "<p class='sm'>Backtest alleen momentum (juni 2008 - sept 2026): 22,3% per jaar, grootste daling 36%, "
-                  "slechtste jaar -14,2% (2022), 89% van de jaren positief; SPY 11,7% / 51%. Aandelen-backtests zijn ~4-5%/jaar "
-                  "te rooskleurig (aandelen die uit de index vielen ontbreken) -- reken op ~17-18% met dalingen tot ~35-40%. "
-                  "Periodes van maanden onder water horen erbij. Geen garantie. Alleen kopen op sterkte.</p>",
+    (100.0, 0.0): "<p class='sm'>Oude backtest alleen momentum (juni 2008 - sept 2026): 22,3% per jaar, grootste daling 36%; "
+                  "SPY 11,7% / 51%. Dat cijfer is met kennis achteraf (S&amp;P-leden van vandaag) en houdt geen stand: zie "
+                  "hieronder. Geen garantie.</p>" + HINDSIGHT_NOTE,
     (50.0, 50.0): "<p class='sm'>Backtest 50% momentum / 50% breakouts (juni 2008 - sept 2026): 16,3% per jaar, grootste daling "
                   "31%; SPY 11,7% / 51%. Min ~4-5%/jaar voor ontbrekende aandelen. Geen garantie.</p>",
     "other": "<p class='sm'>Zie README voor de backtest van deze verdeling. Aandelen-backtests zijn ~4-5%/jaar te rooskleurig.</p>",
@@ -342,7 +347,7 @@ def build_niche_html(niche, ta: dict, main_book=None) -> str:
         f"({niche.eligible_count:,} kwamen in aanmerking), alleen binnen 25% van hun 52-weekse top. "
         "<b>Getest in ronde 14 (2011-2026): geen voorsprong.</b> Deze lijst deed het niet beter dan een willekeurig klein "
         "aandeel en slechter dan SPY (Sharpe 0,41 / 0,38 / 0,41 tegen SPY 0,80 / 0,66 / 1,40), met dalingen tot ~40%, "
-        "terwijl de test kleine aandelen zelfs bevoordeelt. Alleen om te volgen; de geteste koop staat in de momentum top 20.</p>"
+        "terwijl de test kleine aandelen zelfs bevoordeelt. Alleen om te volgen.</p>"
         + _decision_table(rows, names) + gone)
 
 
@@ -373,12 +378,12 @@ def build_decision_html(cfg, book, ta_reports: list | None = None, account_size:
         "<div class='card dec'><h2>Instappen of niet?</h2>"
         f"<p class='sm'>Koersen t/m het slot van {_date(book.preview_date)}. Volgende beslismoment: slot van "
         f"<b>{_date(book.next_rebalance)}</b> (kopen/verkopen op de open daarna).</p>"
-        f"<p class='mkt'>{mkt}</p>{now}"
-        + "<h3 style='margin:12px 0 2px'>Momentum top 20 <span class='sm'>het geteste plan</span></h3>"
+        f"<p class='mkt'>{mkt}</p>{now}" + HINDSIGHT_NOTE
+        + "<h3 style='margin:12px 0 2px'>Momentum top 20 <span class='sm'>jouw plan -- zie de waarschuwing hierboven</span></h3>"
         + _decision_table(rows)
         + "<div style='margin-top:18px'>" + build_niche_html(niche_book, ta, book) + "</div>" +
         "<p class='sm'><b>Niet in deze tabellen = niet instappen.</b> Chartpatronen, breakouts en de andere setups op dit dashboard "
-        "zijn info: in de tests deden ze het niet beter dan een willekeurig aandeel. Het advies volgt alleen de geteste "
-        "maandregel. De grijze grafiekregel verandert het advies niet: in ronde 14 voorspelden de waarschuwingen "
+        "zijn info: in de tests deden ze het niet beter dan een willekeurig aandeel. Het advies volgt de maandregel van je plan "
+        "(die zelf SPY niet versloeg zodra kennis achteraf eruit was, zie boven). De grijze grafiekregel verandert het advies niet: in ronde 14 voorspelden de waarschuwingen "
         "(weerstand vlak erboven, dagtrend omlaag, overstrekt) en de technische score niets over de volgende maand; "
         "aandelen met weerstand vlak erboven deden het zelfs iets beter. Klik op een ticker voor de volledige analyse.</p></div>")

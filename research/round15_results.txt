@@ -1,0 +1,6 @@
+price coverage of point-in-time members at month-ends: DEV 75%, VAL 89%, OOS 96%
+CAGR / maxDD / Sharpe
+SPY                                      | DEV   11.1%  19.3%  0.80 | VAL   13.1%  33.7%  0.66 | OOS   21.9%  18.8%  1.40
+P0 today's S&P 500 members (hindsight)   | DEV   19.5%  32.7%  0.98 | VAL   13.3%  22.9%  0.67 | OOS   48.3%  30.6%  1.33
+P1 point-in-time S&P 500 members         | DEV    7.3%  33.5%  0.48 | VAL    2.5%  23.4%  0.22 | OOS   20.8%  30.6%  0.78
+most frequent hindsight-only picks (held by P0, not members then): {'CVNA': 48, 'XYZ': 31, 'LULU': 30, 'TSLA': 28, 'TTD': 27, 'GNRC': 25, 'AXON': 25, 'DECK': 24, 'DXCM': 24, 'TKO': 23, 'FIX': 23, 'VEEV': 22, 'TRGP': 21, 'BLDR': 21, 'LITE': 21}

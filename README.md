@@ -12,6 +12,37 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 15 — the main list with point-in-time S&P 500 membership (`research/round15.py`)
+
+Pre-registered in `research/HYPOTHESES.md`. Point-in-time S&P 500 membership is rebuilt
+from Wikipedia's change table (May 2026 revision, 395 changes; 503–511 members every year
+since 2010), undoing each change after a month-end. Earlier tests used **today's** members
+all the way back. Removed names that are delisted have no free price data (yfinance had 2 of
+197; Stooq blocks automated requests), so price coverage of the members of that time is 75% in
+2011–18, 89% in 2019–22 and 96% in 2023–26. Same rule as live: month-end top 20 by 12-1
+return, SPY > 200-day, 0.10% per side.
+
+| CAGR / max DD / Sharpe | 2011–18 | 2019–22 | 2023–26 |
+|---|---|---|---|
+| SPY | 11.1% / 19% / **0.80** | 13.1% / 34% / **0.66** | 21.9% / 19% / **1.40** |
+| top 20 of **today's** S&P 500 members (hindsight) | 19.5% / 33% / 0.98 | 13.3% / 23% / 0.67 | 48.3% / 31% / 1.33 |
+| top 20 of the members **at that time** | 7.3% / 34% / 0.48 | 2.5% / 23% / 0.22 | 20.8% / 31% / 0.78 |
+
+**Failed: with point-in-time membership the momentum list did not beat SPY in any period.**
+The rule needed 2 of 3. Even in 2023–26, with 96% price coverage, it was far behind (Sharpe
+0.78 vs 1.40). The hindsight version held stocks before they joined the index: CVNA for 48
+months, XYZ 31, LULU 30, TSLA 28, TTD 27, GNRC 25, AXON 25 and so on. That is where the
+earlier backtest's edge came from.
+
+What this means for the plan:
+- The 22%/yr of the earlier backtests is not a realistic expectation. In this test, an
+  S&P 500 index fund was better on both return and risk.
+- Only the S&P 500 part could be tested; S&P 400 and small caps have no usable change
+  history here. Round 14 found momentum among other liquid names weak as well.
+- The scanner keeps working as before (the momentum list stays the configured plan, which is
+  the user's choice). The dashboard now shows this result above the list, and the plan's
+  backtest note says the old number does not hold.
+
 ## Research round 14 — niche momentum and the dashboard warnings (`research/round14.py`, `round14b.py`)
 
 Pre-registered in `research/HYPOTHESES.md`. The data is today's ~4,750 US-listed common
