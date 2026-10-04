@@ -344,3 +344,9 @@ close and zone.low - close <= 1 ATR ("at resistance"). Those picks:
 Pass: B's book (equal weight over the 20 slots, monthly) has a higher Sharpe than A in DEV and
 not lower in VAL and OOS, in P1. Either way the dashboard follows the user's rule (WACHT until
 confirmed); if it fails, the dashboard says waiting did not help in the test.
+
+## Round 16 results
+- ~2/3 of picks had a zone within 1 ATR above. Flagged picks, B minus A per month: P1 -0.31 / -0.29 /
+  -0.86% (t -1.6 / -0.9 / -2.2); R1 -0.57 / -1.89 / -2.67% (t -2.2 / -4.3 / -5.0). B1 similar.
+- Book Sharpe A vs B: P1 0.39 vs 0.37, -0.35 vs -0.79, 1.06 vs 1.17; R1 0.62 vs 0.56, 0.78 vs 0.22, 1.52 vs 1.24.
+- FAILED (DEV lower). Dashboard keeps the user's WACHT rule with this result shown.

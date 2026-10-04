@@ -12,6 +12,28 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 16 — wait for two closes above the resistance before buying? (`research/round16.py`)
+
+User rule: say KOPEN only after a pick has reacted positively at the resistance just above
+it, because otherwise it can reverse there. Pre-registered. For every month-end top-20 pick
+the `ta/` engine looked for a zone within 1 ATR above the close (two thirds of all picks had
+one). **A** buys at the next open. **B** waits for two consecutive closes above the zone, and a
+slot that never confirms stays in cash.
+
+| flagged picks, return per month | 2011–18 | 2019–22 | 2023–26 |
+|---|---|---|---|
+| point-in-time S&P 500: buy now (A) | +0.69% | −0.03% | +1.47% |
+| point-in-time S&P 500: wait (B) | +0.38% (t −1.6) | −0.32% (t −0.9) | +0.61% (t −2.2) |
+| live list (today's S&P 500+400): buy now (A) | +1.46% | +2.48% | +3.57% |
+| live list: wait (B) | +0.89% (t −2.2) | +0.59% (t −4.3) | +0.90% (t −5.0) |
+
+Book Sharpe A vs B: point-in-time 0.39 vs 0.37 · −0.35 vs −0.79 · 1.06 vs 1.17; live list 0.62 vs
+0.56 · 0.78 vs 0.22 · 1.52 vs 1.24. **Failed**: B's Sharpe was lower in DEV. Waiting costs money
+because with momentum stocks the confirmation often comes after the jump (you buy higher), or
+never comes. A single close above (B1) was no better. As agreed, the dashboard still follows
+the user's rule (WACHT with the level to clear, `portfolio.wait_for_resistance_break: true`) and
+shows this result next to it.
+
 ## Research round 15 — the main list with point-in-time S&P 500 membership (`research/round15.py`)
 
 Pre-registered in `research/HYPOTHESES.md`. Point-in-time S&P 500 membership is rebuilt

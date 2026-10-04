@@ -38,7 +38,10 @@ def _spark(series: pd.Series | None, w: int = 120, h: int = 26) -> str:
             f"<polyline fill='none' stroke='{color}' stroke-width='1.5' points='{pts}'/></svg>")
 
 
-ROUND16_NOTE = "Effect in de test: zie README ronde 16 (wordt ingevuld na de test)."
+ROUND16_NOTE = ("Let op, getest in ronde 16: wachten kostte geld. Aandelen met weerstand vlak erboven deden het daarna "
+                "0,3-0,9% per maand slechter als je op 2 slotkoersen erboven wachtte (S&amp;P 500-leden van toen; met de huidige "
+                "lijst 0,6-2,7%): de bevestiging komt vaak pas na de sprong, of niet. Uitzetten: "
+                "<code>wait_for_resistance_break: false</code>.")
 
 HINDSIGHT_NOTE = (
     "<p class='nt'><b>Belangrijk (onderzoeksronde 15):</b> de oude backtest gebruikte de S&amp;P-leden van <i>vandaag</i> en "

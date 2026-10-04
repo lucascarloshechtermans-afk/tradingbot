@@ -1,0 +1,17 @@
+analysed 5450 pick-months
+== P1: 3200 pick-months, 70% at resistance (zone within 1 ATR above)
+  DEV B: flagged picks, per-month return A +0.69%  B +0.38%  diff -0.31% (t -1.6, n 1094)
+  DEV B1: flagged picks, per-month return A +0.69%  B1 +0.31%  diff -0.38% (t -2.4, n 1094)
+  VAL B: flagged picks, per-month return A -0.03%  B -0.32%  diff -0.29% (t -0.9, n 513)
+  VAL B1: flagged picks, per-month return A -0.03%  B1 -0.21%  diff -0.17% (t -0.6, n 513)
+  OOS B: flagged picks, per-month return A +1.47%  B +0.61%  diff -0.86% (t -2.2, n 536)
+  OOS B1: flagged picks, per-month return A +1.47%  B1 +0.40%  diff -1.07% (t -2.9, n 536)
+  book (equal weight over the slots, monthly) Sharpe: | DEV A 0.39 B 0.37 B1 0.26 | VAL A -0.35 B -0.79 B1 -0.58 | OOS A 1.06 B 1.17 B1 1.03
+== R1: 3191 pick-months, 67% at resistance (zone within 1 ATR above)
+  DEV B: flagged picks, per-month return A +1.46%  B +0.89%  diff -0.57% (t -2.2, n 1031)
+  DEV B1: flagged picks, per-month return A +1.46%  B1 +0.75%  diff -0.70% (t -3.3, n 1031)
+  VAL B: flagged picks, per-month return A +2.48%  B +0.59%  diff -1.89% (t -4.3, n 484)
+  VAL B1: flagged picks, per-month return A +2.48%  B1 +0.90%  diff -1.58% (t -4.7, n 484)
+  OOS B: flagged picks, per-month return A +3.57%  B +0.90%  diff -2.67% (t -5.0, n 536)
+  OOS B1: flagged picks, per-month return A +3.57%  B1 +1.61%  diff -1.96% (t -4.0, n 536)
+  book (equal weight over the slots, monthly) Sharpe: | DEV A 0.62 B 0.56 B1 0.42 | VAL A 0.78 B 0.22 B1 0.34 | OOS A 1.52 B 1.24 B1 1.37
