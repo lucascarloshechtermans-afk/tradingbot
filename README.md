@@ -60,7 +60,48 @@ after the signal does not change a single signal. 4H/1H history is only ~2 years
 at yfinance, so the historical numbers are daily-timeframe signals (with weekly and
 monthly confluence); the universe is today's index members (survivorship bias).
 
-_Results of the first full run follow in the next commit (the run takes ~40 minutes)._
+**Result of the first full run (2026-10-04; full tables in `research/ta_eval_2026-10-04.txt`).**
+120 stocks, 461 sample dates, ~1,900 stock-years, 2008–2026. `ex20` = 20-session
+return of the signal minus the average of all sampled stocks on the same day.
+
+| | train ≤2014 | validation 2015–19 | OOS 2020+ |
+|---|---|---|---|
+| confirmed breakout, confirmed (n 6.3k / 5.5k / 8.1k) | −0.09% | +0.01% | −0.11% |
+| breakout retest, confirmed | +0.01% | −0.24% | +0.22% |
+| support bounce, confirmed | −0.34% | −0.23% | −0.04% |
+| trend continuation, confirmed | −0.03% | +0.22% | +0.26% |
+| failed breakdown (long), triggered | +0.15% | +0.26% | +0.05% |
+| failed breakout (short), confirmed | −0.11% | −0.21% | −0.21% |
+| primary long setup, score 75+ | +0.16% | −0.08% | −0.02% |
+| primary long setup, score <45 | +0.70% | 0.00% | +0.45% |
+
+- **No setup type, status or score bucket beat the same-day average** in all three
+  periods. Most large cells (n > 1,000) sit within about ±0.4% over 20
+  sessions, and the few larger values do not repeat across periods (score <45:
+  +0.70 / 0.00 / +0.45%). Raw returns are positive for the long setups (about
+  +0.5% to +2%), but random stocks on the same days did just as well. This is the same conclusion as
+  research rounds 3–5: daily technical entries do not add an edge over a random
+  stock on the same day.
+- **A higher score did not mean a better outcome.** The <45 bucket did best in
+  train and OOS. The score describes how complete and aligned the chart is, not
+  what happens next, so it must not be read as a ranking of expected returns.
+- **"Confirmed" vs "triggered"**: for breakouts, confirmed did about 0.2% less
+  badly than triggered in all three periods, but it still did not beat the
+  average. For the other setups the difference is mixed.
+- **Shorts** (failed breakout, resistance rejection, breakdown) have no edge
+  either: their excess is about 0. The negative raw numbers come from the
+  market rising.
+- **High-volatility stocks (ATR > 4%)** had a positive excess (+0.45 / +2.40 /
+  +1.02%). This is a property of volatile stocks in a rising market (beta),
+  reinforced by survivorship bias in today's index list. It is not a property
+  of the setups.
+- Small cells (bullish pullback, mean reversion: n < 150) are too small to read.
+
+**What this means.** The engine is useful to understand a chart: where the
+levels are, what is confirmed, what contradicts it, and how the timeframes line
+up. It is not a validated buy signal. The portfolio plan stays the validated
+MOMENTUM TOP 20; the technical report is context for those names. Nothing in
+the engine was tuned on these numbers.
 
 ## Research round 13 — resistance and chart patterns as filters (`research/round13.py`)
 
