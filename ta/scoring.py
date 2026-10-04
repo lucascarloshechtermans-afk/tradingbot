@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ta import nl
+
 DEFAULT_WEIGHTS = {"trend": 18.0, "price_action": 14.0, "sr": 12.0, "momentum": 12.0, "volume": 10.0,
                    "volatility": 6.0, "candles": 5.0, "mtf": 13.0, "rs": 10.0}
 FAMILY_NL = {"trend": "trendstructuur", "price_action": "price action / setup", "sr": "steun & weerstand",
@@ -72,7 +74,7 @@ def score(report, weights: dict[str, float] | None = None) -> TechnicalScore:
         if base is None:
             base = 60 + 0.4 * tr.strength
     pen = 8 * len(tr.exhaustion) if (tr.direction == d) else 0
-    subs["trend"] = (max(base - pen, 0), (f"{tr.label_nl}, kracht {tr.strength:.0f}/100, fase {tr.stage}" if tr.direction
+    subs["trend"] = (max(base - pen, 0), (f"{tr.label_nl}, kracht {tr.strength:.0f}/100, fase {nl(tr.stage)}" if tr.direction
                                           else f"{tr.label_nl} (geen trendkracht)")
                      + (f"; -{pen} voor overstrekking" if pen else ""))
 
@@ -92,7 +94,7 @@ def score(report, weights: dict[str, float] | None = None) -> TechnicalScore:
     if room_side:
         nz = min(room_side, key=lambda z: abs(z.mid - close))
         room = (nz.low - close if d > 0 else close - nz.high) / atr
-        room_s, room_txt = 50 * float(np.clip(room / 3, 0, 1)), f"{room:.1f} ATR ruimte tot {nz.strength} {'weerstand' if d > 0 else 'steun'}"
+        room_s, room_txt = 50 * float(np.clip(room / 3, 0, 1)), f"{room:.1f} ATR ruimte tot {nl(nz.strength)} {'weerstand' if d > 0 else 'steun'}"
     else:
         room_s, room_txt = 50.0, "geen zone in de weg (open lucht)"
     sup_s, sup_txt = 0.0, "geen zone vlak achter de koers"
@@ -101,7 +103,7 @@ def score(report, weights: dict[str, float] | None = None) -> TechnicalScore:
         dist = (close - bz.high if d > 0 else bz.low - close) / atr
         if dist <= 1.5:
             sup_s = 30.0 if bz.strength == "strong" else 15.0
-            sup_txt = f"{bz.strength} {'steun' if d > 0 else 'weerstand'} {dist:.1f} ATR {'eronder' if d > 0 else 'erboven'}"
+            sup_txt = f"{nl(bz.strength)} {'steun' if d > 0 else 'weerstand'} {dist:.1f} ATR {'eronder' if d > 0 else 'erboven'}"
             if bz.role in ("flip_support", "flip_resistance"):
                 sup_s += 20
                 sup_txt += " (rolwissel)"
@@ -111,7 +113,7 @@ def score(report, weights: dict[str, float] | None = None) -> TechnicalScore:
     divs = [x for x in m.divergences if x.bars_ago <= 15]
     adj = sum(-15 for x in divs if x.kind == ("regular_bear" if d > 0 else "regular_bull")) + \
         sum(10 for x in divs if x.kind == ("regular_bull" if d > 0 else "regular_bear"))
-    subs["momentum"] = (float(np.clip(ms + adj, 0, 100)), f"{m.state} (familiescore {m.score:+.0f}), {m.acceleration}"
+    subs["momentum"] = (float(np.clip(ms + adj, 0, 100)), f"{nl(m.state)} (familiescore {m.score:+.0f}), {nl(m.acceleration)}"
                         + (f"; divergentie {adj:+d}" if adj else ""))
 
     if v.available:
@@ -132,7 +134,7 @@ def score(report, weights: dict[str, float] | None = None) -> TechnicalScore:
     opp = [x for x in fa.candles if x.direction == ("bear" if d > 0 else "bull") and x.significance == "high"]
     if same:
         best = max(same, key=lambda x: x.score)
-        subs["candles"] = (best.score, f"{best.name_nl} ({best.significance}, {best.confirmation})")
+        subs["candles"] = (best.score, f"{best.name_nl} ({nl(best.significance)}, {nl(best.confirmation)})")
     elif opp:
         subs["candles"] = (20.0, f"tegengestelde kaars: {opp[-1].name_nl}")
     else:
@@ -161,6 +163,6 @@ def score(report, weights: dict[str, float] | None = None) -> TechnicalScore:
     conflicts = list(prim.conflicts) if prim is not None else []
     conflicts += [f"{FAMILY_NL[c.family]} spreekt tegen ({c.sub:.0f}/100): {c.why}" for c in contribs
                   if c.sub is not None and c.sub < 30 and c.family not in ("candles",)]
-    maturity = (f"{prim.status_nl}; trendfase {tr.stage}" if prim is not None else f"geen setup; trendfase {tr.stage}")
+    maturity = (f"{prim.status_nl}; trendfase {nl(tr.stage)}" if prim is not None else f"geen setup; trendfase {nl(tr.stage)}")
     return TechnicalScore(round(total, 1), d, contribs, round(total, 1), maturity,
                           prim.status if prim is not None else "none", conflicts)

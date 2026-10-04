@@ -9,6 +9,7 @@ from html import escape
 
 import numpy as np
 
+from ta import nl
 from ta.engine import TF_NL
 from ta.scoring import FAMILY_NL
 from ui.ta_chart import CHART_CSS, render
@@ -54,7 +55,7 @@ def score_table(rep) -> str:
         f"<tr><td>{escape(FAMILY_NL[c.family])}</td><td>{'-' if c.sub is None else f'{c.sub:.0f}'}</td>"
         f"<td>{c.weight:.0f}%</td><td>{c.points:.1f}</td><td>{escape(c.why)}</td></tr>" for c in sc.contributions)
     return (f"<p><b>Totaal {sc.total:.0f}/100</b> voor {DIR_NL[sc.direction]} &middot; rijpheid: {escape(sc.maturity)} &middot; "
-            f"bevestiging: {escape(sc.confirmation)}</p>"
+            f"bevestiging: {escape(nl(sc.confirmation))}</p>"
             "<table class='tat'><thead><tr><th>Familie</th><th>Deelscore</th><th>Gewicht</th><th>Punten</th><th>Waarom</th></tr></thead>"
             f"<tbody>{rows}</tbody></table>"
             + (f"<p><b>Tegenstrijdige signalen (apart, niet verrekend):</b></p><ul>{_li(sc.conflicts)}</ul>" if sc.conflicts else "")
@@ -88,27 +89,27 @@ def detail_sections(rep) -> str:
                  f"{'boven' if e.direction == 'bull' else 'onder'} {_f(e.level)}</li>" for e in tr.recent_events[-5:])
     mas = ", ".join(f"{k.upper()} {_f(ind.last(k))}" for k in ("ema9", "ema21", "ema34", "ema50", "sma10", "sma20", "sma50", "sma100", "sma200", "ema200"))
     out.append(_sec(f"Trend & structuur: {tr.label_nl}",
-                    f"<ul>{_li(tr.reasons)}</ul><p>Swings: {escape(' '.join(tr.swing_labels) or '-')} &middot; fase: {tr.stage} "
+                    f"<ul>{_li(tr.reasons)}</ul><p>Swings: {escape(' '.join(tr.swing_labels) or '-')} &middot; fase: {nl(tr.stage)} "
                     f"({tr.bars_in_state} bars) &middot; MA-volgorde {tr.alignment:+d}/4 &middot; afstand EMA21 "
                     f"{_f(tr.dist_atr['ema21'], 1)} ATR, SMA50 {_f(tr.dist_atr['sma50'], 1)} ATR, SMA200 {_f(tr.dist_atr['sma200'], 1)} ATR</p>"
                     f"<p class='sm'>{escape(mas)}</p><p><b>Structuurbreuken (BOS/CHoCH):</b></p><ul>{ev or '<li>-</li>'}</ul>"
                     + (f"<p><b>Uitputting:</b></p><ul>{_li(tr.exhaustion)}</ul>" if tr.exhaustion else "")))
-    zr = "".join(f"<tr><td>{escape(z.role)}</td><td>{z.strength}</td><td>{_f(z.low)}-{_f(z.high)}</td><td>{z.score:.0f}</td>"
+    zr = "".join(f"<tr><td>{escape(z.role)}</td><td>{nl(z.strength)}</td><td>{_f(z.low)}-{_f(z.high)}</td><td>{z.score:.0f}</td>"
                  f"<td>{z.reactions} ({z.support_reactions} steun / {z.resistance_reactions} weerstand)</td>"
                  f"<td>{escape(', '.join(z.sources))}</td><td class='sm'>{escape(', '.join(f'{k} {v:g}' for k, v in z.score_parts.items() if v))}</td></tr>"
                  for z in sorted(fa.zones, key=lambda z: -z.mid))
     out.append(_sec("Steun & weerstand (gescoorde zones)",
                     "<table class='tat'><thead><tr><th>Rol</th><th>Kracht</th><th>Zone</th><th>Score</th><th>Reacties</th>"
                     f"<th>Bronnen</th><th>Scoredelen</th></tr></thead><tbody>{zr}</tbody></table>"))
-    out.append(_sec(f"Momentum: {m.state}",
+    out.append(_sec(f"Momentum: {nl(m.state)}",
                     f"<p>RSI7 {_f(m.rsi[7], 0)} &middot; RSI14 {_f(m.rsi[14], 0)} &middot; RSI21 {_f(m.rsi[21], 0)} &middot; "
-                    f"MACD-hist {_f(m.macd_hist)} ({m.acceleration}) &middot; ROC 5/10/20/60 "
+                    f"MACD-hist {_f(m.macd_hist)} ({nl(m.acceleration)}) &middot; ROC 5/10/20/60 "
                     + " / ".join(_f(m.roc[w], 1) for w in (5, 10, 20, 60)) + f"% &middot; Stoch {_f(m.stoch, 0)} &middot; "
                     f"StochRSI {_f(m.stochrsi, 0)} &middot; ADX {_f(m.adx, 0)} (+DI {_f(ind.last('plus_di'), 0)} / "
                     f"-DI {_f(ind.last('minus_di'), 0)})</p><ul>{_li(m.notes)}</ul>"))
     out.append(_sec("Volume", f"<ul>{_li(v.notes)}</ul>"))
     out.append(_sec("Volatiliteit & compressie", f"<ul>{_li(vo.notes)}</ul>"))
-    cs = "".join(f"<li><b>{escape(c.name_nl)}</b> {c.date:%d-%m} -- {c.significance} ({c.score:.0f}), {c.confirmation}: "
+    cs = "".join(f"<li><b>{escape(c.name_nl)}</b> {c.date:%d-%m} -- {nl(c.significance)} ({c.score:.0f}), {nl(c.confirmation)}: "
                  f"{escape(', '.join(c.context))}</li>" for c in fa.candles)
     out.append(_sec("Candlesticks (laatste 3 kaarsen, met context)", f"<ul>{cs or '<li>Geen patroon.</li>'}</ul>"))
     pr = "".join(f"<tr><td>{escape(p.name)}</td><td>{'bull' if p.direction == 'bull' else 'bear'}</td><td>{escape(p.status_nl)}</td>"

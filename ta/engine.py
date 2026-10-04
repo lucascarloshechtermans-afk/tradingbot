@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from ta import nl
 from ta.frame import FrameAnalysis, analyze_frame
 from ta.regime import Regime
 from ta.relstrength import RSAssessment, assess_rs
@@ -78,7 +79,7 @@ def confluence(frames: dict[str, FrameAnalysis], direction: int) -> MTFConfluenc
         res = min((z for z in fa.zones if z.low > fa.close), key=lambda z: z.low, default=None)
         pat = next((p for p in fa.patterns if p.status in ("near", "breakout", "confirmed")), None)
         mc.rows[tf] = {"ok": True, "trend": fa.trend.label_nl, "direction": d, "swings": " ".join(fa.trend.swing_labels[-4:]),
-                       "momentum": fa.momentum.state, "volume": (f"RVOL {fa.volume.rvol:.1f}" if fa.volume.available and
+                       "momentum": nl(fa.momentum.state), "volume": (f"RVOL {fa.volume.rvol:.1f}" if fa.volume.available and
                                                                 np.isfinite(fa.volume.rvol) else "n.v.t."),
                        "support": sup, "resistance": res, "pattern": pat,
                        "event": fa.trend.last_event}
@@ -95,7 +96,7 @@ def confluence(frames: dict[str, FrameAnalysis], direction: int) -> MTFConfluenc
         line = f"{TF_NL[tf].capitalize()}: {fa.trend.label_nl}"
         if fa.trend.swing_labels:
             line += f" ({'/'.join(fa.trend.swing_labels[-2:])})"
-        line += f", momentum {fa.momentum.state}"
+        line += f", momentum {nl(fa.momentum.state)}"
         e = fa.trend.last_event
         if e is not None and len(fa.df) - 1 - e.i <= 10:
             line += f"; {'bullish' if e.direction == 'bull' else 'bearish'} {e.kind} op {e.date:%d-%m}"

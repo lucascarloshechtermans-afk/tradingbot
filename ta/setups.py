@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ta import nl
+
 from ta.frame import FrameAnalysis
 from ta.levels import containing, nearest
 from ta.swings import known_swings
@@ -138,7 +140,7 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
         if z.high < close or containing([z], close):
             j = _recent_cross(c, z.high, True, 5)
             if j is not None:
-                broke.append((f"{z.strength} weerstand {z.low:,.2f}-{z.high:,.2f}", z.high, j, z.low))
+                broke.append((f"{nl(z.strength)} weerstand {z.low:,.2f}-{z.high:,.2f}", z.high, j, z.low))
     for p in bull_pats:
         if p.status in ("breakout", "confirmed") and p.breakout_date is not None:
             j = df.index.get_loc(p.breakout_date)
@@ -155,13 +157,16 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
         if np.isfinite(rv):
             (ev if rv >= 1.3 else conf).append(f"breakout-volume {rv:.1f}x het gemiddelde" + ("" if rv >= 1.3 else " -- zwak, verdacht"))
         if m.state in ("bullish", "strong_bullish"):
-            ev.append(f"momentum bevestigt ({m.state}, RSI14 {rsi14:.0f})")
+            ev.append(f"momentum bevestigt ({nl(m.state)}, RSI14 {rsi14:.0f})")
         else:
-            conf.append(f"momentum bevestigt niet ({m.state})")
+            conf.append(f"momentum bevestigt niet ({nl(m.state)})")
         kind = "failed_breakout" if st == "failed" else "confirmed_breakout"
         add(Setup(kind, -1 if st == "failed" else 1, "triggered" if st == "failed" else st, {"breakout": lvl, "invalidatie": inv},
                   ev, conf, trigger=f"tweede slot boven {lvl:,.2f} of volume-uitbraak", trigger_price=lvl,
-                  invalidation=f"slot terug onder {lvl:,.2f}", invalidation_price=lvl, families={"price_action", "sr", "volume", "momentum"}))
+                  invalidation=(f"slot terug onder {lvl:,.2f} = mislukte breakout; structureel ongeldig onder {inv:,.2f}"
+                                if np.isfinite(inv) and inv < lvl else f"slot terug onder {lvl:,.2f}"),
+                  invalidation_price=inv if np.isfinite(inv) and inv < lvl else lvl,
+                  families={"price_action", "sr", "volume", "momentum"}))
 
     # 3 breakout retest
     for p in bull_pats:
@@ -220,7 +225,7 @@ def classify(fa: FrameAnalysis) -> list[Setup]:
         add(Setup("trend_continuation", 1, "confirmed",
                   {"BOS-niveau": e.level, "EMA21": ema21, "invalidatie": swing_low_px},
                   [f"Bullish BOS op {e.date:%d-%m} (slot boven {e.level:,.2f}) in een sterke uptrend",
-                   f"momentum {m.state}, koers {tr.dist_atr['ema21']:.1f} ATR boven de EMA21 (niet overstrekt)"],
+                   f"momentum {nl(m.state)}, koers {tr.dist_atr['ema21']:.1f} ATR boven de EMA21 (niet overstrekt)"],
                   [x for x in tr.exhaustion], trigger="al gebeurd (BOS)", trigger_price=e.level,
                   invalidation=f"slot onder de laatste swing low {swing_low_px:,.2f}", invalidation_price=swing_low_px,
                   families={"trend", "momentum"}))
