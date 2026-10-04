@@ -48,6 +48,15 @@ CAGR / max drawdown / Sharpe:
   yesterday's winners. The ~4–5%/yr haircut in the plan's notes may be too small. The
   main list stays the plan (it is still the only tested rule with an edge over SPY in
   VAL/OOS here), but expect less than the backtest.
+- **Diagnostic (after the pre-registration):** the same top-20 rule on the 900 most
+  traded stocks chosen point-in-time (a size match for the S&P 500+400) gave Sharpe 0.48 /
+  0.33 / 0.56, below SPY in every period. Within that universe, today's S&P members gave
+  0.60 / 0.93 / 1.14 and all other liquid names gave 0.43 / 0.10 / 0.07. Nearly the whole
+  edge sits in "is an S&P member today". Part of that is hindsight (survivorship), and part
+  may be real: the S&P only admits profitable US companies, and live, today's membership
+  is known at the time, so it is not look-ahead going forward. Separating the two needs
+  historical S&P membership lists. FMP sells them, but the connected FMP plan does not
+  include them. Until then, treat the plan's backtest as an upper bound.
 
 ## Niche finds — momentum outside the S&P 500 (tested in round 14: no edge)
 

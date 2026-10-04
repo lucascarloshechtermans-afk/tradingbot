@@ -296,3 +296,12 @@ even those favour N0 (it would have held more of the missing collapses).
   Pass: flagged picks worse with |t| >= 2 in DEV and the same sign in VAL and OOS (score: rank
   correlation > 0 with the same rule) → the warning becomes a rule (skip the name); otherwise the
   dashboard says the warning had no measurable effect.
+
+## Round 14 results (Q1-Q3; Q4 below when run)
+- Q1 FAILED: niche momentum (F1+F2, top 10) Sharpe 0.25 / 0.14 / 0.53 vs random niche
+  0.44 / 0.25 / 0.16 (DEV lower) -> dashboard: niche list = VOLGEN (follow), "no edge".
+- Q2: F1 vs N0 0.31>0.30, 0.40>-0.06, 0.19>-0.53 -> kept. F2 vs N0 0.26<0.30 -> off.
+- Q3: N4 vs N3 DEV 0.30>0.25 but VAL 0.01<0.14; N3 lower in DEV -> undecided -> top 20.
+- Post-hoc diagnostic (not pre-registered): the main rule on the 900 most traded stocks chosen
+  point-in-time: 0.48 / 0.33 / 0.56; today's S&P members within it 0.60 / 0.93 / 1.14; the
+  rest 0.43 / 0.10 / 0.07 -> the main list's edge is tied to today's S&P membership.
