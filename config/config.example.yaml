@@ -129,7 +129,7 @@ portfolio:                   # README "Research rounds 6-9": price-only systems 
   dip_max_positions: 10
   include_small_caps: true     # + S&P SmallCap 600 in momentum / breakouts (tested: lowered results, see README round 8)
   small_cap_min_price: 50      # small caps only at this share price or higher
-  wait_for_resistance_break: true  # WACHT on picks with resistance within 1 ATR until 2 closes above it (research round 16)
+  wait_for_resistance_break: false # true = WACHT on picks with resistance within 1 ATR until 2 closes above it (round 16: cost return)
   niche_enabled: true          # NICHE FINDS: same momentum rule over all US stocks outside the S&P 500
                                # tested in round 14: NO edge over a random small stock -- shown to follow, not to buy
   niche_top_n: 20

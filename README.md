@@ -30,9 +30,10 @@ slot that never confirms stays in cash.
 Book Sharpe A vs B: point-in-time 0.39 vs 0.37 · −0.35 vs −0.79 · 1.06 vs 1.17; live list 0.62 vs
 0.56 · 0.78 vs 0.22 · 1.52 vs 1.24. **Failed**: B's Sharpe was lower in DEV. Waiting costs money
 because with momentum stocks the confirmation often comes after the jump (you buy higher), or
-never comes. A single close above (B1) was no better. As agreed, the dashboard still follows
-the user's rule (WACHT with the level to clear, `portfolio.wait_for_resistance_break: true`) and
-shows this result next to it.
+never comes. A single close above (B1) was no better. The dashboard first followed the user's
+rule (WACHT with the level to clear). On the first live day WDC (+6.8%) and STX (+4.7%) broke out
+while marked WACHT, so it is now **off by default**; `portfolio.wait_for_resistance_break: true`
+switches it back on.
 
 ## Research round 15 — the main list with point-in-time S&P 500 membership (`research/round15.py`)
 
