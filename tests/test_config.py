@@ -69,6 +69,22 @@ def test_risk_rejects_nonpositive_max_holding_days():
         AppConfig.from_dict({"risk": {"max_holding_days": 0}})
 
 
+def test_holding_days_for_extends_only_trend_following_strategies_by_default():
+    cfg = AppConfig.from_dict({})
+    assert cfg.risk.holding_days_for("Momentum Continuation") == 7
+    assert cfg.risk.holding_days_for("Trend Continuation") == 7
+    assert cfg.risk.holding_days_for("Bullish Pullback") == cfg.risk.max_holding_days
+    assert cfg.risk.holding_days_for(None) == cfg.risk.max_holding_days
+
+
+def test_holding_days_by_strategy_overridable_and_validated():
+    cfg = AppConfig.from_dict({"risk": {"holding_days_by_strategy": {"Bullish Breakout": 3}}})
+    assert cfg.risk.holding_days_for("Bullish Breakout") == 3
+    assert cfg.risk.holding_days_for("Momentum Continuation") == cfg.risk.max_holding_days
+    with pytest.raises(ConfigError):
+        AppConfig.from_dict({"risk": {"holding_days_by_strategy": {"Bullish Breakout": 0}}})
+
+
 def test_risk_max_holding_days_overridable():
     cfg = AppConfig.from_dict({"risk": {"max_holding_days": 10}})
     assert cfg.risk.max_holding_days == 10

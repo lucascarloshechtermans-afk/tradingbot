@@ -7,6 +7,7 @@ from datetime import datetime
 import pandas as pd
 
 from data.cache import DiskCache
+from data.sessions import drop_incomplete_daily
 from data.provider import DataProvider, DataUnavailable, TickerInfo
 
 logger = logging.getLogger(__name__)
@@ -52,12 +53,22 @@ class YFinanceProvider(DataProvider):
                     time.sleep(self.retry_backoff_seconds * attempt)
         raise DataUnavailable(f"{description} failed after {self.max_retries} attempts: {last_exc}")
 
+    def get_universe_closes(self, tickers: list[str], latest_session=None, key: str = "momuni") -> tuple[pd.DataFrame, pd.DataFrame]:
+        from analysis.momentum_portfolio import fetch_universe
+
+        return fetch_universe(tickers, cache=self.cache, latest_session=latest_session, key=key)
+
+    def get_us_listed(self) -> dict[str, str]:
+        from data.us_listed import fetch_us_listed
+
+        return fetch_us_listed(self.cache)
+
     def get_history(self, ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
         cache_key = f"hist_{ticker}_{period}_{interval}"
         if self.cache is not None:
             cached = self.cache.get(cache_key)
-            if cached is not None:
-                return cached
+            if cached is not None and not self._missing_last_session(cached, interval, self.cache.age_seconds(cache_key)):
+                return drop_incomplete_daily(cached) if interval == "1d" else cached
 
         import yfinance as yf
 
@@ -85,10 +96,36 @@ class YFinanceProvider(DataProvider):
         df = df[["open", "high", "low", "close", "adj_close", "volume"]].sort_index()
         df = df[~df.index.duplicated(keep="last")]
         df = df.dropna(subset=["open", "high", "low", "close"])
+        if interval == "1d":
+            df = drop_incomplete_daily(df)  # never use or cache today's live bar as if it were a close
 
         if self.cache is not None:
             self.cache.set(cache_key, df)
         return df
+
+    @staticmethod
+    def _missing_last_session(df: pd.DataFrame, interval: str, age_s: float | None) -> bool:
+        """A TTL alone isn't enough: a daily history cached the evening of a
+        session can still lack that session's bar (yfinance publishes it late),
+        and would then be served for up to cache_ttl_hours. Treat a daily frame
+        as stale when its last bar is older than the last COMPLETED US session
+        -- re-checking at most hourly so a genuinely missing bar (holiday,
+        halted ticker) doesn't trigger a download on every call."""
+        if interval != "1d" or df.empty:
+            return False
+        now = pd.Timestamp.now(tz="America/New_York")
+        last_bar = df.index[-1].tz_convert("America/New_York").normalize()
+        if age_s is not None and now - pd.Timedelta(seconds=age_s) < last_bar + pd.Timedelta(hours=16, minutes=15):
+            return True  # cached while that session was still trading: its last bar is a partial one
+        if age_s is not None and age_s < 3600:
+            return False
+        session = now.normalize()
+        if now.weekday() >= 5 or now < session + pd.Timedelta(hours=16, minutes=15):
+            session -= pd.tseries.offsets.BDay(1)
+        while session.weekday() >= 5:
+            session -= pd.Timedelta(days=1)
+        last = df.index[-1].tz_convert("America/New_York").normalize()
+        return last < session
 
     def get_info(self, ticker: str) -> TickerInfo:
         import yfinance as yf

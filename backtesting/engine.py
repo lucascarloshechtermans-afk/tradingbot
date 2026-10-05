@@ -21,6 +21,7 @@ class Trade:
     pnl_pct: float | None = None
     holding_days: int | None = None
     holding_bars: int | None = None
+    max_holding_bars: int | None = None  # this trade's own time-exit cap (None = no cap)
 
 
 @dataclass
@@ -34,6 +35,8 @@ class BacktestResult:
 SignalFn = Callable[[pd.DataFrame], bool]
 StopFn = Callable[[pd.DataFrame, float], float]
 TargetFn = Callable[[pd.DataFrame, float, float], float]
+HoldingDaysFn = Callable[[pd.DataFrame], "int | None"]
+EntryFilterFn = Callable[[pd.DataFrame, float], bool]
 
 
 def run_backtest(
@@ -47,6 +50,8 @@ def run_backtest(
     slippage_pct: float = 0.05,
     max_position_pct: float = 20.0,
     max_holding_days: int | None = None,
+    holding_days_fn: HoldingDaysFn | None = None,
+    entry_filter_fn: EntryFilterFn | None = None,
 ) -> BacktestResult:
     """Event-driven, single-position backtester with no look-ahead bias.
 
@@ -65,11 +70,28 @@ def run_backtest(
     5. If both stop and target are breached within the same bar, the STOP is
        assumed to have been hit first (the conservative assumption — we cannot
        know intrabar order from daily OHLC data).
+    5b. A stop is a market order once triggered: if the bar's OPEN already gapped
+       through the stop (open <= stop for a long), the fill happens at that worse
+       open price, not at the theoretical stop level — a stop resting at $100
+       cannot be filled at $100 when the market opens at $95. The same applies,
+       symmetrically, to a target gapping through on the open (open >= target):
+       real brokers still fill a triggered market/marketable-limit exit at the
+       open when it's already better than the target, so pretending the fill
+       happened exactly at the target would understate gains just as pretending
+       a blown-through stop filled at the stop would overstate them.
     6. `max_holding_days`, when set, force-closes a position at that bar's CLOSE
        once it has been held for that many BARS (trading days, not calendar days —
        a weekend never counts) without hitting its stop or target — this is what
        actually enforces a "~1 trading week" swing-trade horizon end to end,
        rather than just hoping the target happens to be reached in time.
+    7. `holding_days_fn`, when given, is called once at entry (with the same
+       `history.iloc[:i]` stop_fn/target_fn see) and may return a per-trade cap
+       that overrides `max_holding_days` for that trade only -- e.g. a longer
+       horizon for trend-following setups than for mean-reversion ones.
+    8. `entry_filter_fn(history.iloc[:i], raw_open_of_bar_i)`, when given, can
+       cancel the pending entry at the open -- models a buy-limit order placed
+       before the session (e.g. "no fill if it gaps up too far"). It only sees
+       the entry bar's OPEN, which is known at the moment the order would fill.
     """
     n = len(history)
     equity = initial_capital
@@ -86,8 +108,14 @@ def run_backtest(
         bar = history.iloc[i]
 
         if pending_entry and not in_position:
-            entry_price = float(bar["open"]) * (1 + slippage_pct / 100)
             history_before_entry = history.iloc[:i]
+            if entry_filter_fn is not None and not entry_filter_fn(history_before_entry, float(bar["open"])):
+                # the order is a buy-limit placed before the open; when the
+                # open is already above the limit it doesn't fill, no trade
+                pending_entry = False
+                equity_curve_values.append(equity)
+                continue
+            entry_price = float(bar["open"]) * (1 + slippage_pct / 100)
             stop = stop_fn(history_before_entry, entry_price)
             target = target_fn(history_before_entry, entry_price, stop)
 
@@ -108,8 +136,15 @@ def run_backtest(
                 equity_curve_values.append(equity)
                 continue
 
+            trade_cap = holding_days_fn(history_before_entry) if holding_days_fn is not None else None
+            if trade_cap is None:
+                trade_cap = max_holding_days
+
             equity -= commission_per_trade
-            trade = Trade(entry_date=date, entry_price=entry_price, shares=shares, stop=stop, target=target)
+            trade = Trade(
+                entry_date=date, entry_price=entry_price, shares=shares, stop=stop, target=target,
+                max_holding_bars=trade_cap,
+            )
             in_position = True
             entry_bar_index = i
             equity_curve_values.append(equity)
@@ -120,14 +155,21 @@ def run_backtest(
             hit_target = bar["high"] >= trade.target
             is_last_bar = i == n - 1
             bars_held = i - entry_bar_index
-            hit_time_limit = max_holding_days is not None and bars_held >= max_holding_days
+            hit_time_limit = trade.max_holding_bars is not None and bars_held >= trade.max_holding_bars
 
             if hit_stop or hit_target or hit_time_limit or is_last_bar:
                 if hit_stop:
-                    exit_price = trade.stop * (1 - slippage_pct / 100)
+                    # A stop becomes a market order once triggered: if the bar's
+                    # open already gapped through it, the fill is at that worse
+                    # open, not at the untouched stop level (see docstring 5b).
+                    base_price = min(float(bar["open"]), trade.stop)
+                    exit_price = base_price * (1 - slippage_pct / 100)
                     reason = "stop"
                 elif hit_target:
-                    exit_price = trade.target * (1 - slippage_pct / 100)
+                    # Symmetric: a gap open beyond the target is filled at that
+                    # (better) open rather than capped at the target price.
+                    base_price = max(float(bar["open"]), trade.target)
+                    exit_price = base_price * (1 - slippage_pct / 100)
                     reason = "target"
                 elif hit_time_limit:
                     exit_price = float(bar["close"])

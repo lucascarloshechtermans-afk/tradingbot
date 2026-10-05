@@ -121,9 +121,33 @@ class RiskConfig:
     # ~3.35 ATRs away against a 2-ATR stop, a move that a 5-day swing rarely
     # completes. See README's "Target realism" section for the validated effect.
     target_volatility_multiplier: float = 1.5
+    # Per-strategy override of max_holding_days (horizon for both the forced
+    # time exit and the target cap). Validated on the full 134-ticker/5y
+    # universe (5-day vs 7-day caps, split at the median entry date so each
+    # half is checked separately): the two trend-FOLLOWING strategies improved
+    # with a 7-day hold in BOTH halves (Momentum Continuation +0.23%->+0.77%
+    # early / +0.42%->+0.93% late; Trend Continuation +0.13%->+0.36% /
+    # +0.24%->+0.69%), while Bullish Pullback got worse (-0.03%->-0.38% early)
+    # and the rest were mixed -- momentum persists, pullback/mean-reversion
+    # moves are short-lived. Only the consistent-in-both-halves group is
+    # extended; everything else keeps max_holding_days.
+    holding_days_by_strategy: dict[str, int] = field(
+        default_factory=lambda: {"Momentum Continuation": 7, "Trend Continuation": 7}
+    )
+    # False (default): a structure stop is only used when it is at least as wide
+    # as the 2-ATR stop -- see risk/stops_targets.py's compute_stop docstring for
+    # the backtest evidence. True restores the legacy "tightest reasonable
+    # structure stop" behavior, kept only for A/B comparison.
+    allow_tight_structure_stop: bool = False
+
+    def holding_days_for(self, strategy: str | None) -> int:
+        if strategy is None:
+            return self.max_holding_days
+        return self.holding_days_by_strategy.get(strategy, self.max_holding_days)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "RiskConfig":
+        by_strategy_raw = raw.get("holding_days_by_strategy")
         cfg = cls(
             account_size=float(raw.get("account_size", 10_000.0)),
             risk_per_trade_pct=float(raw.get("risk_per_trade_pct", 0.5)),
@@ -131,13 +155,18 @@ class RiskConfig:
             max_position_pct=float(raw.get("max_position_pct", 20.0)),
             max_holding_days=int(raw.get("max_holding_days", 5)),
             target_volatility_multiplier=float(raw.get("target_volatility_multiplier", 1.5)),
+            allow_tight_structure_stop=bool(raw.get("allow_tight_structure_stop", False)),
         )
+        if by_strategy_raw is not None:
+            cfg.holding_days_by_strategy = {str(k): int(v) for k, v in by_strategy_raw.items()}
         if cfg.account_size <= 0:
             raise ConfigError("risk.account_size must be positive")
         if not (0 < cfg.risk_per_trade_pct <= 100):
             raise ConfigError("risk.risk_per_trade_pct must be between 0 and 100")
         if cfg.max_holding_days <= 0:
             raise ConfigError("risk.max_holding_days must be positive")
+        if any(v <= 0 for v in cfg.holding_days_by_strategy.values()):
+            raise ConfigError("risk.holding_days_by_strategy values must be positive")
         return cfg
 
 
@@ -176,15 +205,46 @@ class GatesConfig:
     # free-data earnings-growth coverage is patchy (ETFs, some foreign filers,
     # recent IPOs) and blanket-rejecting missing data here would silently wipe
     # out an unpredictable chunk of the universe rather than apply a real
-    # quality bar. Validated: a 5y/134-ticker backtest at 0.15 cut trades ~17%
-    # (8958 -> 7491) while profit factor rose 1.17 -> 1.21 and expectancy
-    # +0.28% -> +0.33% -- see config.example.yaml's comment for the full A/B.
+    # quality bar. A 5y/134-ticker backtest at 0.15 reported trades ~17% fewer
+    # (8958 -> 7491), profit factor 1.17 -> 1.21, expectancy +0.28% -> +0.33% --
+    # but that number is CONTAMINATED by look-ahead (found during a later
+    # audit): backtest_screener.py has no point-in-time historical EPS growth,
+    # so it applies each ticker's CURRENT growth statically across the whole
+    # window, letting 2026 fundamentals filter 2021-era trades. Since today's
+    # growers are disproportionately past winners, this can look like a
+    # validated edge while partly just rewarding hindsight. Treat the number
+    # above as directional at best, not clean evidence, until this is rebuilt
+    # on point-in-time EPS-growth-by-report-date data -- see
+    # config.example.yaml's comment for the full caveat.
     min_earnings_growth: float | None = None
+    # No-chase entry rule: the entry is a buy-limit at (signal close + this many
+    # ATRs); if the next session opens above it, no fill. None disables.
+    # Full-universe A/B (on top of the minimum-stop fix): better in both halves
+    # of the sample on win rate, mean R, profit factor and net $ -- early
+    # +0.027R -> +0.034R, late +0.035R -> +0.042R; overall PF 1.09 -> 1.11.
+    max_entry_gap_atr: float | None = 0.5
+    # Cross-sectional composite momentum (mean of the 63/126/252-day return,
+    # skipping the last 5 days), ranked 0-100 against every ticker being
+    # scanned; reject below this percentile. Taken from the externally
+    # supplied "Explosive Breakout" scanner (alt_scanners/), where it is the
+    # core of the ranking. Applies to EVERY strategy, counter-trend included,
+    # and a ticker without the ~258 bars of history it needs is rejected (so
+    # data.period must be >= 2y). None disables.
+    min_momentum_percentile: float | None = None
+    # Kaufman efficiency ratio over 30 days (|net move| / sum of |daily moves|,
+    # 1.0 = straight line) must be >= this. Same source. None disables.
+    min_efficiency_ratio: float | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "GatesConfig":
         meg = raw.get("min_earnings_growth", None)
+        mega = raw.get("max_entry_gap_atr", 0.5)
+        mmp = raw.get("min_momentum_percentile", None)
+        mer = raw.get("min_efficiency_ratio", None)
         return cls(
+            max_entry_gap_atr=float(mega) if mega is not None else None,
+            min_momentum_percentile=float(mmp) if mmp is not None else None,
+            min_efficiency_ratio=float(mer) if mer is not None else None,
             min_rs_percentile=float(raw.get("min_rs_percentile", 50.0)),
             rs_window=int(raw.get("rs_window", 60)),
             regime_gate_enabled=bool(raw.get("regime_gate_enabled", True)),
@@ -303,6 +363,107 @@ class AlertsConfig:
 
 
 @dataclass
+class PortfolioConfig:
+    """How the account is split between the price-only systems (README,
+    'Research rounds 6-9'). Percent of the account; 0 switches a system off.
+    Default (user's choice after the final backtest): 100% MOMENTUM TOP 20.
+    LEADER BREAKOUT, LEADER DIP and INDEX RSI(2) are off (set their pct > 0
+    to switch them back on)."""
+    momentum_pct: float = 100.0
+    breakout_pct: float = 0.0
+    dip_pct: float = 0.0
+    index_rsi2_pct: float = 0.0
+    momentum_top_n: int = 20
+    breakout_risk_pct_of_sleeve: float = 1.0   # risk per breakout, % of the breakout sleeve
+    breakout_max_positions: int = 20
+    dip_risk_pct_of_sleeve: float = 1.0   # risk per dip trade, % of the dip sleeve (halved below SPY's 200-day)
+    dip_max_positions: int = 10
+    # add the S&P SmallCap 600 to the momentum / breakout universe, only at this
+    # price or higher (research round 8: it LOWERED results in every test, see README)
+    include_small_caps: bool = True
+    small_cap_min_price: float = 50.0
+    # NICHE FINDS: the same month-end 12-1 momentum rule over ALL US-listed common stocks
+    # outside the S&P 500 (lesser-known names such as CDNA). Not part of the tested plan.
+    # a momentum pick with resistance within 1 ATR above is WACHT until two closes above it.
+    # Off: research round 16 found waiting cost 0.3-2.7%/month, and live it held back WDC/STX on their breakout day
+    wait_for_resistance_break: bool = False
+    niche_enabled: bool = True
+    niche_top_n: int = 20          # round 14 Q3: top 10 vs 20 undecided -> 20 (more spread)
+    niche_min_price: float = 10.0
+    # trend-quality filters for the niche list (0 / 1 switch them off): within X% of the
+    # 52-week high, and no more than this share of the gain made on one single day
+    niche_near_high_pct: float = 75.0    # round 14 Q2: helped in all three periods -> kept
+    niche_max_jump_share: float = 1.0    # round 14 Q2: did not help -> off (0.33 to switch on)
+
+    @classmethod
+    def from_dict(cls, raw: dict) -> "PortfolioConfig":
+        cfg = cls(
+            momentum_pct=float(raw.get("momentum_pct", 100.0)),
+            breakout_pct=float(raw.get("breakout_pct", 0.0)),
+            dip_pct=float(raw.get("dip_pct", 0.0)),
+            index_rsi2_pct=float(raw.get("index_rsi2_pct", 0.0)),
+            momentum_top_n=int(raw.get("momentum_top_n", 20)),
+            breakout_risk_pct_of_sleeve=float(raw.get("breakout_risk_pct_of_sleeve", 1.0)),
+            breakout_max_positions=int(raw.get("breakout_max_positions", 20)),
+            dip_risk_pct_of_sleeve=float(raw.get("dip_risk_pct_of_sleeve", 1.0)),
+            dip_max_positions=int(raw.get("dip_max_positions", 10)),
+            include_small_caps=bool(raw.get("include_small_caps", True)),
+            small_cap_min_price=float(raw.get("small_cap_min_price", 50.0)),
+            wait_for_resistance_break=bool(raw.get("wait_for_resistance_break", False)),
+            niche_enabled=bool(raw.get("niche_enabled", True)),
+            niche_top_n=int(raw.get("niche_top_n", 20)),
+            niche_min_price=float(raw.get("niche_min_price", 10.0)),
+            niche_near_high_pct=float(raw.get("niche_near_high_pct", 75.0)),
+            niche_max_jump_share=float(raw.get("niche_max_jump_share", 1.0)),
+        )
+        weights = (cfg.momentum_pct, cfg.breakout_pct, cfg.dip_pct, cfg.index_rsi2_pct)
+        if min(weights) < 0 or sum(weights) > 100.0001:
+            raise ConfigError(f"portfolio weights must be >= 0 and sum to at most 100 (got {weights})")
+        if cfg.momentum_top_n < 1 or cfg.dip_max_positions < 1 or cfg.breakout_max_positions < 1 or cfg.niche_top_n < 1:
+            raise ConfigError("portfolio.momentum_top_n, breakout_max_positions and dip_max_positions must be >= 1")
+        return cfg
+
+    @property
+    def breakout_risk_pct_of_account(self) -> float:
+        return self.breakout_pct / 100 * self.breakout_risk_pct_of_sleeve
+
+    @property
+    def dip_risk_pct_of_account(self) -> float:
+        return self.dip_pct / 100 * self.dip_risk_pct_of_sleeve
+
+
+TECHNICAL_FAMILIES = ("trend", "price_action", "sr", "momentum", "volume", "volatility", "candles", "mtf", "rs")
+
+
+@dataclass
+class TechnicalConfig:
+    """The multi-timeframe technical-analysis engine (ta/). Analysis only: it
+    describes and scores charts, it never sizes positions or allocates money.
+    weights: relative weight per indicator FAMILY in the 0-100 technical score
+    (missing families keep the defaults from ta/scoring.py; 0 switches one off)."""
+    enabled: bool = True
+    history_period: str = "5y"     # daily history per analysed stock (weekly/monthly need >= 2y)
+    hourly_top_n: int = 25         # how many names also get the 4H/1H analysis (slower: one intraday download each)
+    max_names: int = 60            # cap on names analysed per scan
+    weights: dict[str, float] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, raw: dict) -> "TechnicalConfig":
+        weights = {str(k): float(v) for k, v in (raw.get("weights") or {}).items()}
+        unknown = set(weights) - set(TECHNICAL_FAMILIES)
+        if unknown:
+            raise ConfigError(f"technical.weights: unknown families {sorted(unknown)}; allowed {list(TECHNICAL_FAMILIES)}")
+        if any(v < 0 for v in weights.values()):
+            raise ConfigError("technical.weights must be >= 0")
+        cfg = cls(enabled=bool(raw.get("enabled", True)), history_period=str(raw.get("history_period", "5y")),
+                  hourly_top_n=int(raw.get("hourly_top_n", 25)), max_names=int(raw.get("max_names", 60)),
+                  weights=weights)
+        if cfg.hourly_top_n < 0 or cfg.max_names < 1:
+            raise ConfigError("technical.hourly_top_n must be >= 0 and technical.max_names >= 1")
+        return cfg
+
+
+@dataclass
 class AppConfig:
     universe: UniverseConfig = field(default_factory=UniverseConfig)
     data: DataConfig = field(default_factory=DataConfig)
@@ -312,6 +473,8 @@ class AppConfig:
     earnings: EarningsConfig = field(default_factory=EarningsConfig)
     backtesting: BacktestConfig = field(default_factory=BacktestConfig)
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
+    portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
+    technical: TechnicalConfig = field(default_factory=TechnicalConfig)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "AppConfig":
@@ -324,6 +487,8 @@ class AppConfig:
             earnings=EarningsConfig.from_dict(raw.get("earnings", {})),
             backtesting=BacktestConfig.from_dict(raw.get("backtesting", {})),
             alerts=AlertsConfig.from_dict(raw.get("alerts", {})),
+            portfolio=PortfolioConfig.from_dict(raw.get("portfolio", {})),
+            technical=TechnicalConfig.from_dict(raw.get("technical", {})),
         )
 
 

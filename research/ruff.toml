@@ -1,0 +1,5 @@
+# Research scripts use single-letter panel names (O/H/L/C/V/A, I = indicators)
+# on purpose: they mirror the maths.
+
+[lint]
+extend-ignore = ["E741"]

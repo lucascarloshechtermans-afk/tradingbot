@@ -140,3 +140,24 @@ def test_get_earnings_dates_returns_empty_on_failure(monkeypatch):
     monkeypatch.setattr("yfinance.Ticker", raiser)
     provider = YFinanceProvider(cache=None, max_retries=1)
     assert provider.get_earnings_dates("FAKE") == []
+
+
+def test_daily_cache_missing_last_completed_session_is_stale():
+    import pandas as pd
+
+    from data.yfinance_provider import YFinanceProvider
+
+    old = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex([pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=10)]))
+    assert YFinanceProvider._missing_last_session(old, "1d", age_s=7200) is True
+    assert YFinanceProvider._missing_last_session(old, "1d", age_s=60) is False      # re-checked < 1h ago
+    assert YFinanceProvider._missing_last_session(old, "1h", age_s=7200) is False    # intraday: TTL only
+    from data.sessions import last_completed_session
+
+    session = last_completed_session().tz_localize("America/New_York")
+    fresh = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex([session]).tz_convert("UTC"))
+    now = pd.Timestamp.now(tz="America/New_York")
+    after_close = (now - (session + pd.Timedelta(hours=16, minutes=30))).total_seconds()
+    assert YFinanceProvider._missing_last_session(fresh, "1d", age_s=after_close) is False
+    # the same bar cached at noon of that session was a live, partial bar -> stale
+    during = (now - (session + pd.Timedelta(hours=12))).total_seconds()
+    assert YFinanceProvider._missing_last_session(fresh, "1d", age_s=during) is True
