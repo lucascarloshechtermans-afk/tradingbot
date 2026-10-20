@@ -219,6 +219,10 @@ def meta_breakout(df, p):
         size = np.where(pr >= th, 1.0, p["low_size"])
     else:
         entry = cand & model.take(f)
+    if p.get("vol_target"):  # equal-risk sizing: full size up to vol_target ATR%, scaled down above
+        a14 = ind.atr(df, 14)
+        vs = np.clip(p["vol_target"] / (a14 / df["close"] * 100), 0, 1).to_numpy()
+        size = vs if size is None else size * vs
     lo_m = df["low"].rolling(p["m"]).min().shift(1)
     exit_sig = (df["close"] < lo_m).to_numpy()
     a = ind.atr(df, 14)

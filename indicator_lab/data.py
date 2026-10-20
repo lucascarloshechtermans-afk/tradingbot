@@ -19,6 +19,14 @@ TRAIN_EXTRA = ["ADBE", "CRM", "ORCL", "CSCO", "PEP", "MRK", "PFE", "ABT", "TMO",
                "LOW", "TGT", "BAC", "WFC", "C", "MS", "AXP", "CVX", "COP", "SLB", "HON", "GE", "MMM", "UPS",
                "LMT", "RTX", "DE", "QCOM", "TXN", "AVGO", "MU", "IBM", "T", "VZ", "NEE", "DUK", "SO", "XLF",
                "XLK", "XLV", "XLI", "XLY", "XLP", "EFA", "EEM"]
+# Volatile growth/momentum names (never used before E34), incl. many that later collapsed
+# (PTON, ZM, SNAP, LYFT, NIO, RIVN, LCID, CCL, PLUG, UPST, ...) to limit survivorship bias.
+VOLATILE = ["TSLA", "SHOP", "ROKU", "TWLO", "ZM", "PTON", "SNAP", "PYPL", "BABA", "ETSY", "ENPH", "FSLR",
+            "PLUG", "RIOT", "MARA", "COIN", "PLTR", "U", "CRWD", "DDOG", "NET", "OKTA", "ZS", "MDB", "TTD",
+            "SNOW", "UBER", "LYFT", "DKNG", "W", "CHWY", "CVNA", "AFRM", "UPST", "SOFI", "RIVN", "LCID", "NIO",
+            "BIDU", "JD", "PDD", "MRNA", "REGN", "VRTX", "ILMN", "ALGN", "LRCX", "AMAT", "KLAC", "ON", "MRVL",
+            "SMCI", "ANET", "FTNT", "PANW", "NOW", "WDAY", "TEAM", "SPOT", "DOCU", "ABNB", "HOOD", "CCL",
+            "AAL", "UAL", "FCX", "CLF", "APA", "DVN", "OXY", "HAL"]
 DEV = CORE + DEV_EXTRA
 ALL = DEV + HOLDOUT
 

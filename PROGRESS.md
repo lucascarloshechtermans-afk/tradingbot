@@ -371,3 +371,33 @@ Untested / next ideas, roughly by expected value:
 3. **Earnings awareness** (the repo has `events/earnings.py`). Breakouts on earnings gaps vs other breakouts.
 4. Optional E22 mode in Pine: sell half at +4 ATR (smoother equity curve, slightly less return).
 5. A 25%-size "probe" position for breakouts the model rejects (E19: 1.28, just inside noise). Re-test on fresh data.
+
+---
+
+## Session 2 (evening 2026-10-20) — working through the "next ideas" list
+
+### E34 — 25%-size "probe" positions for breakouts the model rejects, re-tested on the fresh 48-ticker basket
+v3 vs v3+probe on TRAIN_EXTRA (unseen by v3), 5-slot Sharpe IS/OOS 0.61/0.45 vs 0.56/0.38, 10-slot 0.64/0.45 vs 0.64/0.51.
+**Rejected:** it does not hold up on fresh data. The +0.05 in E19 was noise, as suspected.
+
+### E35 — A watchlist of volatile growth/momentum names (`data.VOLATILE`, 71 tickers, never used before)
+TSLA, SHOP, ROKU, CRWD, PLTR, COIN, SMCI, MRNA, … deliberately including many that later crashed (PTON, ZM, SNAP, LYFT,
+NIO, RIVN, LCID, CCL, PLUG, UPST, AFRM, DOCU, …) to limit survivorship bias. Delisted names are still missing, so
+B&H here is flattered. B&H = equal weight over the names alive that day.
+
+| | 2015-20 Sharpe / CAGR / MaxDD | 2021-26 Sharpe / CAGR / MaxDD | PF IS/OOS | avg trade IS/OOS |
+|---|---|---|---|---|
+| B&H | 1.41 / 41.5% / −42% | 0.56 / 14.3% / **−56%** | – | – |
+| v1, 10 slots | 1.27 / 29.0% / −29% | 0.36 / 6.1% / −43% | 2.67 / 1.19 | +7.3% / +1.2% |
+| v2, 10 slots | 1.09 / 23.3% / −32% | 0.58 / 11.8% / −33% | 2.37 / 1.24 | +6.1% / +1.5% |
+| **v3, 10 slots** | 1.11 / 21.1% / −29% | **0.67 / 14.5% / −25%** | 2.63 / 1.25 | +6.3% / +1.5% |
+| v3, 5 slots | 0.72 / 14.7% / −34% | 0.36 / 6.4% / −43% | | |
+- **Verdict:** on volatile names in 2021-26, v3 matched B&H's return (14.5% vs 14.3%) with less than half the drawdown
+  (−25% vs −56%) and a better Sharpe. In the 2015-20 tech boom, B&H of (surviving) volatile names was unbeatable.
+  v3 > v2 > v1 holds again OOS. **With volatile names, use 10 slots, not 5:** concentration kills it.
+
+### E36 — Equal-risk sizing (size = min(1, target ATR% / ATR%))
+Target 2/3/4% ATR, VOLATILE 10-slot OOS Sharpe 0.69/0.68/0.68 (v3 0.67), with MaxDD −12/−17/−20% vs −25% and CAGR
+7.5/10.6/12.8% vs 14.5%. DEV/HOLD composite 1.20/1.23/1.25.
+**Verdict:** a pure risk dial. Drawdown and return scale down together, and the Sharpe is unchanged. Not a better
+signal, but useful advice: on very volatile names, size so that every position carries similar risk.
