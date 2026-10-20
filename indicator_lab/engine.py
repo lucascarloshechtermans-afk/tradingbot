@@ -28,6 +28,8 @@ class ExitRules:
     be_atr: float | None = None     # move stop to breakeven once high >= entry + k*ATR
     close_stop: bool = False        # stops only trigger on a CLOSE below them (fill next open)
     tight_after: float | None = None  # once high >= entry + k*ATR(signal), trail with tight_trail
+    fail_bars: int | None = None    # after this many bars, exit (next open) if close is still <= entry
+    entry_close: bool = False       # fill at the SIGNAL bar's close (market-on-close) instead of next open
     tight_trail: float | None = None
 
 
@@ -89,6 +91,8 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
                     stop = max(stop, ep)
                 if exit_sig[t] or (rules.close_stop and c[t] <= stop):
                     pend_exit = True
+                if rules.fail_bars is not None and t - ei >= rules.fail_bars and c[t] <= ep:
+                    pend_exit = True
             continue
 
         if pend_entry:
@@ -121,7 +125,22 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
             continue
 
         if entry[t] and t + 1 < n and np.isfinite(atr[t]):
-            pend_entry = True
+            if rules.entry_close:
+                ep = c[t]
+                sig_atr = atr[t]
+                stop = ep - rules.stop_atr * sig_atr if rules.stop_atr is not None else -np.inf
+                tgt = ep + rules.tgt_atr * sig_atr if rules.tgt_atr is not None else np.inf
+                hh = c[t]
+                if rules.trail_atr is not None:
+                    stop = max(stop, hh - rules.trail_atr * sig_atr)
+                ei = t
+                w = 1.0 if size is None else float(np.clip(size[t], 0.0, 1.0))
+                ret[t] = w * (1 / (1 + cost) - 1)
+                in_pos = True
+                if exit_sig[t]:
+                    pend_exit = True
+            else:
+                pend_entry = True
 
     return ret, trades
 

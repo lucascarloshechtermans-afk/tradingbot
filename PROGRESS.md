@@ -258,3 +258,22 @@ Base without SMA200 / with SMA50 / SMA100 / SMA150 (keep 0.5 and 0.75): 1.08–1
 - **Verdict:** no improvement (not adopted), but **strong evidence that v3's model is real.** A model fitted only on
   48 completely different tickers works just as well on the DEV and HOLDOUT tickers. It learned something general
   about breakouts, not quirks of the DEV names.
+
+### E24 — Can the model learn the strong-close filter itself? Stricter labels?
+- v1 base (no IBS) + model trained on DEV+EXTRA, keep 0.4/0.5/0.6: 1.24/1.17/1.11, OOS 0.87–0.93. Worse OOS than v3.
+- Label "trade made > 1% / > 3%" instead of > 0: 1.18/1.14. **Rejected.** The hand IBS filter + the "> 0" label stay.
+
+### E25 — Mean-reversion signal (RSI2 dip in uptrend) with its own quality model, alone and with v3
+- RSI2 < 10 + SMA200, exit close > SMA5: unfiltered composite 0.68. With a model (keep 0.3/0.5/0.7, DEV+EXTRA):
+  0.73/0.70/0.73. RSI2 < 20: 0.76. The model barely helps mean reversion.
+- v3 + MR in shared slots: 1.11 (MR top 30%) / 1.13 (top 70%). CAGR up to 16–20%, but MaxDD up to −24/−26% and a
+  lower slot Sharpe. **Rejected** (noted as a "more return, more risk" mode).
+
+### E26 — Dead-trade exit and the weekly timeframe
+- Exit if still ≤ the entry price after 5/10/15/20 bars: 1.03/1.03/1.12/1.14. Worse. Breakouts often need time.
+- v2 logic on WEEKLY bars (signal on the weekly close, daily ATR trail): 10/10 1.15→0.85 · 10/10 + IBS 0.82 ·
+  4/4 + IBS 1.05 · 4/4 without trail 0.89 (79-bar holds) · 10/5 trail 6 0.71. **Daily stays better.**
+
+### E27 — Execution: buy at the signal day's close (MOC order) instead of the next open
+v3 MOC 1.19 vs next-open 1.23 (OOS 1.07 vs 1.06). No difference. The night after a breakout is not systematically
+positive. **Practical takeaway:** placing the buy at the next morning's open is fine; no need to trade at 15:55.

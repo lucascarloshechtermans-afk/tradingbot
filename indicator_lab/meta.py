@@ -47,6 +47,9 @@ def feature_frame(df: pd.DataFrame) -> pd.DataFrame:
         "winter": pd.Series(df.index.month.isin([11, 12, 1, 2, 3, 4]).astype(float), index=df.index),
         "spy_vol20": spy.pct_change().rolling(20).std() * np.sqrt(252),
         "vol_ratio": c.pct_change().rolling(20).std() / c.pct_change().rolling(120).std(),
+        "rsi2": ind.rsi(c, 2),
+        "roc5": ind.roc(c, 5),
+        "ext200": (c - ind.sma(c, 200)) / a,
     })
 
 
@@ -125,7 +128,7 @@ class YearlyModels:
     """Per test year: standardization, coefficients and the probability threshold."""
 
     def __init__(self, table: pd.DataFrame, feats=FEATS, keep: float = 0.5, l2: float = 10.0,
-                 first_year: int = 2015, last_year: int = 2026, min_train: int = 200):
+                 first_year: int = 2015, last_year: int = 2026, min_train: int = 200, label_min: float = 0.0):
         self.feats = feats
         self.models = {}
         for y in range(first_year, last_year + 1):
@@ -135,7 +138,7 @@ class YearlyModels:
             X = tr[feats].to_numpy(float)
             mu, sd = X.mean(0), X.std(0) + 1e-9
             Z = (X - mu) / sd
-            yv = (tr["ret"].to_numpy() > 0).astype(float)
+            yv = (tr["ret"].to_numpy() > label_min).astype(float)
             w, b = fit_logreg(Z, yv, l2=l2)
             p = 1 / (1 + np.exp(-(Z @ w + b)))
             thr = np.quantile(p, 1 - keep)
@@ -179,13 +182,14 @@ def meta_breakout(df, p):
     tl = p.get("trend_len", 200)
     train = p.get("train", "dev")
     key = (p["n"], p["m"], p["trail"], p.get("keep", 0.5), p.get("l2", 10.0), tuple(p.get("feats", FEATS)), ib, tl,
-           train)
+           train, p.get("label_min", 0.0))
     if key not in _MODELS:
         tickers = data.DEV + (data.TRAIN_EXTRA if train == "dev+extra" else [])
         if train == "extra":
             tickers = data.TRAIN_EXTRA
         tab = candidate_table(tickers, p["n"], p["m"], p["trail"], ib, tl)
-        _MODELS[key] = YearlyModels(tab, feats=list(key[5]), keep=key[3], l2=key[4])
+        _MODELS[key] = YearlyModels(tab, feats=list(key[5]), keep=key[3], l2=key[4],
+                                    label_min=p.get("label_min", 0.0))
     model = _MODELS[key]
     f = feature_frame(df)
     cand = base_candidates(df, p["n"], ib, tl).to_numpy()
@@ -199,7 +203,8 @@ def meta_breakout(df, p):
     lo_m = df["low"].rolling(p["m"]).min().shift(1)
     exit_sig = (df["close"] < lo_m).to_numpy()
     a = ind.atr(df, 14)
-    rules = ExitRules(trail_atr=p["trail"], tgt_atr=p.get("tgt"), stop_atr=p.get("stop"))
+    rules = ExitRules(trail_atr=p["trail"], tgt_atr=p.get("tgt"), stop_atr=p.get("stop"), fail_bars=p.get("fail_bars"),
+                      entry_close=bool(p.get("entry_close")))
     return entry, exit_sig, rules, a.to_numpy(), size
 
 
@@ -211,3 +216,44 @@ def export_final(n=20, m=20, trail=4.0, ibs_min=0.7, keep=0.75, l2=100.0, year=2
     mu, sd, w, b, thr = ym.models[year]
     return {"feats": FEATS, "mu": mu.tolist(), "sd": sd.tolist(), "w": w.tolist(), "b": float(b),
             "thr": float(thr), "logit_thr": float(np.log(thr / (1 - thr))), "n_train": len(tab)}
+
+
+# ---------------------------------------------------------------------------------
+# Mean-reversion variant: RSI(2) dip in an uptrend, exit when close > SMA(x).
+
+MR_FEATS = FEATS + ["rsi2", "roc5", "ext200"]
+
+
+def mr_parts(df, lo=10.0, exit_ma=5, trend_len=200):
+    c = df["close"]
+    cand = (ind.rsi(c, 2) < lo) & (c > ind.sma(c, trend_len))
+    exit_sig = c > ind.sma(c, exit_ma)
+    return cand.to_numpy(), exit_sig.to_numpy()
+
+
+def mr_table(tickers, lo, exit_ma, stop):
+    rows = []
+    rules = ExitRules(stop_atr=stop)
+    for t in tickers:
+        df = get(t)
+        f = feature_frame(df)
+        cand, exit_sig = mr_parts(df, lo, exit_ma)
+        o, h, low, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
+        a = ind.atr(df, 14).to_numpy()
+        for i in np.flatnonzero(cand):
+            r, xi = single_trade(o, h, low, c, a, exit_sig, i, rules)
+            rows.append({"ticker": t, "date": df.index[i], "exit_date": df.index[xi], "ret": r, **f.iloc[i].to_dict()})
+    return pd.DataFrame(rows).dropna()
+
+
+def meta_mr(df, p):
+    lo, xm, stop = p.get("lo", 10.0), p.get("exit_ma", 5), p.get("stop")
+    train = p.get("train", "dev")
+    key = ("mr", lo, xm, stop, p.get("keep", 0.5), p.get("l2", 100.0), train)
+    if key not in _MODELS:
+        tickers = data.DEV + (data.TRAIN_EXTRA if train == "dev+extra" else [])
+        _MODELS[key] = YearlyModels(mr_table(tickers, lo, xm, stop), feats=MR_FEATS, keep=key[4], l2=key[5])
+    f = feature_frame(df)
+    cand, exit_sig = mr_parts(df, lo, xm)
+    entry = cand & _MODELS[key].take(f) if p.get("keep", 0.5) < 1 else cand
+    return entry, exit_sig, ExitRules(stop_atr=stop), ind.atr(df, 14).to_numpy(), None

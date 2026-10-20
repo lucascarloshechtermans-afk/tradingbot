@@ -34,3 +34,12 @@ def test_stop_beats_target_when_both_inside_one_bar():
     entry = np.array([True, False, False])
     _, trades = simulate(df, entry, None, np.ones(3), ExitRules(stop_atr=1.0, tgt_atr=1.0), cost=0.0)
     assert trades[0]["reason"] == "stop" and trades[0]["exit"] == 9
+
+
+def test_entry_at_signal_close_accrues_from_next_bar():
+    df = _df([10, 11, 12, 13], [10, 12, 13, 14], [10, 10.5, 11.5, 12.5], [10, 11, 12, 13])
+    entry = np.array([True, False, False, False])
+    exit_sig = np.array([False, True, False, False])
+    r, trades = simulate(df, entry, exit_sig, np.ones(4), ExitRules(entry_close=True), cost=0.0)
+    assert trades[0]["entry"] == 10 and trades[0]["exit"] == 12  # bought bar0 close, sold bar2 open
+    assert np.isclose(np.prod(1 + r) - 1, 0.2)

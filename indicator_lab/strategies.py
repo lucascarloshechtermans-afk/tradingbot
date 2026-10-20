@@ -251,6 +251,32 @@ def family(df, p):
     return cond.to_numpy(), (c < lo).to_numpy(), rules, b["atr"].to_numpy(), None
 
 
+def weekly_breakout(df, p):
+    """v2 logic on WEEKLY bars: weekly close above the prior n-week high (and above the
+    40-week SMA, the weekly 200-day), strong weekly close; exit on a weekly close below the
+    prior m-week low or the daily ATR trail. Signals land on the week's last daily bar."""
+    b = base(df)
+    w = df.resample("W-FRI").agg({"open": "first", "high": "max", "low": "min", "close": "last",
+                                   "volume": "sum"}).dropna()
+    wc = w["close"]
+    hi = w["high"].rolling(p["n"]).max().shift(1)
+    lo = w["low"].rolling(p["m"]).min().shift(1)
+    cond = (wc > hi) & (wc > ind.sma(wc, 40)) & (ind.ibs(w) >= p.get("ibs_min", 0.0))
+    ex = wc < lo
+    # map each weekly bar to the last daily bar of that week
+    last_day = df.index.to_series().groupby(df.index.to_period("W-FRI")).max()
+    wk_to_day = pd.Series(last_day.values, index=last_day.index.to_timestamp(how="end").normalize())
+    entry = pd.Series(False, index=df.index)
+    exit_sig = pd.Series(False, index=df.index)
+    for wd, d in wk_to_day.items():
+        key = w.index[w.index.normalize() == wd.normalize()]
+        if len(key):
+            entry[d] = bool(cond.get(key[0], False))
+            exit_sig[d] = bool(ex.get(key[0], False))
+    rules = ExitRules(trail_atr=p.get("trail"))
+    return entry.to_numpy(), exit_sig.to_numpy(), rules, b["atr"].to_numpy(), None
+
+
 # (strategy, params, numeric params to perturb in the robustness check)
 V2 = (breakout, {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7}, ["n", "m", "trail", "ibs_min"])
 
