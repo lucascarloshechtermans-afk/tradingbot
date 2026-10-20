@@ -347,3 +347,27 @@ ATR% high 1.07/0.96 · RS63 high 1.09/0.95. B&H (79 names): 0.92/1.11, MaxDD −
   No trail (20-day-low only): 0.94. 40-day-low only: 0.93 (124-bar holds).
 - **Verdict:** keep v3's two exits. The trail does most of the work, and the 20-day-low exit makes it less sensitive
   to the trail setting.
+
+### E33 — Realistic cash: idle capital earns the 3-month T-bill rate (^IRX)
+v3 5-slot (seed 0), with on average ~70% of the slots occupied. CAGR without → with T-bill interest on idle cash:
+DEV IS 14.6% → 14.9% · DEV OOS 15.0% → 16.0% · HOLD IS 16.8% → 17.1% · HOLD OOS 12.4% → 13.4%.
+Worth ~+0.3%/yr when rates were ~0 (2015-20) and ~+1%/yr in 2021-26. It narrows, but does not close, the raw-return
+gap to B&H (DEV OOS 21.4%). Reporting only; the protocol keeps cash at 0% (conservative).
+
+---
+
+## Status after this session & ideas not yet tested
+
+After E18 (v3), 15 more idea families (E19–E33) produced nothing that beat v3 by more than the ±0.04 noise band on
+the composite **and** held up in the neighbour checks. With ~35 families and ~250 variants tested on the same
+2015-2026 data, the risk that the next "winner" is luck (data-snooping) keeps rising, so new wins need extra-strict
+proof. The fresh-universe check (E29) is the best tool for that: it confirmed v3 > v2 > v1, but at a much lower absolute level.
+
+Untested / next ideas, roughly by expected value:
+1. **Run the indicator on a larger watchlist of volatile momentum names** (e.g. 100+ stocks with ATR% > 2.5) with
+   10 slots. E30 suggests that is where the edge lives. It needs a point-in-time universe to avoid survivorship bias.
+2. **Short side / bear-market mode** (mirror breakdowns, or move to T-bills/an inverse ETF when SPY < SMA200).
+   The engine is long-only today, so this needs a `side` flag. Expected value is modest in a 2015-26 bull sample.
+3. **Earnings awareness** (the repo has `events/earnings.py`). Breakouts on earnings gaps vs other breakouts.
+4. Optional E22 mode in Pine: sell half at +4 ATR (smoother equity curve, slightly less return).
+5. A 25%-size "probe" position for breakouts the model rejects (E19: 1.28, just inside noise). Re-test on fresh data.
