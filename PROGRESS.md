@@ -1,26 +1,31 @@
 # PROGRESS — swing buy/sell indicator research
 
-## ⭐ CURRENT BEST VERSION: v2 — Donchian 20/20 breakout + strong close + 4×ATR trail
+## ⭐ CURRENT BEST VERSION: v3 — v2 breakout + logistic "breakout quality" model (meta-labeling)
 
-- **Rule:** BUY when the close is above the highest high of the prior 20 days AND above the 200-day SMA AND the
-  close is in the top 30% of the day's range (IBS ≥ 0.7, a "strong close"). SELL when the close is below the
-  lowest low of the prior 20 days (exit at the next open), or when the chandelier trailing stop (highest high
-  since entry − 4×ATR14) is touched.
-- **Code:** `indicator_lab/strategies.py::breakout {"n":20,"m":20,"trail":4.0,"ibs_min":0.7}`
-- **Pine (TradingView):** `indicator_lab/pine/swing_v2_strong_close.pine`
+- **Rule:** the v2 candidate (close > prior 20-day high, close > SMA200, close in the top 30% of the day's range) is
+  only taken when a small logistic-regression model scores it in the top 75% of breakout quality. The model uses 17
+  features known at that close. The most stable ones: higher relative volume is better; a strong SPY over the last
+  3 months, an already "smooth" 20-day trend (efficiency ratio), a large 6-month gain and wide Bollinger bands are
+  worse. SELL is unchanged from v2: close below the prior 20-day low (exit next open), or the 4×ATR chandelier stop.
+- **No look-ahead in the test:** the model was refit before every calendar year only on breakouts whose trades had
+  already closed, using DEV tickers only. Every year scored below is therefore unseen by the model that traded it.
+- **Code:** `indicator_lab/meta.py::meta_breakout {"n":20,"m":20,"trail":4.0,"ibs_min":0.7,"keep":0.75,"l2":100}`
+- **Pine (TradingView):** `indicator_lab/pine/swing_v3_quality_model.pine` holds the latest fit, with coefficients
+  in `v3_model.json`. It has a switch to fall back to v2 and an orange ✕ for breakouts the model rejected.
 - **Reproduce:** `python -m indicator_lab.run best`
 
 | Cell (5-slot portfolio) | Sharpe | CAGR | MaxDD | Trades | Win% | PF | Avg hold |
 |---|---|---|---|---|---|---|---|
-| DEV 2015-20 (in-sample) | 1.33 | 16.4% | -13.9% | 306 | 51% | 2.46 | 35 d |
-| DEV 2021-26 (OOS) | 1.16 | 14.8% | -14.9% | 264 | 49% | 2.23 | 35 d |
-| HOLDOUT 2015-20 | 1.36 | 16.9% | -12.7% | 275 | 47% | 2.29 | 36 d |
-| HOLDOUT 2021-26 (OOS) | 0.88 | 12.0% | -19.1% | 287 | 42% | 1.48 | 28 d |
+| DEV 2015-20 | 1.40 | 15.9% | -9.6% | 273 | 52% | 2.76 | 36 d |
+| DEV 2021-26 | **1.23** | 15.9% | -15.4% | 260 | 49% | 2.23 | 35 d |
+| HOLDOUT 2015-20 | 1.42 | 16.4% | -14.5% | 250 | 48% | 2.57 | 36 d |
+| HOLDOUT 2021-26 | 0.88 | 12.2% | -18.0% | 276 | 43% | 1.58 | 28 d |
 | **Buy & hold** (equal weight, DEV OOS / HOLD OOS) | 1.18 / 1.06 | 21.4% / 16.3% | -26.5% / -24.2% | – | – | – | – |
 
-Composite (mean 5-slot Sharpe over 4 cells) **1.18** (v1 1.03, baseline v0 0.15), worst cell 0.88, OOS 1.02.
-**Honest read:** v2 roughly matches buy & hold on Sharpe on the DEV tickers OOS (1.16 vs 1.18) with about half the
-drawdown and ~45% time in the market. It still trails B&H on raw return and on the holdout tickers OOS.
+Composite **1.23** (v2 1.18, v1 1.03, baseline v0 0.15). Worst cell 0.88, OOS 1.06, sleeves Sharpe 1.16 (v2 1.06).
+**Honest read:** on the DEV tickers in 2021-26, v3 now edges buy & hold on Sharpe (1.23 vs 1.18) with about 60% of
+its drawdown, while invested ~44% of the time. It still makes less raw return than B&H (15.9% vs 21.4% CAGR), and on
+the unseen HOLDOUT tickers in 2021-26 it trails B&H (0.88 vs 1.06). The step from v2 to v3 is real but modest.
 
 ---
 
@@ -172,3 +177,31 @@ close > upper BB 0.95/1.03 · ROC20 crosses 10% 0.93/0.80.
 - "Fresh" breakout (no breakout in the prior 20/40 bars): 0.90/0.83. Continuation only (a breakout in the prior 10/20 bars): 0.87/0.99.
 - Entries only Nov–Apr: 1.00. Only May–Oct: 0.80. Skip Sep–Oct: 1.13 (sleeves 0.98). The seasonality effect is real
   (May–Oct is clearly weaker), but excluding months removes trades and does not lift the composite. Not adopted.
+
+### E17 — Meta-labeling: a logistic model decides which breakouts to take (walk-forward)
+Setup: every candidate bar of the base breakout gets 17 features (IBS, log RVOL, ROC21/63/126, ATR%, RSI14,
+extension over SMA50, RS63 vs SPY, distance to the 52-week high, Bollinger-width percentile, gap, SPY > SMA200,
+SPY ROC63, range/ATR, breakout size/ATR, ER20). The label is whether the trade with the base exits made money. An L2
+logistic regression is refit before each year on DEV candidates whose trade had already closed. A candidate is taken
+if its probability is in the top `keep` share of that year's training predictions. Numpy only; Pine-portable.
+- Univariate first look (2013-20 candidates, avg return by quintile): ATR% top quintile +3.6% vs +1.3%; RSI14 low
+  better; extension low better; ER20 high **bad** (+0.1%); SPY ROC63 low (after market dips) **good** (+3.9%).
+- On the v1 base (no IBS): keep 0.3/0.5/0.7 → 1.08/1.13/1.04. l2 1/100 → 1.16/1.18. The sleeves Sharpe rose to 1.15,
+  but OOS fell (0.75–0.85). Small 6-feature model: 1.09–1.10. **Not better than v2.**
+
+### E18 — Meta-labeling on top of v2 (IBS ≥ 0.7 base) → **NEW BEST v3**
+- keep 0.6/0.7/0.75/0.8/0.9 (l2 100): composite 1.23/1.26/1.23/1.25/1.20, sleeves 1.13/1.16/1.16/1.15/1.12.
+  l2 30/100/300/1000 (keep 0.75): 1.21/1.23/1.20/1.20. **Every setting beats v2** (1.18, sleeves 1.06). Plateau, no spike.
+- Neighbours of n/m/trail/IBS with the model on vs v2's same neighbours: n16 1.06 vs 0.99 · n24 1.29 vs 1.20 ·
+  m16 1.20 vs 1.16 · m24 1.31 vs 1.12 · trail 3.2 0.95 vs 0.94 · trail 4.8 1.07 vs 1.03. The model layer helps in
+  every variant. ✅
+- Sleeves robustness (DEV 2015-26, base 1.22): all ±20% nudges 1.02–1.23 (only trail 3.2 drops, as for v1/v2). ✅
+- Coefficient stability across the 13 yearly refits: rvol (+), spy_roc63 (−), er20 (−) keep their sign every year;
+  bbw_pct (−), rs63 (+), rsi14 (+) almost every year; ibs, gap, range_atr, roc21/63 flip sign (noise, small weights).
+- 4-feature model with only sign-stable features (rvol, spy_roc63, er20, bbw_pct): 1.18–1.23, sleeves 1.09–1.16.
+  Close to, but slightly below, the full model. Kept as a documented simpler fallback.
+- **Interpretation:** take breakouts with volume behind them that come after the market has been weak and after a
+  choppy, coiled period. Skip breakouts that are the n-th leg of an already smooth, extended run during a hot market.
+- **Verdict:** new best v3 (keep 0.75, l2 100, the centre of the plateau). Pine port generated from the final fit
+  (`export_final`, trained on all 3656 DEV candidates). Note: TradingView's SPY is not dividend-adjusted unless that
+  chart setting is on, so the market features there differ marginally from the backtest.

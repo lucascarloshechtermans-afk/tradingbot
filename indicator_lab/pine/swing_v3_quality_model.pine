@@ -1,0 +1,114 @@
+//@version=5
+// Swing buy/sell indicator v3 — v2 (Donchian 20/20 breakout + strong close + 4xATR trail)
+// filtered by a logistic "breakout quality" model (meta-labeling).
+// Port of indicator_lab/meta.py::meta_breakout {"n":20,"m":20,"trail":4.0,"ibs_min":0.7,"keep":0.75,"l2":100}.
+// Model coefficients = indicator_lab/pine/v3_model.json (trained on 3656 DEV breakouts 2013-2026).
+// In the backtests the model was refit every year on past data only; this file holds the latest fit.
+// BUY = signal at this close, enter next open. SELL = close below prior m-day low (exit next open)
+// or trailing stop touched (exit at stop). Daily chart. Not financial advice.
+indicator("Swing v3 – breakout + quality model + ATR trail", overlay = true)
+
+n         = input.int(20, "Breakout lookback (days)", minval = 2)
+m         = input.int(20, "Exit lookback (days)", minval = 2)
+trailMult = input.float(4.0, "Trail (x ATR14)", minval = 0.5, step = 0.25)
+trendLen  = input.int(200, "Trend filter SMA", minval = 10)
+ibsMin    = input.float(0.7, "Min close position in day range (0-1)", minval = 0, maxval = 1, step = 0.05)
+useModel  = input.bool(true, "Use quality model (v3); off = v2")
+thrAdj    = input.float(0.0, "Quality threshold shift (logit, + = stricter)", step = 0.1)
+spySym    = input.symbol("AMEX:SPY", "Market reference")
+
+f_z(x, mu, sd) => nz((x - mu) / sd)
+
+atr     = ta.atr(14)
+trendMa = ta.sma(close, trendLen)
+hiN     = ta.highest(high, n)[1]
+loM     = ta.lowest(low, m)[1]
+ibs     = high > low ? (close - low) / (high - low) : 0.5
+
+// ---- model features (all known at this bar's close) ----
+spy      = request.security(spySym, "D", close)
+volRatio = volume / ta.sma(volume, 50)
+rvol     = math.log(math.max(volRatio, 0.05))
+roc21    = close / close[21] - 1
+roc63    = close / close[63] - 1
+roc126   = close / close[126] - 1
+atrPct   = atr / close * 100
+rsi14    = ta.rsi(close, 14)
+ext50    = (close - ta.sma(close, 50)) / atr
+spyRoc63 = spy / spy[63] - 1
+rs63     = roc63 - spyRoc63
+dist52   = close / ta.highest(high, 252) - 1
+bbSd     = ta.stdev(close, 20)
+bbw      = 4 * bbSd / ta.sma(close, 20)
+bbwPct   = ta.percentrank(bbw, 252) / 100
+gapAtr   = (open - close[1]) / atr[1]
+spyUp    = spy > ta.sma(spy, 200) ? 1.0 : 0.0
+rangeAtr = (high - low) / atr[1]
+brkAtr   = (close - ta.highest(high, 20)[1]) / atr
+er20     = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 20)
+
+score = -0.239166
+     + -0.013667 * f_z(ibs, 0.882077, 0.084629)
+     + +0.076333 * f_z(rvol, 0.004562, 0.362269)
+     + +0.016040 * f_z(roc21, 0.077442, 0.060907)
+     + +0.012175 * f_z(roc63, 0.126248, 0.125601)
+     + -0.138152 * f_z(roc126, 0.194296, 0.202241)
+     + +0.057250 * f_z(atrPct, 1.628976, 0.716738)
+     + +0.032266 * f_z(rsi14, 69.835640, 6.166100)
+     + -0.019922 * f_z(ext50, 4.170886, 1.825834)
+     + +0.083876 * f_z(rs63, 0.066311, 0.118742)
+     + -0.026856 * f_z(dist52, -0.021334, 0.041406)
+     + -0.045780 * f_z(bbwPct, 0.542970, 0.289047)
+     + -0.012404 * f_z(gapAtr, 0.224549, 0.546279)
+     + -0.007950 * f_z(spyUp, 0.958425, 0.199617)
+     + -0.168088 * f_z(spyRoc63, 0.059937, 0.050155)
+     + -0.014471 * f_z(rangeAtr, 1.052503, 0.485749)
+     + +0.053219 * f_z(brkAtr, 0.488135, 0.464076)
+     + -0.137207 * f_z(er20, 0.391360, 0.180358)
+quality = 1 / (1 + math.exp(-score))
+qualityOk = not useModel or score >= -0.436348 + thrAdj
+
+// state: 0 flat, 1 entry pending (fills next open), 2 long, 3 exit pending
+var int   state = 0
+var float hh    = na
+var float stop  = na
+buySig  = false
+sellSig = false
+exited  = false  // the engine never re-enters on the bar it exits
+
+if state == 3
+    state := 0
+    stop := na
+    exited := true
+if state == 1
+    state := 2
+    hh := high
+    stop := hh - trailMult * atr
+    if close < loM
+        sellSig := true
+        state := 3
+else if state == 2
+    if low <= stop
+        sellSig := true
+        state := 0
+        stop := na
+    else
+        hh := math.max(hh, high)
+        stop := math.max(stop, hh - trailMult * atr)
+        if close < loM
+            sellSig := true
+            state := 3
+if state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and qualityOk and not sellSig and not exited
+    buySig := true
+    state := 1
+
+plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
+plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
+plotshape(buySig, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+plotshape(sellSig, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
+// breakouts the model rejected, for context
+plotshape(useModel and state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and not qualityOk and not sellSig and not exited,
+     "Rejected breakout", shape.xcross, location.belowbar, color.new(color.orange, 30), size = size.tiny)
+plot(quality, "Breakout quality (0-1)", display = display.data_window)
+alertcondition(buySig, "Swing v3 BUY", "Swing v3 BUY on {{ticker}} at {{close}}")
+alertcondition(sellSig, "Swing v3 SELL", "Swing v3 SELL on {{ticker}} at {{close}}")
