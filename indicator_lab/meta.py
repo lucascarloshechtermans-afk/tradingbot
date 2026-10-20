@@ -21,6 +21,22 @@ FEATS = ["ibs", "rvol", "roc21", "roc63", "roc126", "atr_pct", "rsi14", "ext50",
          "bbw_pct", "gap", "spy_up", "spy_roc63", "range_atr", "brk_atr", "er20"]
 
 
+_BREADTH: dict = {}
+
+
+def market_breadth() -> pd.DataFrame:
+    """Share of TRAIN_EXTRA tickers (never scored) above their SMA50 / SMA200, plus VIX."""
+    if "b" not in _BREADTH:
+        cl = pd.concat({t: get(t)["close"] for t in data.TRAIN_EXTRA}, axis=1)
+        above50 = (cl > cl.rolling(50).mean()).where(cl.rolling(50).mean().notna()).mean(axis=1)
+        above200 = (cl > cl.rolling(200).mean()).where(cl.rolling(200).mean().notna()).mean(axis=1)
+        vix = get("^VIX")["close"]
+        _BREADTH["b"] = pd.DataFrame({"breadth50": above50, "breadth200": above200,
+                                      "vix": vix.reindex(cl.index).ffill(),
+                                      "vix_rel": (vix / vix.rolling(50).mean()).reindex(cl.index).ffill()})
+    return _BREADTH["b"]
+
+
 def feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     c = df["close"]
     a = ind.atr(df, 14)
@@ -50,7 +66,7 @@ def feature_frame(df: pd.DataFrame) -> pd.DataFrame:
         "rsi2": ind.rsi(c, 2),
         "roc5": ind.roc(c, 5),
         "ext200": (c - ind.sma(c, 200)) / a,
-    })
+    }).join(market_breadth().reindex(df.index).ffill())
 
 
 def base_candidates(df: pd.DataFrame, n: int = 20, ibs_min: float = 0.0, trend_len: int | None = 200) -> pd.Series:
@@ -193,6 +209,9 @@ def meta_breakout(df, p):
     model = _MODELS[key]
     f = feature_frame(df)
     cand = base_candidates(df, p["n"], ib, tl).to_numpy()
+    if p.get("univ_atr"):  # only "lively" names: trailing 1-year mean ATR% above a floor
+        a14 = ind.atr(df, 14)
+        cand = cand & ((a14 / df["close"] * 100).rolling(252, min_periods=200).mean() >= p["univ_atr"]).to_numpy()
     size = None
     if p.get("low_size") is not None:  # take every candidate; below-threshold ones at reduced size
         pr, th = model.prob(f)

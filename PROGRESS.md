@@ -27,6 +27,14 @@ Composite **1.23** (v2 1.18, v1 1.03, baseline v0 0.15). Worst cell 0.88, OOS 1.
 its drawdown, while invested ~44% of the time. It still makes less raw return than B&H (15.9% vs 21.4% CAGR), and on
 the unseen HOLDOUT tickers in 2021-26 it trails B&H (0.88 vs 1.06). The step from v2 to v3 is real but modest.
 
+> ⚠️ **Most important caveat (E29):** on a third, completely fresh basket of 48 large caps and sector ETFs
+> (`TRAIN_EXTRA`, never used to pick or tune v1–v3), every version is much weaker than on DEV/HOLDOUT.
+> v3 5-slot Sharpe is 0.61 (2015-20) / 0.45 (2021-26) vs B&H 0.75 / 1.03, and CAGR 5–7% vs 13–15%. The ranking
+> v3 > v2 > v1 still holds there, so the improvements are real, but **the absolute edge depends heavily on what you
+> point it at.** It works best on volatile, trending names (NVDA, AMD, MU, GE, META, CAT, …) and poorly on slow
+> defensives, utilities, staples and bonds. In 2021-26 the average trade was +3.6% in the most volatile quarter of
+> tickers vs +0.4–0.9% in the other three. Use it on a watchlist of lively growth/momentum stocks, not on everything.
+
 ---
 
 ## Test protocol (fixed, so every idea is judged the same way)
@@ -277,3 +285,30 @@ Base without SMA200 / with SMA50 / SMA100 / SMA150 (keep 0.5 and 0.75): 1.08–1
 ### E27 — Execution: buy at the signal day's close (MOC order) instead of the next open
 v3 MOC 1.19 vs next-open 1.23 (OOS 1.07 vs 1.06). No difference. The night after a breakout is not systematically
 positive. **Practical takeaway:** placing the buy at the next morning's open is fine; no need to trade at 15:55.
+
+
+### E28 — Market breadth and VIX as model features
+Share of TRAIN_EXTRA names above SMA50/SMA200 (no holdout data used), VIX level, VIX / its 50-day mean, all five +
+winter: composite 1.20/1.22/1.24/1.17/1.15/1.12 (v3 1.23). **No gain.** The model looks saturated; its SPY-ROC63
+feature already captures the market state.
+
+### E29 — A third, fresh test universe: the 48 TRAIN_EXTRA tickers (never used to select or tune v1–v3)
+| 5-slot | 2015-20 Sharpe / CAGR / DD | 2021-26 Sharpe / CAGR / DD | Sleeves IS/OOS | PF IS/OOS |
+|---|---|---|---|---|
+| v1 | 0.56 / 6.4% / −18.2% | 0.27 / 2.9% / −22.2% | 0.69 / 0.54 | 1.56 / 1.29 |
+| v2 | 0.56 / 6.3% / −17.4% | 0.36 / 4.3% / −20.6% | 0.69 / 0.55 | 1.57 / 1.30 |
+| v3 | 0.61 / 6.9% / −16.2% | 0.45 / 5.5% / −19.2% | 0.75 / 0.54 | 1.60 / 1.29 |
+| B&H | 0.75 / 13.5% / −35.3% | 1.03 / 15.1% / −19.4% | – | – |
+- **Verdict:** v3 > v2 > v1 holds on fresh tickers, so the progress generalizes. But the indicator clearly loses to
+  buy & hold on a broad, defensive-heavy large-cap basket. This is the most important limitation found.
+
+### E30 — Why? Ticker volatility predicts the edge → a volatility universe filter
+- Across all 79 tickers, the correlation between a ticker's 2013-20 mean ATR% and its 2021-26 v3 average trade is
+  **0.58**. By ATR quartile, the 2021-26 average trade was +0.37 / +0.75 / +0.88 / **+3.59%**, and the same monotonic
+  pattern already shows in-sample (+0.90 / 0.75 / 2.01 / 4.36%). Worst names: NKE, SBUX, TLT, TXN, UPS, VZ, XLU.
+  Best: NVDA, AMD, MU, GE, META, SLB, CAT, ORCL, AAPL, COST.
+- Filter (no look-ahead): trade a ticker only while its trailing 252-day mean ATR% ≥ 1.5/1.75/2.0/2.25/2.5%:
+  composite 1.14/1.06/1.13/1.03/0.98. On EXTRA OOS: 0.48/0.61/0.48/0.37/0.76 (v3 0.45).
+- **Verdict:** a higher edge per trade, but not a better portfolio. Fewer names trade, so cash sits idle and
+  concentration rises. Not adopted as a rule. **Adopted as usage advice:** run the indicator on a watchlist of
+  volatile momentum names (the original scanner's `min_atr_pct` idea points the same way).
