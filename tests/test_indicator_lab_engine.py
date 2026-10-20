@@ -43,3 +43,14 @@ def test_entry_at_signal_close_accrues_from_next_bar():
     r, trades = simulate(df, entry, exit_sig, np.ones(4), ExitRules(entry_close=True), cost=0.0)
     assert trades[0]["entry"] == 10 and trades[0]["exit"] == 12  # bought bar0 close, sold bar2 open
     assert np.isclose(np.prod(1 + r) - 1, 0.2)
+
+
+def test_short_profits_when_price_falls_and_stops_above_on_gap():
+    df = _df([10, 10, 9, 8], [10, 10.2, 9.1, 8.1], [10, 9.5, 8.5, 7.5], [10, 9.6, 8.6, 7.6])
+    entry = np.array([True, False, False, False])
+    exit_sig = np.array([False, False, True, False])
+    r, trades = simulate(df, entry, exit_sig, np.ones(4), ExitRules(side=-1), cost=0.0)
+    assert trades[0]["entry"] == 10 and trades[0]["exit"] == 8 and np.isclose(trades[0]["ret"], 0.2)
+    df2 = _df([10, 10, 12, 12], [10, 10.5, 12.5, 12.5], [10, 9.8, 11.5, 11.5], [10, 10, 12, 12])
+    _, tr2 = simulate(df2, entry, None, np.ones(4), ExitRules(side=-1, stop_atr=1.0), cost=0.0)
+    assert tr2[0]["reason"] == "stop" and tr2[0]["exit"] == 12  # gapped above the 11.0 stop

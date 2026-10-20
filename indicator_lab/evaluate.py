@@ -29,6 +29,8 @@ _DATA: dict[str, pd.DataFrame] = {}
 def get(t: str) -> pd.DataFrame:
     if t not in _DATA:
         _DATA[t] = data.load(t)
+        from indicator_lab import meta  # lets ticker-aware filters (earnings) find the symbol
+        meta._TICKER_OF[id(_DATA[t])] = t
     return _DATA[t]
 
 

@@ -190,6 +190,23 @@ class YearlyModels:
 
 
 _MODELS: dict = {}
+_TICKER_OF: dict = {}
+
+
+def _near_earnings(df: pd.DataFrame, k: int) -> np.ndarray:
+    """True on bars whose next earnings reaction day is 1..k sessions ahead. Uses actual report
+    dates; in practice these are announced weeks ahead (Pine: earnings.future_time)."""
+    import os
+
+    from indicator_lab import earnings as ER
+    t = _TICKER_OF.get(id(df))
+    out = np.zeros(len(df), dtype=bool)
+    if t is None or t in ER.ETFS or not os.path.exists(os.path.join(data.CACHE_DIR, f"earn_{t}.json")):
+        return out
+    rd = df.index.get_indexer(ER.reaction_days(t, df.index))
+    for r in rd[rd >= 0]:
+        out[max(0, r - k):r] = True
+    return out
 
 
 def meta_breakout(df, p):
@@ -212,6 +229,8 @@ def meta_breakout(df, p):
     if p.get("univ_atr"):  # only "lively" names: trailing 1-year mean ATR% above a floor
         a14 = ind.atr(df, 14)
         cand = cand & ((a14 / df["close"] * 100).rolling(252, min_periods=200).mean() >= p["univ_atr"]).to_numpy()
+    if p.get("earn_skip"):  # no new entry when the next earnings reaction day is <= earn_skip bars away
+        cand = cand & ~_near_earnings(df, p["earn_skip"])
     size = None
     if p.get("low_size") is not None:  # take every candidate; below-threshold ones at reduced size
         pr, th = model.prob(f)

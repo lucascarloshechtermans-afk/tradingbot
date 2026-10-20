@@ -17,7 +17,10 @@
 - **Eerlijke waarschuwing:** op een brede mand van 48 andere grote aandelen doet hij het duidelijk slechter dan buy &
   hold. **Gebruik hem op beweeglijke groei-/momentumaandelen** (NVDA, AMD, META, …), niet op saaie defensieve
   aandelen, nutsbedrijven of obligaties.
-- Van ~35 geteste ideeën hebben er 3 het gehaald (v1 → v2 → v3). De rest staat hieronder, met de reden waarom ze
+- **Praktische tips uit sessie 2:** gebruik op beweeglijke aandelen 10 posities in plaats van 5 (in 2021-26 even
+  veel rendement als buy & hold, met minder dan de helft van de max daling), en open geen nieuwe positie in de week vóór
+  de kwartaalcijfers van dat bedrijf. Shorten (breakdowns) werkt níet.
+- Van ~40 geteste ideeën hebben er 3 het gehaald (v1 → v2 → v3). De rest staat hieronder, met de reden waarom ze
   afvielen. Er zijn geen echte orders geplaatst en er is niets met een broker verbonden. Geen financieel advies.
 
 ## ⭐ CURRENT BEST VERSION: v3 — v2 breakout + logistic "breakout quality" model (meta-labeling)
@@ -401,3 +404,37 @@ Target 2/3/4% ATR, VOLATILE 10-slot OOS Sharpe 0.69/0.68/0.68 (v3 0.67), with Ma
 7.5/10.6/12.8% vs 14.5%. DEV/HOLD composite 1.20/1.23/1.25.
 **Verdict:** a pure risk dial. Drawdown and return scale down together, and the Sharpe is unchanged. Not a better
 signal, but useful advice: on very volatile names, size so that every position carries similar risk.
+
+### E37 — Short side: mirror of v2 on breakdowns (new `simulate_short`, stop above / trail from the lowest low)
+Close < prior 20-day low, < SMA200, weak close (IBS ≤ 0.3); cover on close > prior 20-day high or 4×ATR trail.
+- Composite −0.55 (PF 0.34–0.48). Only when SPY < SMA200: −0.34. Tighter trail 2.5: −0.31. 10-bar time stop: −0.29.
+- v3 + short in shared slots: 0.53 (v3 alone 1.23).
+- **Verdict: firmly rejected.** Stock breakdowns get run over by sharp short-covering rallies, even in bear phases.
+  In this sample the best "bear mode" is the one v3 already has: no new longs below SMA200, so it sits in cash.
+
+### E38 — Earnings awareness (Alpha Vantage quarterly report dates; 107 stocks cached, the free limit stopped the rest)
+Pre-registered hypotheses, checked on v3's trades in DEV+HOLD, EXTRA and VOLATILE, IS and OOS (6 cells):
+- **H1, breakouts on the earnings reaction day are better: rejected.** Mixed (+4.5 vs +3.9% DEV+HOLD IS, but +1.1 vs
+  +2.7% OOS, and −0.6 vs +1.5% on EXTRA IS).
+- **H2, entries ≤5 sessions before earnings are worse: confirmed in all 6 cells.** Avg trade: DEV+HOLD +2.6 vs +4.0% (IS),
+  −0.2 vs +3.0% (OOS) · EXTRA +0.4 vs +1.4%, −0.2 vs +1.1% · VOLATILE +4.7 vs +9.0%, −0.4 vs +1.4%.
+  This matches the scanner's existing `avoid_earnings` rule.
+- As a filter (skip entries 3/5/7/10 sessions before earnings): composite 1.26/1.25/1.22/1.24 (v3 1.23). Worst cell
+  0.96–1.01 (v3 0.88), OOS 1.09–1.16 (v3 1.06), sleeves 1.11–1.14 (v3 1.16). Fresh EXTRA IS/OOS 0.44–0.54 / 0.54–0.70
+  (v3 0.61/0.45). VOLATILE 10-slot 0.99–1.17 / 0.61–0.70 (v3 1.11/0.67).
+- **Verdict:** a clear per-trade effect, but at portfolio level it is mixed and inside the noise. A skipped breakout
+  often never re-triggers, so the trade is lost entirely. **Not a rule. Adopted as advice:** don't open a new swing
+  position in the week before a company's earnings. (The test used actual report dates. In practice those are
+  announced weeks ahead, and TradingView exposes them as `earnings.future_time`.)
+- Note: "held through earnings → +7% vs −2%" looks huge, but it is a look-ahead artefact. Trades that last long
+  enough to reach earnings are the winners. Not usable.
+
+### E39 — Pine: optional half-profit target (idea 4)
+`swing_v3_quality_model.pine` has a new input, "Take half profit at +x ATR" (default 0 = off; E22 used 4). When on,
+it draws the target line, marks "½" when it is hit and has its own alert. BUY/SELL logic is unchanged.
+
+### Status after session 2
+All 5 queued ideas are done: probe positions ✗ · volatile universe (✓ as usage advice: 10 slots on volatile names,
+OOS ≈ B&H return at under half the drawdown) · short side ✗ · earnings (advice only) · Pine half-profit option ✓.
+**v3 remains the best version.** Next ideas: a point-in-time (survivorship-free) volatile universe; the full Alpha
+Vantage earnings history once the daily limit resets (27 names missing); and a regime switch between 5 and 10 slots.

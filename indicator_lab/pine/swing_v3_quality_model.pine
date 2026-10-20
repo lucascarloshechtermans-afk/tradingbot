@@ -16,6 +16,7 @@ ibsMin    = input.float(0.7, "Min close position in day range (0-1)", minval = 0
 useModel  = input.bool(true, "Use quality model (v3); off = v2")
 thrAdj    = input.float(0.0, "Quality threshold shift (logit, + = stricter)", step = 0.1)
 spySym    = input.symbol("AMEX:SPY", "Market reference")
+tpMult    = input.float(0.0, "Take half profit at +x ATR (0 = off; research E22 used 4)", minval = 0, step = 0.5)
 
 f_z(x, mu, sd) => nz((x - mu) / sd)
 
@@ -72,6 +73,9 @@ qualityOk = not useModel or score >= -0.436348 + thrAdj
 var int   state = 0
 var float hh    = na
 var float stop  = na
+var float tp    = na
+var bool  halfOff = false
+halfSig = false
 buySig  = false
 sellSig = false
 exited  = false  // the engine never re-enters on the bar it exits
@@ -84,6 +88,11 @@ if state == 1
     state := 2
     hh := high
     stop := hh - trailMult * atr
+    tp := tpMult > 0 ? open + tpMult * atr[1] : na
+    halfOff := false
+    if tpMult > 0 and high >= tp
+        halfSig := true
+        halfOff := true
     if close < loM
         sellSig := true
         state := 3
@@ -93,6 +102,9 @@ else if state == 2
         state := 0
         stop := na
     else
+        if tpMult > 0 and not halfOff and high >= tp
+            halfSig := true
+            halfOff := true
         hh := math.max(hh, high)
         stop := math.max(stop, hh - trailMult * atr)
         if close < loM
@@ -105,10 +117,13 @@ if state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and qualityO
 plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
 plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
 plotshape(buySig, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+plot(tpMult > 0 and (state == 2 or state == 3) and not halfOff ? tp : na, "Half-profit target", color = color.teal, style = plot.style_linebr)
+plotshape(halfSig, "½ PROFIT", shape.diamond, location.abovebar, color.teal, size = size.tiny, text = "½")
 plotshape(sellSig, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
 // breakouts the model rejected, for context
 plotshape(useModel and state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and not qualityOk and not sellSig and not exited,
      "Rejected breakout", shape.xcross, location.belowbar, color.new(color.orange, 30), size = size.tiny)
 plot(quality, "Breakout quality (0-1)", display = display.data_window)
 alertcondition(buySig, "Swing v3 BUY", "Swing v3 BUY on {{ticker}} at {{close}}")
+alertcondition(halfSig, "Swing v3 HALF PROFIT", "Swing v3: take half profit on {{ticker}}")
 alertcondition(sellSig, "Swing v3 SELL", "Swing v3 SELL on {{ticker}} at {{close}}")

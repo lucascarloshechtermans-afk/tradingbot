@@ -277,6 +277,24 @@ def weekly_breakout(df, p):
     return entry.to_numpy(), exit_sig.to_numpy(), rules, b["atr"].to_numpy(), None
 
 
+def breakdown_short(df, p):
+    """Mirror of v2 on the short side: close below the prior n-day LOW, below the trend SMA,
+    weak close (IBS <= ibs_max). Cover on a close above the prior m-day HIGH or the ATR trail
+    (lowest low since entry + trail x ATR). Optional market filter: only when SPY < SMA(spy_ma)."""
+    b = base(df)
+    c = b["c"]
+    n, m = p["n"], p["m"]
+    lo_n = df["low"].rolling(n).min().shift(1)
+    hi_m = df["high"].rolling(m).max().shift(1)
+    tl = p.get("trend_len", 200)
+    cond = (c < lo_n) & (c < ind.sma(c, tl)) & (ind.ibs(df) <= p.get("ibs_max", 1.0))
+    if p.get("spy_ma"):
+        spy = _spy(df)["close"]
+        cond &= spy < ind.sma(spy, p["spy_ma"])
+    rules = ExitRules(trail_atr=p.get("trail"), stop_atr=p.get("stop"), max_bars=p.get("max_bars"), side=-1)
+    return cond.to_numpy(), (c > hi_m).to_numpy(), rules, b["atr"].to_numpy(), None
+
+
 # (strategy, params, numeric params to perturb in the robustness check)
 V2 = (breakout, {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7}, ["n", "m", "trail", "ibs_min"])
 
