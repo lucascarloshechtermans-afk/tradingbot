@@ -50,9 +50,12 @@ def feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     })
 
 
-def base_candidates(df: pd.DataFrame, n: int = 20, ibs_min: float = 0.0) -> pd.Series:
+def base_candidates(df: pd.DataFrame, n: int = 20, ibs_min: float = 0.0, trend_len: int | None = 200) -> pd.Series:
     c = df["close"]
-    return (c > df["high"].rolling(n).max().shift(1)) & (c > ind.sma(c, 200)) & (ind.ibs(df) >= ibs_min)
+    cond = (c > df["high"].rolling(n).max().shift(1)) & (ind.ibs(df) >= ibs_min)
+    if trend_len:
+        cond &= c > ind.sma(c, trend_len)
+    return cond
 
 
 def single_trade(o, h, lo, c, atr, exit_sig, i, rules: ExitRules, cost=0.001):
@@ -82,13 +85,13 @@ def single_trade(o, h, lo, c, atr, exit_sig, i, rules: ExitRules, cost=0.001):
 
 
 def candidate_table(tickers: list[str], n: int = 20, m: int = 20, trail: float = 4.0,
-                    ibs_min: float = 0.0) -> pd.DataFrame:
+                    ibs_min: float = 0.0, trend_len: int | None = 200) -> pd.DataFrame:
     rows = []
     rules = ExitRules(trail_atr=trail)
     for t in tickers:
         df = get(t)
         f = feature_frame(df)
-        cand = base_candidates(df, n, ibs_min).to_numpy()
+        cand = base_candidates(df, n, ibs_min, trend_len).to_numpy()
         lo_m = df["low"].rolling(m).min().shift(1)
         exit_sig = (df["close"] < lo_m).to_numpy()
         o, h, lo, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
@@ -173,13 +176,19 @@ _MODELS: dict = {}
 def meta_breakout(df, p):
     """Base breakout, filtered by the walk-forward logistic model (trained on DEV)."""
     ib = p.get("ibs_min", 0.0)
-    key = (p["n"], p["m"], p["trail"], p.get("keep", 0.5), p.get("l2", 10.0), tuple(p.get("feats", FEATS)), ib)
+    tl = p.get("trend_len", 200)
+    train = p.get("train", "dev")
+    key = (p["n"], p["m"], p["trail"], p.get("keep", 0.5), p.get("l2", 10.0), tuple(p.get("feats", FEATS)), ib, tl,
+           train)
     if key not in _MODELS:
-        tab = candidate_table(data.DEV, p["n"], p["m"], p["trail"], ib)
+        tickers = data.DEV + (data.TRAIN_EXTRA if train == "dev+extra" else [])
+        if train == "extra":
+            tickers = data.TRAIN_EXTRA
+        tab = candidate_table(tickers, p["n"], p["m"], p["trail"], ib, tl)
         _MODELS[key] = YearlyModels(tab, feats=list(key[5]), keep=key[3], l2=key[4])
     model = _MODELS[key]
     f = feature_frame(df)
-    cand = base_candidates(df, p["n"], ib).to_numpy()
+    cand = base_candidates(df, p["n"], ib, tl).to_numpy()
     size = None
     if p.get("low_size") is not None:  # take every candidate; below-threshold ones at reduced size
         pr, th = model.prob(f)
@@ -190,7 +199,8 @@ def meta_breakout(df, p):
     lo_m = df["low"].rolling(p["m"]).min().shift(1)
     exit_sig = (df["close"] < lo_m).to_numpy()
     a = ind.atr(df, 14)
-    return entry, exit_sig, ExitRules(trail_atr=p["trail"]), a.to_numpy(), size
+    rules = ExitRules(trail_atr=p["trail"], tgt_atr=p.get("tgt"), stop_atr=p.get("stop"))
+    return entry, exit_sig, rules, a.to_numpy(), size
 
 
 def export_final(n=20, m=20, trail=4.0, ibs_min=0.7, keep=0.75, l2=100.0, year=2027) -> dict:

@@ -14,6 +14,11 @@ DEV_EXTRA = ["IWM", "DIA", "AMZN", "GOOGL", "META", "JPM", "XOM", "JNJ", "HD", "
 # Never looked at while designing/tuning an idea; only used for the final check.
 HOLDOUT = ["CAT", "UNH", "V", "AMD", "COST", "PG", "NFLX", "BA", "DIS", "INTC", "WMT", "GS",
            "XLE", "XLU", "TLT", "GLD"]
+# Only ever used as extra TRAINING data for learned filters (never scored).
+TRAIN_EXTRA = ["ADBE", "CRM", "ORCL", "CSCO", "PEP", "MRK", "PFE", "ABT", "TMO", "LLY", "MCD", "NKE", "SBUX",
+               "LOW", "TGT", "BAC", "WFC", "C", "MS", "AXP", "CVX", "COP", "SLB", "HON", "GE", "MMM", "UPS",
+               "LMT", "RTX", "DE", "QCOM", "TXN", "AVGO", "MU", "IBM", "T", "VZ", "NEE", "DUK", "SO", "XLF",
+               "XLK", "XLV", "XLI", "XLY", "XLP", "EFA", "EEM"]
 DEV = CORE + DEV_EXTRA
 ALL = DEV + HOLDOUT
 

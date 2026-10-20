@@ -239,3 +239,22 @@ if its probability is in the top `keep` share of that year's training prediction
 
   v3 was positive in all 12 years. It beats B&H in down or choppy years (2015, 2018, 2022) and in strong momentum
   years (2024, 2026), and lags in broad V-shaped rallies (2019, 2020, 2025), where it is either flat or late.
+
+### E21 — Let the model replace the SMA200 trend filter (to catch V-shaped recoveries sooner)
+Base without SMA200 / with SMA50 / SMA100 / SMA150 (keep 0.5 and 0.75): 1.08–1.10 / 1.10–1.18 / 1.12–1.17 / 1.18–1.20.
+**Rejected:** SMA200 (v3 1.23) stays best. The model cannot replace the trend filter.
+
+### E22 — Partial profit: sell half at +X ATR, trail the other half (blend of two exits)
+- +2/3/3.5/4/5/6 ATR: composite 1.14/1.23/1.23/1.28/1.25/1.26. OOS 0.96/1.16/1.09/1.14/1.07/1.10 (v3 1.06). Lower
+  drawdowns, ~1–2 points less CAGR.
+- Neighbours vs v3's same neighbours: n16 1.11 vs 1.06 · n24 1.35 vs 1.29 · m16 1.23 vs 1.20 · m24 1.32 vs 1.31 ·
+  trail 3.2 0.97 vs 0.95 · 4.8 1.08 vs 1.07 · IBS .56 1.14 vs 1.20 · .84 1.12 vs 1.08 · keep .6 1.29 vs 1.23 · .9 1.20 vs 1.20.
+- **Verdict:** better in 8 of 10 neighbours, but only by ~+0.03 on average, inside the noise band. Not crowned.
+  Documented as an optional, smoother "half off at +4 ATR" variant (lower DD, slightly lower return).
+
+### E23 — Train the quality model on more and different data (48 training-only tickers)
+`data.TRAIN_EXTRA` (ADBE, CRM, …, sector ETFs, EFA, EEM) is never scored. Average composite over keep 0.6/0.75/0.9:
+- DEV-trained (v3): 1.22 · DEV+EXTRA-trained: 1.22 · **EXTRA-only-trained: 1.25** (keep 0.75: 1.32, worst cell 1.13).
+- **Verdict:** no improvement (not adopted), but **strong evidence that v3's model is real.** A model fitted only on
+  48 completely different tickers works just as well on the DEV and HOLDOUT tickers. It learned something general
+  about breakouts, not quirks of the DEV names.
