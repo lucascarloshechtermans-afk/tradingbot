@@ -151,16 +151,37 @@ def breakout(df, p):
     if p.get("er_min"):
         er_n = p.get("er_n", 50)
         cond &= C(df, f"er{er_n}", lambda: ind.efficiency_ratio(c, er_n)) >= p["er_min"]
+    if p.get("vdry"):  # volume dried up into the breakout: 10-bar avg vol < vdry x 50-bar avg (prior bars)
+        v = df["volume"]
+        cond &= (ind.sma(v, 10) / ind.sma(v, 50)).shift(1) <= p["vdry"]
+    if p.get("range_min"):  # breakout bar's range >= range_min x ATR (prior)
+        cond &= (df["high"] - df["low"]) >= p["range_min"] * b["atr"].shift(1)
+    if p.get("nr"):  # the bar before the breakout had the narrowest range of the last `nr` bars
+        rng = df["high"] - df["low"]
+        cond &= (rng.shift(1) <= rng.shift(1).rolling(p["nr"]).min())
     if p.get("near_high"):  # close within near_high % of its 252-day high
         h252 = df["high"].rolling(252, min_periods=200).max()
         cond &= c >= h252 * (1 - p["near_high"] / 100)
+    if p.get("fresh"):  # first breakout after a base: no n-day breakout in the prior `fresh` bars
+        prior = (c > hi).shift(1, fill_value=False).rolling(p["fresh"], min_periods=1).max().astype(bool)
+        cond &= ~prior
+    if p.get("cont"):  # continuation: there WAS a breakout in the prior `cont` bars
+        prior = (c > hi).shift(1, fill_value=False).rolling(p["cont"], min_periods=1).max().astype(bool)
+        cond &= prior
+    if p.get("months"):  # only enter in these calendar months
+        cond &= pd.Series(c.index.month.isin(p["months"]), index=c.index)
     entry = cond.to_numpy()
+    if p.get("exit_close_low"):  # exit on close below the lowest CLOSE of m bars
+        lo = C(df, f"llc{m}", lambda: c.rolling(m).min().shift(1))
+    if p.get("exit_sma"):
+        lo = C(df, f"sma{m}", lambda: ind.sma(c, m))
     ex = c < lo
     if p.get("exit_ema"):
         ex |= c < C(df, f"ema{p['exit_ema']}", lambda: ind.ema(c, p["exit_ema"]))
     exit_sig = ex.to_numpy()
     rules = ExitRules(stop_atr=p.get("stop"), trail_atr=p.get("trail"), max_bars=p.get("max_bars"),
-                      be_atr=p.get("be"), close_stop=bool(p.get("close_stop")))
+                      be_atr=p.get("be"), close_stop=bool(p.get("close_stop")),
+                      tight_after=p.get("tight_after"), tight_trail=p.get("tight_trail"))
     size = None
     if p.get("vol_target"):
         # risk-parity-ish: full size when ATR% <= vol_target, scaled down above it
@@ -186,6 +207,48 @@ def breakout_pullback(df, p):
     exit_sig = (c < lo).to_numpy()
     rules = ExitRules(stop_atr=p.get("stop"), trail_atr=p.get("trail"))
     return entry, exit_sig, rules, b["atr"].to_numpy(), None
+
+
+def family(df, p):
+    """Classic entry families, all with v2's exits (m-day low + ATR trail) so only the
+    entry differs. Optional IBS strong-close and SMA200 filters as in v2."""
+    b = base(df)
+    c = b["c"]
+    k = p["kind"]
+    if k == "supertrend":
+        st = C(df, f"st{p.get('st_n', 10)}{p.get('st_mult', 3.0)}",
+               lambda: ind.supertrend(df, p.get("st_n", 10), p.get("st_mult", 3.0)))
+        sig = st & ~st.shift(1, fill_value=False)
+    elif k == "keltner":
+        mid = ind.ema(c, 20)
+        sig = c > mid + p.get("kc_mult", 2.0) * b["atr"]
+    elif k == "macd":
+        m_, s_, h_ = ind.macd(c)
+        sig = (m_ > s_) & (m_.shift() <= s_.shift()) & (m_ > 0)
+    elif k == "ichimoku":
+        tenkan = (df["high"].rolling(9).max() + df["low"].rolling(9).min()) / 2
+        kijun = (df["high"].rolling(26).max() + df["low"].rolling(26).min()) / 2
+        span_a = ((tenkan + kijun) / 2).shift(26)
+        span_b = ((df["high"].rolling(52).max() + df["low"].rolling(52).min()) / 2).shift(26)
+        above = (c > span_a) & (c > span_b) & (tenkan > kijun)
+        sig = above & ~above.shift(1, fill_value=False)
+    elif k == "aroon":
+        au = C(df, "aroonup25", lambda: ind.aroon_up(df, 25))
+        sig = (au >= 100) & (au.shift() < 100)
+    elif k == "bb":
+        lo_b, mid_b, up_b = ind.bbands(c, 20, 2.0)
+        sig = c > up_b
+    elif k == "roc":
+        r = ind.roc(c, p.get("roc_n", 20))
+        sig = (r > p.get("roc_min", 0.10)) & (r.shift() <= p.get("roc_min", 0.10))
+    else:
+        raise ValueError(k)
+    cond = sig & (c > b["sma200"])
+    if p.get("ibs_min") is not None:
+        cond &= ind.ibs(df) >= p["ibs_min"]
+    lo = C(df, f"ll{p['m']}", lambda: df["low"].rolling(p["m"]).min().shift(1))
+    rules = ExitRules(trail_atr=p.get("trail"))
+    return cond.to_numpy(), (c < lo).to_numpy(), rules, b["atr"].to_numpy(), None
 
 
 # (strategy, params, numeric params to perturb in the robustness check)

@@ -139,3 +139,36 @@ Per ticker, the losers in OOS are low-volatility defensives: TLT (PF 0.03), XLU,
 - Minimum ATR% 1.0/1.25/1.5/2.0: 1.13/1.12/1.07/0.85. Noise to worse.
 - Kaufman efficiency ratio ≥ 0.2/0.3/0.4 (50 bars): 0.84/0.62/0.32. ER(20) ≥ 0.3/0.4: 1.01/0.94. **Clearly worse:**
   requiring an already "clean" trend means buying late.
+
+### E12 — Which signal gets the last free slot? (ranking same-day signals)
+Ranked by ROC21/63/126/252, RS vs SPY, ATR%, RSI14, IBS, extension, RVOL, return/vol (high-first or low-first)
+→ composite 1.14–1.22 vs random 1.18. **No effect.** With the strong-close filter the 5 slots are rarely full. This also
+gives the noise level of the composite: about ±0.04.
+
+### E13 — Exit tightening after a big gain, volume dry-up, range-expansion and NR breakouts
+- Trail tightens to 2.5/3 ATR after +4/+6/+8 ATR: 1.05/1.05(2.5)/1.11(6→3)/1.20(8→3). The best is within noise,
+  and its neighbour is worse.
+- Volume dried up before the breakout (10/50 vol ≤ 0.8/0.9/1.0): 0.89/0.91/0.98. Range ≥ 1.0/1.3 ATR on the breakout
+  bar: 1.14/1.01. NR4/NR7 before the breakout: 0.71/0.72. **All rejected.**
+
+### E14 — Ensemble of breakout lookbacks: the ARTEFACT case (important lesson)
+- 10/20/55 as three independent parts, each able to take its own slot: composite **1.30**, CAGR 19–27%. It looked
+  like a big win, BUT one ticker could fill up to 3 slots (60% of equity), so this is concentration and leverage,
+  not a better signal. The 20/40 two-part version: 1.09, HOLD OOS 0.46, DD −34%.
+- Fair version: ONE position per ticker, sized by the fraction of parts that are long (1/3, 2/3, 1):
+  10/20/55 1.06 · 10/20/40 1.08 · 15/20/30 1.04 · 20/55 1.09 · 10/20 1.12 · trail 3/4/5 0.98. **No improvement.**
+- Fix to the protocol: the composite now also prints the sleeves Sharpe (per ticker, no slot interaction),
+  and a new best must not lower it.
+
+### E15 — Classic indicator families as the entry (all with v2's exits)
+Composite (without / with the IBS ≥ 0.7 strong-close filter): Supertrend(10,3) 0.99/0.69 · Keltner(20, 2 ATR) 0.89/1.08 ·
+MACD cross above 0 0.62/0.57 · Ichimoku (above cloud, TK cross) 1.08/1.08 · Aroon-up hits 100 1.06/1.20 ·
+close > upper BB 0.95/1.03 · ROC20 crosses 10% 0.93/0.80.
+- **Verdict:** none beat v2. Aroon+IBS (1.20) is in effect a 25-day breakout, the same signal as v2. The Donchian
+  breakout + strong close family is the strongest.
+
+### E16 — Close-based exits, fresh vs continuation breakouts, seasonality
+- Exit on a close below the lowest CLOSE of 20/15 bars: 1.05/1.14 (sleeves 0.99 < v2 1.06). Exit below SMA50/SMA20: 1.07/0.94.
+- "Fresh" breakout (no breakout in the prior 20/40 bars): 0.90/0.83. Continuation only (a breakout in the prior 10/20 bars): 0.87/0.99.
+- Entries only Nov–Apr: 1.00. Only May–Oct: 0.80. Skip Sep–Oct: 1.13 (sleeves 0.98). The seasonality effect is real
+  (May–Oct is clearly weaker), but excluding months removes trades and does not lift the composite. Not adopted.

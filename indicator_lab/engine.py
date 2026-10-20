@@ -27,6 +27,8 @@ class ExitRules:
     max_bars: int | None = None     # time stop, bars held
     be_atr: float | None = None     # move stop to breakeven once high >= entry + k*ATR
     close_stop: bool = False        # stops only trigger on a CLOSE below them (fill next open)
+    tight_after: float | None = None  # once high >= entry + k*ATR(signal), trail with tight_trail
+    tight_trail: float | None = None
 
 
 def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, atr: np.ndarray,
@@ -81,6 +83,8 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
                 a = atr[t]
                 if rules.trail_atr is not None and np.isfinite(a):
                     stop = max(stop, hh - rules.trail_atr * a)
+                if rules.tight_after is not None and hh >= ep + rules.tight_after * sig_atr and np.isfinite(a):
+                    stop = max(stop, hh - rules.tight_trail * a)
                 if rules.be_atr is not None and hh >= ep + rules.be_atr * sig_atr:
                     stop = max(stop, ep)
                 if exit_sig[t] or (rules.close_stop and c[t] <= stop):

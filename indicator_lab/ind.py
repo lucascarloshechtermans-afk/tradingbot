@@ -82,3 +82,30 @@ def efficiency_ratio(c: pd.Series, n: int) -> pd.Series:
     net = (c - c.shift(n)).abs()
     path = c.diff().abs().rolling(n).sum()
     return net / path.replace(0, np.nan)
+
+
+def supertrend(df: pd.DataFrame, n: int = 10, mult: float = 3.0) -> pd.Series:
+    """True while in an up-trend (TradingView ta.supertrend direction < 0)."""
+    a = atr(df, n).to_numpy()
+    hl2 = ((df["high"] + df["low"]) / 2).to_numpy()
+    c = df["close"].to_numpy()
+    up = hl2 - mult * a
+    dn = hl2 + mult * a
+    fu, fd = up.copy(), dn.copy()
+    trend = np.ones(len(c), dtype=bool)
+    for i in range(1, len(c)):
+        if not np.isfinite(a[i]):
+            continue
+        fu[i] = max(up[i], fu[i - 1]) if np.isfinite(fu[i - 1]) and c[i - 1] > fu[i - 1] else up[i]
+        fd[i] = min(dn[i], fd[i - 1]) if np.isfinite(fd[i - 1]) and c[i - 1] < fd[i - 1] else dn[i]
+        if trend[i - 1] and c[i] < fu[i]:
+            trend[i] = False
+        elif not trend[i - 1] and c[i] > fd[i]:
+            trend[i] = True
+        else:
+            trend[i] = trend[i - 1]
+    return pd.Series(trend, index=df.index)
+
+
+def aroon_up(df: pd.DataFrame, n: int = 25) -> pd.Series:
+    return df["high"].rolling(n + 1).apply(lambda x: float(np.argmax(x)) / n * 100, raw=True)

@@ -32,12 +32,64 @@ def get(t: str) -> pd.DataFrame:
     return _DATA[t]
 
 
+_FEAT: dict[str, pd.DataFrame] = {}
+
+
+def features(t: str) -> pd.DataFrame:
+    """Per-bar values a trader could rank same-day signals by (all known at the close)."""
+    if t not in _FEAT:
+        from indicator_lab import ind
+        df = get(t)
+        c = df["close"]
+        a = ind.atr(df, 14)
+        spy = get("SPY")["close"].reindex(df.index).ffill()
+        _FEAT[t] = pd.DataFrame({
+            "roc21": ind.roc(c, 21), "roc63": ind.roc(c, 63), "roc126": ind.roc(c, 126), "roc252": ind.roc(c, 252),
+            "rs63": ind.roc(c, 63) - ind.roc(spy, 63),
+            "atr_pct": a / c, "rsi14": ind.rsi(c, 14), "ibs": ind.ibs(df),
+            "ext50": (c - ind.sma(c, 50)) / a,
+            "rvol": df["volume"] / ind.sma(df["volume"], 50),
+            "ret_vol": ind.roc(c, 126) / (c.pct_change().rolling(126).std() * np.sqrt(126)),
+        })
+    return _FEAT[t]
+
+
 def run_ticker(strategy: Callable, params: dict, t: str):
     df = get(t)
     entry, exit_sig, rules, atr, size = strategy(df, params)
     r, trades = simulate(df, np.asarray(entry, bool), None if exit_sig is None else np.asarray(exit_sig, bool),
                          np.asarray(atr, float), rules, size=size)
+    f = features(t)
+    for x in trades:  # feature values on the SIGNAL bar (the bar before the fill)
+        i = df.index.get_loc(x["entry_date"]) - 1
+        x["feat"] = f.iloc[i].to_dict()
     return pd.Series(r, index=df.index), trades
+
+
+def blend_ticker(parts, t: str):
+    """One position per ticker, sized by the fraction of `parts` that are long
+    (e.g. 3 breakout lookbacks -> 0, 1/3, 2/3 or full size). Each part keeps its own
+    entries/exits; the slot is held from the first part entering until the last exits."""
+    sims = [run_ticker(fn, p, t) for fn, p in parts]
+    r = sum(s[0] for s in sims) / len(sims)
+    idx = r.index
+    held = np.zeros(len(idx), dtype=bool)
+    for _, trades in sims:
+        for x in trades:
+            held[idx.get_loc(x["entry_date"]):idx.get_loc(x["exit_date"]) + 1] = True
+    trades, i, n = [], 0, len(idx)
+    while i < n:
+        if held[i]:
+            j = i
+            while j + 1 < n and held[j + 1]:
+                j += 1
+            first = [x for _, ts in sims for x in ts if idx.get_loc(x["entry_date"]) == i]
+            trades.append({"entry_date": idx[i], "exit_date": idx[j], "ret": float(np.prod(1 + r.iloc[i:j + 1]) - 1),
+                           "bars": j - i, "reason": "blend", "feat": first[0].get("feat", {}) if first else {}})
+            i = j + 1
+        else:
+            i += 1
+    return r, trades
 
 
 def run(strategy, params: dict, tickers: list[str]):
@@ -45,6 +97,8 @@ def run(strategy, params: dict, tickers: list[str]):
     `strategy` may be a list of (fn, params) parts: each part trades independently
     (its own exits) and they compete for the same portfolio slots, which is how a
     multi-signal indicator would be traded."""
+    if isinstance(strategy, dict) and "blend" in strategy:
+        return {t: blend_ticker(strategy["blend"], t) for t in tickers}
     if isinstance(strategy, (list, tuple)):
         out = {}
         for i, (fn, p) in enumerate(strategy):
@@ -56,6 +110,9 @@ def run(strategy, params: dict, tickers: list[str]):
 
 SLOTS = 5
 SEEDS = 5
+# Optional rule for choosing among same-day signals when slots are scarce:
+# (feature name, True = highest first). None = random order.
+RANK: tuple[str, bool] | None = None
 
 
 def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int = SLOTS, seed: int = 0) -> pd.Series:
@@ -64,7 +121,15 @@ def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int = S
     skipped. Simultaneous signals are taken in a fixed random order (seeded) so no
     ticker is systematically favoured."""
     rng = np.random.default_rng(seed)
-    allt = [(x["entry_date"], rng.random(), x["exit_date"], t) for t, ts in trades.items() for x in ts]
+
+    def key(x):
+        if RANK is None:
+            return rng.random()
+        v = x.get("feat", {}).get(RANK[0], np.nan)
+        v = -np.inf if not np.isfinite(v) else v
+        return (-v if RANK[1] else v) + rng.random() * 1e-12
+
+    allt = [(x["entry_date"], key(x), x["exit_date"], t) for t, ts in trades.items() for x in ts]
     allt.sort()
     mask = np.zeros(rets.shape)
     cols = {t: i for i, t in enumerate(rets.columns)}
@@ -154,7 +219,7 @@ def report(name: str, strategy: Callable, params: dict, verbose: bool = True) ->
             print(f"  {k:9s} {fmt(v)}")
         cs = composite(out)
         print(f"  COMPOSITE slot-Sharpe mean {cs['mean']:.2f} | min {cs['min']:.2f} | OOS {cs['oos']:.2f}"
-              f" | MAR {cs['mar']:.2f} | min trades/cell {cs['min_n']}")
+              f" | MAR {cs['mar']:.2f} | sleeves {cs['sleeve']:.2f} | min trades/cell {cs['min_n']}")
     return out
 
 
@@ -168,6 +233,7 @@ def composite(out: dict) -> dict:
     return {"mean": float(np.mean(sh)), "min": float(np.min(sh)),
             "oos": float(np.mean([out["DEV_OOS"]["slot"]["sharpe"], out["HOLD_OOS"]["slot"]["sharpe"]])),
             "mar": float(np.mean([out[c]["slot"]["mar"] for c in CELLS])),
+            "sleeve": float(np.mean([out[c]["sharpe"] for c in CELLS])),
             "min_n": int(min(out[c]["n"] for c in CELLS))}
 
 
