@@ -115,11 +115,12 @@ SEEDS = 5
 RANK: tuple[str, bool] | None = None
 
 
-def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int = SLOTS, seed: int = 0) -> pd.Series:
+def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int | None = None, seed: int = 0) -> pd.Series:
     """How a swing trader actually uses a buy signal on a watchlist: at most `k` open
     positions, each sized 1/k of equity; a signal arriving with all slots full is
     skipped. Simultaneous signals are taken in a fixed random order (seeded) so no
     ticker is systematically favoured."""
+    k = k or SLOTS
     rng = np.random.default_rng(seed)
 
     def key(x):
@@ -145,7 +146,7 @@ def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int = S
     return pd.Series((rets.to_numpy() * mask).sum(axis=1) / k, index=idx)
 
 
-def score(results: dict, period: tuple[str, str], k: int = SLOTS) -> dict:
+def score(results: dict, period: tuple[str, str], k: int | None = None) -> dict:
     a, b = pd.Timestamp(period[0]), pd.Timestamp(period[1])
     rets, trades, per, tmap = [], [], {}, {}
     for t, (r, tr) in results.items():

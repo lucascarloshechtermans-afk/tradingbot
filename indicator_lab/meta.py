@@ -44,6 +44,9 @@ def feature_frame(df: pd.DataFrame) -> pd.DataFrame:
         "range_atr": (df["high"] - df["low"]) / a.shift(),
         "brk_atr": (c - hi20) / a,
         "er20": ind.efficiency_ratio(c, 20),
+        "winter": pd.Series(df.index.month.isin([11, 12, 1, 2, 3, 4]).astype(float), index=df.index),
+        "spy_vol20": spy.pct_change().rolling(20).std() * np.sqrt(252),
+        "vol_ratio": c.pct_change().rolling(20).std() / c.pct_change().rolling(120).std(),
     })
 
 
@@ -135,6 +138,21 @@ class YearlyModels:
             thr = np.quantile(p, 1 - keep)
             self.models[y] = (mu, sd, w, b, thr)
 
+    def prob(self, feats_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+        """(probability, threshold) per bar; NaN where no model exists for that year."""
+        pr = np.full(len(feats_df), np.nan)
+        th = np.full(len(feats_df), np.nan)
+        years = feats_df.index.year
+        X = feats_df[self.feats].to_numpy(float)
+        for y, (mu, sd, w, b, thr) in self.models.items():
+            idx = years == y
+            if not idx.any():
+                continue
+            z = (X[idx] - mu) / sd
+            pr[idx] = 1 / (1 + np.exp(-(np.nan_to_num(z) @ w + b)))
+            th[idx] = thr
+        return pr, th
+
     def take(self, feats_df: pd.DataFrame) -> np.ndarray:
         out = np.zeros(len(feats_df), dtype=bool)
         years = feats_df.index.year
@@ -162,11 +180,17 @@ def meta_breakout(df, p):
     model = _MODELS[key]
     f = feature_frame(df)
     cand = base_candidates(df, p["n"], ib).to_numpy()
-    entry = cand & model.take(f)
+    size = None
+    if p.get("low_size") is not None:  # take every candidate; below-threshold ones at reduced size
+        pr, th = model.prob(f)
+        entry = cand & np.isfinite(pr)
+        size = np.where(pr >= th, 1.0, p["low_size"])
+    else:
+        entry = cand & model.take(f)
     lo_m = df["low"].rolling(p["m"]).min().shift(1)
     exit_sig = (df["close"] < lo_m).to_numpy()
     a = ind.atr(df, 14)
-    return entry, exit_sig, ExitRules(trail_atr=p["trail"]), a.to_numpy(), None
+    return entry, exit_sig, ExitRules(trail_atr=p["trail"]), a.to_numpy(), size
 
 
 def export_final(n=20, m=20, trail=4.0, ibs_min=0.7, keep=0.75, l2=100.0, year=2027) -> dict:

@@ -205,3 +205,37 @@ if its probability is in the top `keep` share of that year's training prediction
 - **Verdict:** new best v3 (keep 0.75, l2 100, the centre of the plateau). Pine port generated from the final fit
   (`export_final`, trained on all 3656 DEV candidates). Note: TradingView's SPY is not dividend-adjusted unless that
   chart setting is on, so the market features there differ marginally from the backtest.
+
+### E19 — v3 extras: size by model score, extra features (noise level, not adopted)
+- Take every v2 candidate, but below-threshold ones at 25%/50% size: composite 1.28/1.25 (v3 1.23), sleeves 1.16/1.13.
+- Extra model features: Nov–Apr "winter" flag 1.27 · SPY 20d volatility 1.20 · ticker 20d/120d vol ratio 1.24 · all three 1.21.
+- **Verdict:** +0.01–0.05 is inside the ±0.04 noise band, and after ~150 variants the multiple-testing risk is real.
+  Not adopted. Noted: 25%-size for low-score breakouts and the winter feature are the most promising follow-ups.
+
+### E20 — Stress tests of v3 (robustness, not a new version)
+- **Bug found and fixed:** `score()` bound the slot count at import time, so changing `E.SLOTS` had no effect.
+  It is now read at call time. All earlier numbers used K=5 as intended, so they are unaffected.
+- **Number of slots K** (composite v3 vs v2): K3 1.23 vs 1.17 · K5 1.23 vs 1.18 · K8 1.22 vs 1.10 · K10 1.17 vs 1.04.
+  v3 beats v2 at every K, and the gap widens with more slots. K3 gives the most return (CAGR 14–22%) with deeper
+  drawdowns (up to −23%).
+- **Costs 0.25% per side** (2.5× the base assumption): v3 1.11 vs v2 1.06 (sleeves 1.01 vs 0.92). Still positive
+  everywhere, and v3 stays ahead.
+- **Year by year, all 31 tickers, 5 slots, total return (seed 0) vs equal-weight B&H:**
+
+| Year | v3 | v3 MaxDD | B&H | B&H MaxDD | Trades |
+|---|---|---|---|---|---|
+| 2015 | +31.2% | −7.2% | +12.4% | −10.5% | 82 |
+| 2016 | +20.5% | −4.4% | +25.5% | −8.7% | 99 |
+| 2017 | +28.9% | −5.0% | +31.4% | −2.2% | 95 |
+| 2018 | +15.4% | −13.1% | +2.1% | −19.9% | 74 |
+| 2019 | +22.0% | −6.2% | +36.4% | −7.4% | 108 |
+| 2020 | +12.2% | −9.1% | +26.6% | −30.8% | 65 |
+| 2021 | +18.8% | −7.4% | +27.7% | −4.5% | 118 |
+| 2022 | +2.3% | −13.6% | −16.4% | −25.3% | 64 |
+| 2023 | +27.3% | −16.2% | +36.7% | −8.6% | 100 |
+| 2024 | +38.3% | −6.1% | +22.9% | −8.0% | 98 |
+| 2025 | +7.2% | −7.9% | +24.2% | −17.2% | 93 |
+| 2026 (to 20 Oct) | +31.7% | −12.0% | +22.0% | −6.8% | 63 |
+
+  v3 was positive in all 12 years. It beats B&H in down or choppy years (2015, 2018, 2022) and in strong momentum
+  years (2024, 2026), and lags in broad V-shaped rallies (2019, 2020, 2025), where it is either flat or late.
