@@ -1,0 +1,56 @@
+//@version=5
+// Swing buy/sell indicator v1 — Donchian breakout + ATR chandelier trail.
+// Port of indicator_lab/strategies.py::donchian_breakout {"n": 20, "m": 20, "trail": 4.0}.
+// Backtested on daily bars (see PROGRESS.md). BUY = signal at this close, enter next open.
+// SELL = close below prior m-day low (exit next open) or trailing stop touched (exit at stop).
+// Not financial advice.
+indicator("Swing v1 – Donchian breakout + ATR trail", overlay = true)
+
+n         = input.int(20, "Breakout lookback (days)", minval = 2)
+m         = input.int(20, "Exit lookback (days)", minval = 2)
+trailMult = input.float(4.0, "Trail (x ATR14)", minval = 0.5, step = 0.25)
+trendLen  = input.int(200, "Trend filter SMA", minval = 10)
+
+atr     = ta.atr(14)
+trendMa = ta.sma(close, trendLen)
+hiN     = ta.highest(high, n)[1]
+loM     = ta.lowest(low, m)[1]
+
+// state: 0 flat, 1 entry pending (fills next open), 2 long, 3 exit pending
+var int   state = 0
+var float hh    = na
+var float stop  = na
+buySig  = false
+sellSig = false
+
+if state == 3
+    state := 0
+    stop := na
+if state == 1
+    state := 2
+    hh := high
+    stop := hh - trailMult * atr
+    if close < loM
+        sellSig := true
+        state := 3
+else if state == 2
+    if low <= stop
+        sellSig := true
+        state := 0
+        stop := na
+    else
+        hh := math.max(hh, high)
+        stop := math.max(stop, hh - trailMult * atr)
+        if close < loM
+            sellSig := true
+            state := 3
+if state == 0 and close > hiN and close > trendMa and not sellSig
+    buySig := true
+    state := 1
+
+plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
+plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
+plotshape(buySig, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+plotshape(sellSig, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
+alertcondition(buySig, "Swing v1 BUY", "Swing v1 BUY on {{ticker}} at {{close}}")
+alertcondition(sellSig, "Swing v1 SELL", "Swing v1 SELL on {{ticker}} at {{close}}")
