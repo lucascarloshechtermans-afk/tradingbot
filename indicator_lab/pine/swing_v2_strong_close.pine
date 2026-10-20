@@ -1,0 +1,60 @@
+//@version=5
+// Swing buy/sell indicator v2 — Donchian breakout with strong-close filter + ATR chandelier trail.
+// Port of indicator_lab/strategies.py::breakout {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7}.
+// Backtested on daily bars (see PROGRESS.md). BUY = signal at this close, enter next open.
+// SELL = close below prior m-day low (exit next open) or trailing stop touched (exit at stop).
+// Not financial advice.
+indicator("Swing v2 – Donchian breakout + strong close + ATR trail", overlay = true)
+
+n         = input.int(20, "Breakout lookback (days)", minval = 2)
+m         = input.int(20, "Exit lookback (days)", minval = 2)
+trailMult = input.float(4.0, "Trail (x ATR14)", minval = 0.5, step = 0.25)
+trendLen  = input.int(200, "Trend filter SMA", minval = 10)
+ibsMin    = input.float(0.7, "Min close position in day range (0-1)", minval = 0, maxval = 1, step = 0.05)
+
+atr     = ta.atr(14)
+trendMa = ta.sma(close, trendLen)
+hiN     = ta.highest(high, n)[1]
+loM     = ta.lowest(low, m)[1]
+ibs     = high > low ? (close - low) / (high - low) : 0.5
+
+// state: 0 flat, 1 entry pending (fills next open), 2 long, 3 exit pending
+var int   state = 0
+var float hh    = na
+var float stop  = na
+buySig  = false
+sellSig = false
+exited  = false  // the engine never re-enters on the bar it exits
+
+if state == 3
+    state := 0
+    stop := na
+    exited := true
+if state == 1
+    state := 2
+    hh := high
+    stop := hh - trailMult * atr
+    if close < loM
+        sellSig := true
+        state := 3
+else if state == 2
+    if low <= stop
+        sellSig := true
+        state := 0
+        stop := na
+    else
+        hh := math.max(hh, high)
+        stop := math.max(stop, hh - trailMult * atr)
+        if close < loM
+            sellSig := true
+            state := 3
+if state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and not sellSig and not exited
+    buySig := true
+    state := 1
+
+plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
+plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
+plotshape(buySig, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+plotshape(sellSig, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
+alertcondition(buySig, "Swing v2 BUY", "Swing v2 BUY on {{ticker}} at {{close}}")
+alertcondition(sellSig, "Swing v2 SELL", "Swing v2 SELL on {{ticker}} at {{close}}")

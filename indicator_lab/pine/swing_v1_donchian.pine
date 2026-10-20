@@ -22,10 +22,12 @@ var float hh    = na
 var float stop  = na
 buySig  = false
 sellSig = false
+exited  = false  // the engine never re-enters on the bar it exits
 
 if state == 3
     state := 0
     stop := na
+    exited := true
 if state == 1
     state := 2
     hh := high
@@ -44,7 +46,7 @@ else if state == 2
         if close < loM
             sellSig := true
             state := 3
-if state == 0 and close > hiN and close > trendMa and not sellSig
+if state == 0 and close > hiN and close > trendMa and not sellSig and not exited
     buySig := true
     state := 1
 

@@ -40,8 +40,17 @@ def run_ticker(strategy: Callable, params: dict, t: str):
     return pd.Series(r, index=df.index), trades
 
 
-def run(strategy: Callable, params: dict, tickers: list[str]):
-    """Full-history simulation per ticker; slicing to periods happens in `score`."""
+def run(strategy, params: dict, tickers: list[str]):
+    """Full-history simulation per ticker; slicing to periods happens in `score`.
+    `strategy` may be a list of (fn, params) parts: each part trades independently
+    (its own exits) and they compete for the same portfolio slots, which is how a
+    multi-signal indicator would be traded."""
+    if isinstance(strategy, (list, tuple)):
+        out = {}
+        for i, (fn, p) in enumerate(strategy):
+            for t in tickers:
+                out[f"{t}#{i}"] = run_ticker(fn, p, t)
+        return out
     return {t: run_ticker(strategy, params, t) for t in tickers}
 
 
@@ -90,6 +99,9 @@ def score(results: dict, period: tuple[str, str], k: int = SLOTS) -> dict:
     out["slot"] = {m: float(np.mean([x[m] for x in seeds])) for m in seeds[0]}
     out["slot_port"] = slot_portfolio(rdf, tmap, k, seed=0)
     out["med_sharpe"] = float(np.median([p["sharpe"] for p in per.values()]))
+    if any("#" in t for t in results):  # combined parts: equal-weight sleeves per ticker
+        port = rdf.T.groupby(lambda t: t.split("#")[0]).sum().T.mean(axis=1)
+        out.update(equity_stats(port))
     out["pos_frac"] = float(np.mean([p["avg"] > 0 for p in per.values() if p["n"] > 0] or [0]))
     out["expo"] = float(np.mean([p["expo"] for p in per.values()]))
     out["per"] = per

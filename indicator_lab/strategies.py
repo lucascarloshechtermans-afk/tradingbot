@@ -90,5 +90,53 @@ def donchian_breakout(df, p):
     return entry, exit_sig, rules, b["atr"].to_numpy(), None
 
 
+def _spy(df):
+    from indicator_lab import data
+    return data.load("SPY").reindex(df.index).ffill()
+
+
+def breakout(df, p):
+    """v1 Donchian breakout plus optional filters, each off unless its param is set:
+    regime: SPY close > SMA(regime) | rs: ticker's `rs`-day return > SPY's |
+    adx_min: ADX14 >= adx_min | vol_mult: breakout-day volume >= vol_mult x SMA50(volume) |
+    ext_max: close no more than ext_max ATR above SMA50 (don't chase) |
+    stop: initial ATR stop | max_bars: time stop."""
+    b = base(df)
+    c = b["c"]
+    n, m = p["n"], p["m"]
+    hi = C(df, f"hh{n}", lambda: df["high"].rolling(n).max().shift(1))
+    lo = C(df, f"ll{m}", lambda: df["low"].rolling(m).min().shift(1))
+    cond = (c > hi) & (c > b["sma200"])
+    if p.get("regime"):
+        spy = _spy(df)["close"]
+        cond &= spy > ind.sma(spy, p["regime"])
+    if p.get("rs"):
+        k = p["rs"]
+        spy = _spy(df)["close"]
+        cond &= ind.roc(c, k) > ind.roc(spy, k)
+    if p.get("adx_min"):
+        a = C(df, "adx14", lambda: ind.adx(df, 14)[2])
+        cond &= a >= p["adx_min"]
+    if p.get("vol_mult"):
+        v = df["volume"]
+        cond &= v >= p["vol_mult"] * ind.sma(v, 50)
+    if p.get("ext_max"):
+        cond &= (c - b["sma50"]) / b["atr"] <= p["ext_max"]
+    if p.get("ibs_min") is not None:
+        cond &= ind.ibs(df) >= p["ibs_min"]
+    entry = cond.to_numpy()
+    ex = c < lo
+    if p.get("exit_ema"):
+        ex |= c < C(df, f"ema{p['exit_ema']}", lambda: ind.ema(c, p["exit_ema"]))
+    exit_sig = ex.to_numpy()
+    rules = ExitRules(stop_atr=p.get("stop"), trail_atr=p.get("trail"), max_bars=p.get("max_bars"),
+                      be_atr=p.get("be"))
+    size = None
+    if p.get("vol_target"):
+        # risk-parity-ish: full size when ATR% <= vol_target, scaled down above it
+        size = np.clip(p["vol_target"] / (b["atr"] / c * 100), 0, 1).to_numpy()
+    return entry, exit_sig, rules, b["atr"].to_numpy(), size
+
+
 # (strategy, params, numeric params to perturb in the robustness check)
-BEST = (donchian_breakout, {"n": 20, "m": 20, "trail": 4.0}, ["n", "m", "trail"])
+BEST = (breakout, {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7}, ["n", "m", "trail", "ibs_min"])

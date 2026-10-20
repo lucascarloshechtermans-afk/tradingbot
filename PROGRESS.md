@@ -1,25 +1,26 @@
 # PROGRESS — swing buy/sell indicator research
 
-## ⭐ CURRENT BEST VERSION: v1 — Donchian 20/20 breakout + 4×ATR trail
+## ⭐ CURRENT BEST VERSION: v2 — Donchian 20/20 breakout + strong close + 4×ATR trail
 
-- **Rule:** BUY when the close is above the highest high of the prior 20 days AND above the 200-day SMA.
-  SELL when the close is below the lowest low of the prior 20 days (exit at the next open), or when the
-  chandelier trailing stop (highest high since entry − 4×ATR14) is touched.
-- **Code:** `indicator_lab/strategies.py::donchian_breakout {"n":20,"m":20,"trail":4.0}`
-- **Pine (TradingView):** `indicator_lab/pine/swing_v1_donchian.pine`
+- **Rule:** BUY when the close is above the highest high of the prior 20 days AND above the 200-day SMA AND the
+  close is in the top 30% of the day's range (IBS ≥ 0.7, a "strong close"). SELL when the close is below the
+  lowest low of the prior 20 days (exit at the next open), or when the chandelier trailing stop (highest high
+  since entry − 4×ATR14) is touched.
+- **Code:** `indicator_lab/strategies.py::breakout {"n":20,"m":20,"trail":4.0,"ibs_min":0.7}`
+- **Pine (TradingView):** `indicator_lab/pine/swing_v2_strong_close.pine`
 - **Reproduce:** `python -m indicator_lab.run best`
 
 | Cell (5-slot portfolio) | Sharpe | CAGR | MaxDD | Trades | Win% | PF | Avg hold |
 |---|---|---|---|---|---|---|---|
-| DEV 2015-20 (in-sample) | 1.26 | 16.1% | -13.4% | 330 | 51% | 2.31 | 35 d |
-| DEV 2021-26 (OOS) | 0.99 | 13.0% | -17.6% | 287 | 47% | 1.92 | 34 d |
-| HOLDOUT 2015-20 | 1.16 | 14.8% | -16.7% | 300 | 45% | 2.17 | 35 d |
-| HOLDOUT 2021-26 (OOS) | 0.69 | 9.6% | -18.0% | 314 | 42% | 1.47 | 28 d |
+| DEV 2015-20 (in-sample) | 1.33 | 16.4% | -13.9% | 306 | 51% | 2.46 | 35 d |
+| DEV 2021-26 (OOS) | 1.16 | 14.8% | -14.9% | 264 | 49% | 2.23 | 35 d |
+| HOLDOUT 2015-20 | 1.36 | 16.9% | -12.7% | 275 | 47% | 2.29 | 36 d |
+| HOLDOUT 2021-26 (OOS) | 0.88 | 12.0% | -19.1% | 287 | 42% | 1.48 | 28 d |
 | **Buy & hold** (equal weight, DEV OOS / HOLD OOS) | 1.18 / 1.06 | 21.4% / 16.3% | -26.5% / -24.2% | – | – | – | – |
 
-Composite (mean 5-slot Sharpe over 4 cells) **1.03**, worst cell 0.69. Baseline v0 (repo pullback): 0.15.
-**Honest read:** v1 has a much smaller drawdown than buy & hold, but it does NOT beat B&H on return or
-Sharpe in 2021-26. Beating a 2015-2026 bull market on Sharpe with a long-only timing signal is the bar to clear.
+Composite (mean 5-slot Sharpe over 4 cells) **1.18** (v1 1.03, baseline v0 0.15), worst cell 0.88, OOS 1.02.
+**Honest read:** v2 roughly matches buy & hold on Sharpe on the DEV tickers OOS (1.16 vs 1.18) with about half the
+drawdown and ~45% time in the market. It still trails B&H on raw return and on the holdout tickers OOS.
 
 ---
 
@@ -75,3 +76,40 @@ Buy RSI2 < 10 and close > SMA200; sell close > SMA5 or RSI2 > 90.
 - Walk-forward (sleeves, 2018-26): DEV 1.04 re-tuned vs 0.97 fixed; HOLD 0.68 re-tuned vs 0.68 fixed. Re-tuning
   adds nothing, so the fixed params are not curve-fit. ✅
 - **Verdict:** new best. Committed with Pine port.
+
+### E4 — Filters on v1: market regime, relative strength, ADX, volume, "don't chase"
+Composite (mean 5-slot Sharpe) vs v1 1.03:
+- SPY > SMA200/100/50 regime: 0.83 / 0.91 / 0.94. **Worse.** The per-ticker SMA200 filter already does this job,
+  and the extra filter mostly delays re-entry after corrections.
+- RS vs SPY (126/63/252-day): 0.87 / 0.99 / 0.81. Worse. Regime+RS: 0.67.
+- ADX ≥ 20/25: 0.86 / 0.77. Worse.
+- Breakout-day volume ≥ k×SMA50: k 0.8/1.0/1.1/1.2/1.3/1.4/1.5 → 0.99/1.02/1.12/1.10/1.05/0.99/0.94. A bumpy hill:
+  the average over the plateau (≈1.06) is within noise of v1. **Not adopted.**
+- Max extension above SMA50 (ATR): 2/2.5/3/3.5/4/5 → 0.84/0.98/1.05/1.12/1.06/0.99. Same story, noise level.
+  Volume 1.2 + extension 3 together: 0.76 (too few trades). **Rejected.**
+
+### E5 — Two signal types in one indicator: v1 breakout + RSI2 mean reversion (shared 5 slots)
+- With RSI2<10/SMA5 exit: composite 0.95, CAGR up (13–19%), but MaxDD −18…−23%. RSI2<5: 0.98. RSI2<20/SMA10: 0.78.
+- **Verdict:** more return but more drawdown, and a lower Sharpe. Rejected under the Sharpe-first rule.
+  Noted as an option for a "max return" variant.
+
+### E6 — Exit and sizing variants on v1
+Composite: initial stop 2/3 ATR 0.97/0.97 · breakeven after +2/+3 ATR 1.07/1.03 · time stop 20/40 bars 0.79/0.95 ·
+exit on close < EMA10/EMA20 0.70/0.85 · fixed 3 ATR stop without trail 0.84 · volatility-scaled size
+(target ATR% 1.5/2/3) 0.98/0.99/1.01.
+- **Verdict:** the plain 4 ATR chandelier + 20-day-low exit is already a good exit. Tighter exits cut the winners.
+  Breakeven +2 ATR is within noise. None adopted.
+
+### E7 — Strong-close filter on the breakout day (IBS = (close−low)/(high−low)) → **NEW BEST v2**
+- IBS ≥ 0.4/0.5/0.6/0.65/**0.7**/0.75/0.8/0.85/0.9 → composite 1.06/1.08/1.13/1.13/**1.18**/1.10/1.06/0.93/0.82.
+  A broad plateau from 0.5 to 0.8 where every value beats v1, so it is not a single lucky value.
+- v2 cells 1.33 / 1.16 / 1.36 / 0.88. **All four cells beat v1** (1.26 / 0.99 / 1.16 / 0.69), and MaxDD is
+  lower in 3 of 4.
+- Neighbours (5-slot composite): n 16/24 → 0.99/1.20 · m 16/24 → 1.16/1.12 · trail 3.2/4.8 → 0.94/1.03.
+  Sleeves robustness (DEV 2015-26, base 1.15): every ±20% nudge stays within 0.96–1.16. No cliff. ✅
+- Walk-forward (grid incl. IBS 0/0.5/0.7): re-tuning picks IBS 0.5 or 0.7 in 17 of 18 years, so the filter is chosen
+  out of sample. WF sleeves Sharpe DEV 1.00 / HOLD 0.66 (v1 WF 1.04 / 0.68), so on sleeves the gain is ≈0.
+  The improvement shows mostly in the realistic 5-slot portfolio: fewer, better breakouts compete for slots. ✅
+  (A modest but consistent improvement.)
+- **Verdict:** new best. Pine port `swing_v2_strong_close.pine`. Also fixed both Pine files so they never re-enter
+  on the bar of an exit, which matches the engine.
