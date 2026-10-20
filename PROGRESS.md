@@ -113,3 +113,29 @@ exit on close < EMA10/EMA20 0.70/0.85 · fixed 3 ATR stop without trail 0.84 · 
   (A modest but consistent improvement.)
 - **Verdict:** new best. Pine port `swing_v2_strong_close.pine`. Also fixed both Pine files so they never re-enter
   on the bar of an exit, which matches the engine.
+
+### E8 — More v2 variants: stop only on a close, other trend filters, gap and squeeze filters
+Composite vs v2 1.18:
+- Trailing stop only on a CLOSE below it (exit next open): 4/3.5/3 ATR → 0.97/1.06/1.03. Worse. The intraday stop
+  protects better.
+- Breakout of the highest CLOSE instead of the highest high: 1.10. Trend MA 50/100/150 instead of 200: 1.14/1.06/1.14.
+  SMA200 rising over 20 bars: 0.97. 12-month / 6-month momentum > 0: 1.02/1.12. None better.
+- Skip breakouts that gapped up > 1/2 ATR: 1.09/1.11. Worse.
+- Bollinger squeeze (BB width ≤ 20th/35th percentile of the last year within the last 10 bars): 1.06/1.09. Composite
+  lower, BUT OOS 1.10/1.09 and worst cell 0.79/0.99 (v2: 0.88), so it is stronger in 2021-26 and weaker in 2015-20.
+  **Interesting, not adopted** (fails the composite rule, and fewer trades: 167-204/cell).
+
+### E9 — Buy the first pullback after a breakout (instead of the breakout itself)
+A strong-close breakout within the last 5/10/20 bars, then RSI2 < 10/20/30 → composite 0.79–0.89, HOLD OOS 0.41–0.66.
+Combined with v2 in the same slots: 1.03. **Rejected:** dips after breakouts are often failed breakouts.
+
+### E10 — Breakout lookback and weekly-timeframe filters
+- n = 30/40/55/100/252: 1.09/1.09/1.06/0.96/0.70 (52-week-high breakouts are clearly worse). 40/40: 1.14. 55/30: 1.04.
+- Weekly close > weekly EMA10/EMA20: 1.12/1.22. Weekly MACD histogram > 0: 1.02. Within 5/10% of the 52-week high: 1.01/1.03.
+- **Verdict:** weekly EMA20 at 1.22 is +0.04 vs v2, but its neighbour EMA10 is 1.12, so this is noise. Not adopted.
+
+### E11 — Diagnosis: where does v2 lose? → volatility and trend-quality filters
+Per ticker, the losers in OOS are low-volatility defensives: TLT (PF 0.03), XLU, V, PG, KO, BA, DIS.
+- Minimum ATR% 1.0/1.25/1.5/2.0: 1.13/1.12/1.07/0.85. Noise to worse.
+- Kaufman efficiency ratio ≥ 0.2/0.3/0.4 (50 bars): 0.84/0.62/0.32. ER(20) ≥ 0.3/0.4: 1.01/0.94. **Clearly worse:**
+  requiring an already "clean" trend means buying late.

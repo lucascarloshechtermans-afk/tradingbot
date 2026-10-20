@@ -75,3 +75,10 @@ def ibs(df: pd.DataFrame) -> pd.Series:
 
 def roc(c: pd.Series, n: int) -> pd.Series:
     return c / c.shift(n) - 1
+
+
+def efficiency_ratio(c: pd.Series, n: int) -> pd.Series:
+    """Kaufman: net move over n bars / sum of absolute bar moves (0 = chop, 1 = straight line)."""
+    net = (c - c.shift(n)).abs()
+    path = c.diff().abs().rolling(n).sum()
+    return net / path.replace(0, np.nan)

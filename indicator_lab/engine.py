@@ -26,6 +26,7 @@ class ExitRules:
     trail_atr: float | None = None  # chandelier: highest high since entry - k*ATR
     max_bars: int | None = None     # time stop, bars held
     be_atr: float | None = None     # move stop to breakeven once high >= entry + k*ATR
+    close_stop: bool = False        # stops only trigger on a CLOSE below them (fill next open)
 
 
 def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, atr: np.ndarray,
@@ -60,9 +61,9 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
             reason = None
             if pend_exit:
                 px, reason = o[t], "signal"
-            elif o[t] <= stop:
+            elif not rules.close_stop and o[t] <= stop:
                 px, reason = o[t], "stop"
-            elif lo[t] <= stop:
+            elif not rules.close_stop and lo[t] <= stop:
                 px, reason = stop, "stop"
             elif o[t] >= tgt:
                 px, reason = o[t], "target"
@@ -82,7 +83,7 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
                     stop = max(stop, hh - rules.trail_atr * a)
                 if rules.be_atr is not None and hh >= ep + rules.be_atr * sig_atr:
                     stop = max(stop, ep)
-                if exit_sig[t]:
+                if exit_sig[t] or (rules.close_stop and c[t] <= stop):
                     pend_exit = True
             continue
 
@@ -99,7 +100,7 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
             in_pos = True
             # same-bar stop/target (stop first)
             px = reason = None
-            if lo[t] <= stop:
+            if not rules.close_stop and lo[t] <= stop:
                 px, reason = stop, "stop"
             elif h[t] >= tgt:
                 px, reason = tgt, "target"
@@ -111,7 +112,7 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
             ret[t] = w * (c[t] / (ep * (1 + cost)) - 1)
             if rules.trail_atr is not None and np.isfinite(atr[t]):
                 stop = max(stop, hh - rules.trail_atr * atr[t])
-            if exit_sig[t]:
+            if exit_sig[t] or (rules.close_stop and c[t] <= stop):
                 pend_exit = True
             continue
 

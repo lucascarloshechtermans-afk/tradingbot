@@ -104,9 +104,23 @@ def breakout(df, p):
     b = base(df)
     c = b["c"]
     n, m = p["n"], p["m"]
-    hi = C(df, f"hh{n}", lambda: df["high"].rolling(n).max().shift(1))
+    src_hi = c if p.get("close_break") else df["high"]
+    hi = C(df, f"hh{n}{p.get('close_break')}", lambda: src_hi.rolling(n).max().shift(1))
     lo = C(df, f"ll{m}", lambda: df["low"].rolling(m).min().shift(1))
-    cond = (c > hi) & (c > b["sma200"])
+    tl = p.get("trend_len", 200)
+    tma = C(df, f"sma{tl}", lambda: ind.sma(c, tl))
+    cond = (c > hi) & (c > tma)
+    if p.get("slope"):  # trend MA higher than `slope` bars ago
+        cond &= tma > tma.shift(p["slope"])
+    if p.get("abs_mom"):  # positive absolute momentum over abs_mom bars
+        cond &= ind.roc(c, p["abs_mom"]) > 0
+    if p.get("gap_max"):  # skip breakouts that gapped up more than gap_max ATR
+        cond &= (df["open"] - c.shift()) / b["atr"].shift() <= p["gap_max"]
+    if p.get("squeeze"):  # BB width now below its `squeeze`-pctile of the last year, within 10 bars
+        lo_b, mid_b, up_b = ind.bbands(c, 20, 2.0)
+        bw = (up_b - lo_b) / mid_b
+        pct = bw.rolling(252).rank(pct=True)
+        cond &= (pct <= p["squeeze"]).rolling(10).max().astype(bool)
     if p.get("regime"):
         spy = _spy(df)["close"]
         cond &= spy > ind.sma(spy, p["regime"])
@@ -124,18 +138,54 @@ def breakout(df, p):
         cond &= (c - b["sma50"]) / b["atr"] <= p["ext_max"]
     if p.get("ibs_min") is not None:
         cond &= ind.ibs(df) >= p["ibs_min"]
+    if p.get("wk_ema"):  # last completed weekly close above its weekly EMA
+        wk = c.resample("W-FRI").last().dropna()
+        ok = (wk > ind.ema(wk, p["wk_ema"])).reindex(c.index, method="ffill").fillna(False)
+        cond &= ok.astype(bool)
+    if p.get("wk_macd"):  # weekly MACD histogram > 0
+        wk = c.resample("W-FRI").last().dropna()
+        ok = (ind.macd(wk)[2] > 0).reindex(c.index, method="ffill").fillna(False)
+        cond &= ok.astype(bool)
+    if p.get("atr_pct_min"):
+        cond &= b["atr"] / c * 100 >= p["atr_pct_min"]
+    if p.get("er_min"):
+        er_n = p.get("er_n", 50)
+        cond &= C(df, f"er{er_n}", lambda: ind.efficiency_ratio(c, er_n)) >= p["er_min"]
+    if p.get("near_high"):  # close within near_high % of its 252-day high
+        h252 = df["high"].rolling(252, min_periods=200).max()
+        cond &= c >= h252 * (1 - p["near_high"] / 100)
     entry = cond.to_numpy()
     ex = c < lo
     if p.get("exit_ema"):
         ex |= c < C(df, f"ema{p['exit_ema']}", lambda: ind.ema(c, p["exit_ema"]))
     exit_sig = ex.to_numpy()
     rules = ExitRules(stop_atr=p.get("stop"), trail_atr=p.get("trail"), max_bars=p.get("max_bars"),
-                      be_atr=p.get("be"))
+                      be_atr=p.get("be"), close_stop=bool(p.get("close_stop")))
     size = None
     if p.get("vol_target"):
         # risk-parity-ish: full size when ATR% <= vol_target, scaled down above it
         size = np.clip(p["vol_target"] / (b["atr"] / c * 100), 0, 1).to_numpy()
     return entry, exit_sig, rules, b["atr"].to_numpy(), size
+
+
+def breakout_pullback(df, p):
+    """Buy the first dip AFTER a v2-style breakout instead of the breakout itself:
+    a strong-close n-day breakout happened within the last `within` bars, and today
+    RSI(2) < `rsi_lo` while the close is still above the breakout's trend MA.
+    Exits as v2 (m-day low, ATR chandelier)."""
+    b = base(df)
+    c = b["c"]
+    n, m = p["n"], p["m"]
+    hi = C(df, f"hh{n}None", lambda: df["high"].rolling(n).max().shift(1))
+    lo = C(df, f"ll{m}", lambda: df["low"].rolling(m).min().shift(1))
+    brk = (c > hi) & (c > b["sma200"]) & (ind.ibs(df) >= p.get("ibs_min", 0.0))
+    recent = brk.rolling(p.get("within", 10), min_periods=1).max().astype(bool) & ~brk
+    r2 = C(df, "rsi2", lambda: ind.rsi(c, 2))
+    dip = r2 < p.get("rsi_lo", 20)
+    entry = (recent & dip & (c > b["sma200"])).to_numpy()
+    exit_sig = (c < lo).to_numpy()
+    rules = ExitRules(stop_atr=p.get("stop"), trail_atr=p.get("trail"))
+    return entry, exit_sig, rules, b["atr"].to_numpy(), None
 
 
 # (strategy, params, numeric params to perturb in the robustness check)
