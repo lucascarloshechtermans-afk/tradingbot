@@ -157,7 +157,7 @@ class YearlyModels:
             yv = (tr["ret"].to_numpy() > label_min).astype(float)
             w, b = fit_logreg(Z, yv, l2=l2)
             p = 1 / (1 + np.exp(-(Z @ w + b)))
-            thr = np.quantile(p, 1 - keep)
+            thr = np.quantile(p, 1 - keep) if keep < 1 else float(yv.mean())  # keep>=1: base-rate threshold
             self.models[y] = (mu, sd, w, b, thr)
 
     def prob(self, feats_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:

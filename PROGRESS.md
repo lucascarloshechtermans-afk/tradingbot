@@ -1,5 +1,25 @@
 # PROGRESS — swing buy/sell indicator research
 
+## 🇳🇱 Samenvatting (voor Carlos)
+
+**Beste versie nu: v3**, een breakout-indicator met een "kwaliteitsfilter".
+- **KOOP** als de slotkoers boven de hoogste koers van de vorige 20 dagen sluit, de koers boven het 200-daags
+  gemiddelde staat, de dag sterk sluit (in de bovenste 30% van de dagrange) én het kwaliteitsmodel de breakout goed
+  genoeg vindt. Het model is het positiefst over breakouts met veel volume, na een zwakke markt en na een rommelige,
+  samengedrukte periode.
+- **VERKOOP** als de koers onder de laagste koers van de vorige 20 dagen sluit, of als de trailing stop
+  (hoogste koers sinds instap − 4×ATR) geraakt wordt. Gemiddeld houd je een trade ~5-7 weken vast.
+- **TradingView:** `indicator_lab/pine/swing_v3_quality_model.pine` (plakken in de Pine Editor, op een dagchart).
+  Je kan het model uitzetten in de instellingen; dan heb je v2.
+- **Resultaat** (2021-2026, getest op data waarop niets is afgesteld): op SPY/QQQ/AAPL/MSFT/NVDA + 10 andere tickers
+  een Sharpe van 1,23 tegenover 1,18 voor buy & hold, met een max drawdown van −15% in plaats van −26%. Minder
+  rendement dan buy & hold (16% tegenover 21% per jaar), maar veel rustiger. Kosten en slippage zitten erin.
+- **Eerlijke waarschuwing:** op een brede mand van 48 andere grote aandelen doet hij het duidelijk slechter dan buy &
+  hold. **Gebruik hem op beweeglijke groei-/momentumaandelen** (NVDA, AMD, META, …), niet op saaie defensieve
+  aandelen, nutsbedrijven of obligaties.
+- Van ~35 geteste ideeën hebben er 3 het gehaald (v1 → v2 → v3). De rest staat hieronder, met de reden waarom ze
+  afvielen. Er zijn geen echte orders geplaatst en er is niets met een broker verbonden. Geen financieel advies.
+
 ## ⭐ CURRENT BEST VERSION: v3 — v2 breakout + logistic "breakout quality" model (meta-labeling)
 
 - **Rule:** the v2 candidate (close > prior 20-day high, close > SMA200, close in the top 30% of the day's range) is
@@ -312,3 +332,18 @@ feature already captures the market state.
 - **Verdict:** a higher edge per trade, but not a better portfolio. Fewer names trade, so cash sits idle and
   concentration rises. Not adopted as a rule. **Adopted as usage advice:** run the indicator on a watchlist of
   volatile momentum names (the original scanner's `min_atr_pct` idea points the same way).
+
+### E31 — Ranking signals on a big 79-ticker watchlist (where slots are often full)
+v3 on ALL+EXTRA (79 names), 5-slot Sharpe IS/OOS: random 1.00/0.80 · ATR% high-first 0.96/0.91 · ATR% low-first
+1.07/0.84 · ROC126 high 0.89/0.81 · RS63 high 0.97/0.54 · return/vol high 0.84/0.68. With 10 slots: random 1.06/0.90 ·
+ATR% high 1.07/0.96 · RS63 high 1.09/0.95. B&H (79 names): 0.92/1.11, MaxDD −33%/−22% (v3 at 10 slots: −9%/−15%).
+- **Verdict:** no ranking rule is reliably better (helps OOS, hurts or is flat IS). "Highest ATR% first" is at worst
+  harmless, so it is a reasonable tie-breaker in practice. On a broad watchlist, v3 has about B&H's Sharpe with far
+  smaller drawdowns but lower return.
+
+### E32 — Threshold and exit simplifications of v3
+- Probability threshold = training base rate (instead of a top-75% quantile): 1.27, but fewer trades (202/cell). Noise level.
+- Trail only (no 20-day-low exit): 1.28 at 4 ATR, but trail 3.5/4.5/5.0 → 0.94/1.06/1.08 and n16 1.07, so fragile.
+  No trail (20-day-low only): 0.94. 40-day-low only: 0.93 (124-bar holds).
+- **Verdict:** keep v3's two exits. The trail does most of the work, and the 20-day-low exit makes it less sensitive
+  to the trail setting.
