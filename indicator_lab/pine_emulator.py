@@ -65,7 +65,7 @@ def pine_score(f: pd.DataFrame, model: dict | None = None) -> pd.Series:
 
 
 def run(df: pd.DataFrame, spy: pd.Series, n=20, m=20, trail=4.0, trend_len=200, ibs_min=0.7,
-        use_model=True, model: dict | None = None, cost_pct=0.1, with_trades=False):
+        use_model=True, model: dict | None = None, cost_pct=0.1, with_trades=False, init_stop=True):
     """Returns (buy, sell) boolean arrays exactly as the Pine script marks them; with
     with_trades=True also the per-trade returns the Pine "chart statistics" row books."""
     model = model or json.load(open(MODEL))
@@ -91,8 +91,12 @@ def run(df: pd.DataFrame, spy: pd.Series, n=20, m=20, trail=4.0, trend_len=200, 
         if state == 1:
             entry_px = o[t]
             state, hh = 2, h[t]
-            stop = hh - trail * a[t]
-            if c[t] < lo_m[t]:
+            istop = o[t] - trail * a[t - 1] if init_stop else -np.inf
+            stop = max(istop, hh - trail * a[t])
+            if lo[t] <= istop:
+                rets.append(istop * (1 - k) / (entry_px * (1 + k)) - 1)
+                sell[t], state, stop = True, 0, np.nan
+            elif c[t] < lo_m[t]:
                 sell[t], state = True, 3
         elif state == 2:
             if lo[t] <= stop:
@@ -123,7 +127,8 @@ def final_model_strategy(df, p):
     cand = base_candidates(df, p.get("n", 20), p.get("ibs_min", 0.7)).to_numpy()
     entry = cand & (score >= model["logit_thr"])
     exit_sig = (df["close"] < df["low"].rolling(p.get("m", 20)).min().shift(1)).to_numpy()
-    return entry, exit_sig, ExitRules(trail_atr=p.get("trail", 4.0)), ind.atr(df, 14).to_numpy(), None
+    rules = ExitRules(trail_atr=p.get("trail", 4.0), stop_atr=p.get("stop", 4.0))
+    return entry, exit_sig, rules, ind.atr(df, 14).to_numpy(), None
 
 
 def spy_close(index) -> pd.Series:

@@ -10,10 +10,10 @@ VAR = {"ibs": "ibs", "rvol": "rvol", "roc21": "roc21", "roc63": "roc63", "roc126
 
 def test_pine_files_embed_exactly_the_exported_v3_model():
     model = json.load(open(os.path.join(PINE, "v3_model.json")))
-    for fname in ("swing_v3_quality_model.pine", "swing_v3_strategy.pine"):
+    for fname in ("swing_v3_quality_model.pine", "swing_v3_strategy.pine", "swing_v3_watchlist_dashboard.pine"):
         src = open(os.path.join(PINE, fname)).read()
         assert re.search(r"score = ([-+]\d+\.\d+)", src).group(1) == f"{model['b']:+.6f}"
-        assert f"score >= {model['logit_thr']:.6f}" in src
+        assert f"minQual   = input.float({round(model['thr'] * 100, 4)}," in src
         for f, mu, sd, w in zip(model["feats"], model["mu"], model["sd"], model["w"]):
             line = f"{w:+.6f} * f_z({VAR[f]}, {mu:.6f}, {sd:.6f})"
             assert line in src, (fname, line)

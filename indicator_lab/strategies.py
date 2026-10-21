@@ -303,5 +303,6 @@ V2 = (breakout, {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7}, ["n", "m", "tr
 
 from indicator_lab.meta import meta_breakout  # noqa: E402  (meta does not import this module)
 
-BEST = (meta_breakout, {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7, "keep": 0.75, "l2": 100.0},
+# stop 4.0 = protective stop from the entry bar (E51: never triggered 2015-26, identical results, pure safety)
+BEST = (meta_breakout, {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7, "keep": 0.75, "l2": 100.0, "stop": 4.0},
         ["n", "m", "trail", "ibs_min", "keep"])

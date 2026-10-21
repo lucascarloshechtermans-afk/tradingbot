@@ -15,7 +15,9 @@
 3. Voor de strategy: open daarna het tabblad **Strategy Tester**. Kosten (0,10% per kant) staan al ingesteld.
 
 ## Wat je ziet
-- **BUY** (groen): signaal op de slotkoers → koop bij de opening van de volgende dag.
+- **BUY** (groen): signaal op de slotkoers → koop bij de opening van de volgende dag. Zet **meteen na de aankoop een
+  stop op aankoopprijs − 4×ATR** (staat in de alert); daarna volgt de rode trailing-stoplijn.
+- **BUY? / SELL?** (vaag): voorlopig signaal terwijl de dagkaars nog loopt — kan nog verdwijnen. Pas na de slotkoers telt het.
 - **SELL** (rood): de trailing stop (rode lijn) is geraakt, of de koers sloot onder het 20-daagse dieptepunt → verkoop
   (bij een stop: op de stop; anders bij de opening van de volgende dag).
 - **Oranje ✕**: breakout die het kwaliteitsmodel afkeurt (bewust geen BUY).
@@ -52,12 +54,18 @@ Per ticker draait de volledige v3-logica op zijn eigen historie. Pine v6 (gebrui
 De scripts zijn `//@version=5` en compileren ook als `//@version=6` (getest). TradingView ondersteunt beide.
 
 ## Niet-Amerikaanse aandelen
-Het kwaliteitsmodel gebruikt SPY als marktreferentie (getraind op Amerikaanse aandelen). Voor bv. Euronext-aandelen kan
-je bij *Market reference* een lokale index-ETF kiezen, maar het model is daar niet op getest: gebruik dan eventueel
+Het kwaliteitsmodel gebruikt SPY als marktreferentie (getraind op Amerikaanse aandelen). Op beurzen die vóór New York
+sluiten (bv. Euronext) gebruikt het script automatisch de SPY-slotkoers van de **vorige** dag, anders zou het een koers
+gebruiken die er op het signaalmoment nog niet is. Het model is niet getest op Europese aandelen: gebruik daar eventueel
 *Use quality model = uit* (v2-regels, die marktneutraal zijn).
 
+## Model bijwerken (1× per jaar)
+`python -m indicator_lab.export_pine` hertraint het kwaliteitsmodel op alle afgesloten breakouts en schrijft de nieuwe
+coëfficiënten in alle drie de v3-bestanden (`--check` controleert of ze in sync zijn). Daarna opnieuw in TradingView plakken.
+
 ## Instellingen
-- **Use quality model** uit = v2. **Quality threshold shift** + = strenger (minder maar betere signalen).
+- **Use quality model** uit = v2. **Min breakout quality %**: standaard de modeldrempel (~39%); hoger = strenger
+  (minder maar betere signalen). De tabel toont de kwaliteit alleen op dagen met een breakout.
 - **Take half profit at +x ATR**: 0 = uit; 4 = de "½"-variant uit onderzoek E22 (rustiger, iets minder rendement).
 - **Earnings warning window / Block BUY**: waarschuwing of blokkade vóór cijfers (werkt alleen op recente bars,
   want TradingView kent enkel de eerstvolgende cijferdatum).

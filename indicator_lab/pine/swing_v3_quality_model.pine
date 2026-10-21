@@ -14,7 +14,7 @@ trailMult = input.float(4.0, "Trail (x ATR14)", minval = 0.5, step = 0.25)
 trendLen  = input.int(200, "Trend filter SMA", minval = 10)
 ibsMin    = input.float(0.7, "Min close position in day range (0-1)", minval = 0, maxval = 1, step = 0.05)
 useModel  = input.bool(true, "Use quality model (v3); off = v2")
-thrAdj    = input.float(0.0, "Quality threshold shift (logit, + = stricter)", step = 0.1)
+minQual   = input.float(39.3009, "Min breakout quality % (default = model threshold; higher = stricter)", minval = 0, maxval = 100, step = 1)
 spySym    = input.symbol("AMEX:SPY", "Market reference")
 tpMult    = input.float(0.0, "Take half profit at +x ATR (0 = off; research E22 used 4)", minval = 0, step = 0.5)
 earnDays  = input.int(7, "Earnings warning window (calendar days, 0 = off)", minval = 0)
@@ -35,7 +35,11 @@ loM     = ta.lowest(low, m)[1]
 ibs     = high > low ? (close - low) / (high - low) : 0.5
 
 // ---- model features (all known at this bar's close) ----
-spy      = request.security(spySym, "D", close)
+// SPY's close of the same date is only known at the same time for US listings; on other exchanges
+// (e.g. Euronext closes before New York) use the previous SPY close to avoid look-ahead/repainting.
+spyToday = request.security(spySym, "D", close)
+spyPrev  = request.security(spySym, "D", close[1])
+spy      = syminfo.timezone == "America/New_York" ? spyToday : spyPrev
 volRatio = volume / ta.sma(volume, 50)
 rvol     = math.log(math.max(volRatio, 0.05))
 roc21    = close / close[21] - 1
@@ -56,24 +60,24 @@ rangeAtr = (high - low) / atr[1]
 brkAtr   = (close - ta.highest(high, 20)[1]) / atr
 er20     = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 20)
 
-score = -0.239166
-     + -0.013667 * f_z(ibs, 0.882077, 0.084629)
-     + +0.076333 * f_z(rvol, 0.004562, 0.362269)
-     + +0.016040 * f_z(roc21, 0.077442, 0.060907)
-     + +0.012175 * f_z(roc63, 0.126248, 0.125601)
-     + -0.138152 * f_z(roc126, 0.194296, 0.202241)
-     + +0.057250 * f_z(atrPct, 1.628976, 0.716738)
-     + +0.032266 * f_z(rsi14, 69.835640, 6.166100)
-     + -0.019922 * f_z(ext50, 4.170886, 1.825834)
-     + +0.083876 * f_z(rs63, 0.066311, 0.118742)
-     + -0.026856 * f_z(dist52, -0.021334, 0.041406)
-     + -0.045780 * f_z(bbwPct, 0.542970, 0.289047)
-     + -0.012404 * f_z(gapAtr, 0.224549, 0.546279)
-     + -0.007950 * f_z(spyUp, 0.958425, 0.199617)
-     + -0.168088 * f_z(spyRoc63, 0.059937, 0.050155)
-     + -0.014471 * f_z(rangeAtr, 1.052503, 0.485749)
-     + +0.053219 * f_z(brkAtr, 0.488135, 0.464076)
-     + -0.137207 * f_z(er20, 0.391360, 0.180358)
+score = -0.243512
+     + -0.012028 * f_z(ibs, 0.882207, 0.084672)
+     + +0.077133 * f_z(rvol, 0.003919, 0.361995)
+     + +0.015587 * f_z(roc21, 0.077099, 0.060410)
+     + +0.016426 * f_z(roc63, 0.126093, 0.125672)
+     + -0.139563 * f_z(roc126, 0.194343, 0.202689)
+     + +0.049966 * f_z(atrPct, 1.623357, 0.713240)
+     + +0.026913 * f_z(rsi14, 69.836667, 6.165982)
+     + -0.021419 * f_z(ext50, 4.176703, 1.826246)
+     + +0.089082 * f_z(rs63, 0.066030, 0.118733)
+     + -0.014834 * f_z(dist52, -0.021020, 0.041071)
+     + -0.046283 * f_z(bbwPct, 0.542481, 0.289020)
+     + -0.015639 * f_z(gapAtr, 0.222430, 0.543220)
+     + -0.010637 * f_z(spyUp, 0.958161, 0.200220)
+     + -0.169306 * f_z(spyRoc63, 0.060063, 0.050280)
+     + -0.010604 * f_z(rangeAtr, 1.051659, 0.484647)
+     + +0.053239 * f_z(brkAtr, 0.487312, 0.462300)
+     + -0.134906 * f_z(er20, 0.391484, 0.180468)
 quality = 1 / (1 + math.exp(-score))
 
 // next earnings report: only meaningful on recent bars (TradingView gives the upcoming date only)
@@ -81,7 +85,8 @@ nextEarn   = earnings.future_time
 daysToEarn = na(nextEarn) ? na : (nextEarn - time_close) / 86400000.0
 earnSoon   = earnDays > 0 and not na(daysToEarn) and daysToEarn >= 0 and daysToEarn <= earnDays
 earnOk     = not (earnBlock and earnSoon)
-qualityOk = not useModel or score >= -0.436348 + thrAdj
+qualityOk = not useModel or quality * 100 >= minQual
+isCand    = close > hiN and close > trendMa and ibs >= ibsMin
 
 // state: 0 flat, 1 entry pending (fills next open), 2 long, 3 exit pending
 var int   state = 0
@@ -122,13 +127,27 @@ if state == 1
     counted := time >= statsFrom
     state := 2
     hh := high
-    stop := hh - trailMult * atr
+    // protective stop from the fill itself: open - trailMult x ATR(signal bar); never hit in the 2015-26 tests,
+    // but it covers a crash on the entry day (research E51)
+    initStop = open - trailMult * atr[1]
+    stop := math.max(initStop, hh - trailMult * atr)
+    if low <= initStop
+        if counted
+            r1 = f_book(initStop)
+            nTr += 1
+            nWin += r1 > 0 ? 1 : 0
+            sumWin += math.max(r1, 0)
+            sumLoss += math.max(-r1, 0)
+            sumRet += r1
+        sellSig := true
+        state := 0
+        stop := na
     tp := tpMult > 0 ? open + tpMult * atr[1] : na
     halfOff := false
-    if tpMult > 0 and high >= tp
+    if state == 2 and tpMult > 0 and high >= tp
         halfSig := true
         halfOff := true
-    if close < loM
+    if state == 2 and close < loM
         sellSig := true
         state := 3
 else if state == 2
@@ -153,19 +172,22 @@ else if state == 2
             sellSig := true
             state := 3
 var int entryBar = na
-if state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and qualityOk and earnOk and not sellSig and not exited
+if state == 0 and isCand and qualityOk and earnOk and not sellSig and not exited
     buySig := true
     state := 1
     entryBar := bar_index + 1
 
 plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
 plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
-plotshape(buySig, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+// confirmed at the close vs provisional while the daily bar is still forming (can still disappear)
+plotshape(buySig and barstate.isconfirmed, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+plotshape(buySig and not barstate.isconfirmed, "BUY? (bar not closed)", shape.labelup, location.belowbar, color.new(color.green, 60), text = "BUY?", textcolor = color.white)
 plot(tpMult > 0 and (state == 2 or state == 3) and not halfOff ? tp : na, "Half-profit target", color = color.teal, style = plot.style_linebr)
 plotshape(halfSig, "½ PROFIT", shape.diamond, location.abovebar, color.teal, size = size.tiny, text = "½")
-plotshape(sellSig, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
+plotshape(sellSig and barstate.isconfirmed, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
+plotshape(sellSig and not barstate.isconfirmed, "SELL? (bar not closed)", shape.labeldown, location.abovebar, color.new(color.red, 60), text = "SELL?", textcolor = color.white)
 // breakouts the model rejected, for context
-plotshape(useModel and state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and not qualityOk and not sellSig and not exited,
+plotshape(useModel and state == 0 and isCand and not qualityOk and not sellSig and not exited,
      "Rejected breakout", shape.xcross, location.belowbar, color.new(color.orange, 30), size = size.tiny)
 plot(quality, "Breakout quality (0-1)", display = display.data_window)
 // for TradingView's Pine Screener: filter a whole watchlist on "Status" = 1 (new BUY) or -1 (SELL)
@@ -186,7 +208,7 @@ if showTable and barstate.islast
     table.cell(info, 0, 0, "Swing v3", text_color = color.white)
     table.cell(info, 1, 0, statusTxt, text_color = color.white, bgcolor = color.new(statusCol, 40))
     table.cell(info, 0, 1, "Breakout quality", text_color = color.white)
-    table.cell(info, 1, 1, str.tostring(quality * 100, "#") + "% " + (qualityOk ? "(ok)" : "(low)"), text_color = qualityOk ? color.lime : color.orange)
+    table.cell(info, 1, 1, isCand ? str.tostring(quality * 100, "#") + "% " + (qualityOk ? "(ok)" : "(too low)") : "no breakout today", text_color = not isCand ? color.gray : qualityOk ? color.lime : color.orange)
     table.cell(info, 0, 2, "Stop", text_color = color.white)
     table.cell(info, 1, 2, inTrade ? str.tostring(stop, format.mintick) : "-", text_color = color.white)
     table.cell(info, 0, 3, "Risk to stop", text_color = color.white)
@@ -212,7 +234,7 @@ if showTable and barstate.islast
 plotshape(buySig and earnSoon, "BUY near earnings", shape.circle, location.belowbar, color.yellow, size = size.tiny)
 
 if buySig
-    alert("Swing v3 BUY " + syminfo.ticker + " @ " + str.tostring(close, format.mintick) + " | est. stop " + str.tostring(close - trailMult * atr, format.mintick) + " | quality " + str.tostring(quality * 100, "#") + "% | size " + str.tostring(sizeSh) + " sh" + (earnSoon ? " | WARNING: earnings in " + str.tostring(math.round(daysToEarn)) + " days" : ""), alert.freq_once_per_bar_close)
+    alert("Swing v3 BUY " + syminfo.ticker + " @ " + str.tostring(close, format.mintick) + " | stop after fill: fill - " + str.tostring(trailMult * atr, format.mintick) + " (~" + str.tostring(close - trailMult * atr, format.mintick) + ")" + " | quality " + str.tostring(quality * 100, "#") + "% | size " + str.tostring(sizeSh) + " sh" + (earnSoon ? " | WARNING: earnings in " + str.tostring(math.round(daysToEarn)) + " days" : ""), alert.freq_once_per_bar_close)
 if sellSig
     alert("Swing v3 SELL " + syminfo.ticker + " @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
 

@@ -580,3 +580,36 @@ SPY > SMA200. Practical settings, from the evidence: a watchlist of volatile gro
 per 8 names on the list (5–10% each); no new entries in the week before earnings; idle cash in SPY when the table says
 YES. Signal rules, filters, exits, sizing and ranking have now been searched broadly (50 experiment families), and
 the remaining ideas test as noise.
+
+
+---
+
+## Session 5 (2026-10-21) — code review of the indicator
+
+A line-by-line review of the Pine scripts and the Python behind them turned up 3 real issues and 3 usability gaps.
+All are fixed, and the backtest numbers are unchanged (v3 composite 1.23).
+
+### E51 — Fixes
+1. **Look-ahead on non-US charts (real bug):** the model read SPY's close of the SAME date. Euronext closes ~4.5 h
+   before New York, so on a European chart historical signals used SPY information that did not exist yet, and live
+   signals changed with SPY intraday. Fix: on charts whose exchange timezone isn't New York, use the previous SPY close
+   (indicator, strategy, dashboard).
+2. **Training-label contamination (small bug):** the exported live model also trained on 23 trades (0.6%) that were
+   still open, labelled with unrealised P&L. `candidate_table` now drops trades still open on the last bar. Refit:
+   3,633 closed breakouts, threshold 39.26 → 39.30%. Walk-forward backtests were unaffected: they only train on trades
+   closed before each test year.
+3. **No protection on the entry day:** the stop only existed from the bar after the fill. Added an initial stop at
+   fill − 4×ATR(signal bar) from the fill bar onward (engine `stop: 4.0`, Pine indicator/strategy/dashboard, emulator).
+   It was never hit in 2015-26, so the results are identical, but it covers an entry-day crash. In the strategy file
+   it is attached at entry via `strategy.exit(loss=…)`.
+4. **Intraday flicker:** BUY/SELL can appear while the daily bar is still forming. Unconfirmed signals now show as faded
+   "BUY?" / "SELL?". Only the confirmed ones count (alerts already fired once per bar close).
+5. **Threshold in logit units → "Min breakout quality %"** in all three files, so it can be read directly. The table
+   shows quality only on breakout days ("no breakout today" otherwise).
+6. **Model refresh was manual and error-prone:** new `python -m indicator_lab.export_pine` refits the model and writes it
+   into all three v3 files (`--check` verifies sync; `tests/test_pine_model_sync.py` now covers the dashboard too).
+   While building it, a first version truncated a file before reading it (open-for-write evaluated first). It was
+   caught immediately and restored from git, and the tool now renders every file before writing any.
+- Verification: 407 tests pass (a new test crashes a bar right after entry and checks that engine and Pine logic stop
+  out at the same price). 102-ticker parity holds (0 unexplained differences; 6 of ~3,250 signals differ only through
+  `ta.percentrank`). All three Pine files compile.

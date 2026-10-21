@@ -78,7 +78,9 @@ def base_candidates(df: pd.DataFrame, n: int = 20, ibs_min: float = 0.0, trend_l
 
 
 def single_trade(o, h, lo, c, atr, exit_sig, i, rules: ExitRules, cost=0.001):
-    """Outcome of a trade signalled at bar i (filled at i+1 open), same logic as engine."""
+    """Outcome of a trade signalled at bar i (filled at i+1 open), same logic as engine.
+    A trade still open on the last bar returns its mark-to-market with exit index n - 1;
+    callers that need a real outcome must check `is_open` via `trade_outcome`."""
     n = len(c)
     if i + 1 >= n:
         return np.nan, n - 1
@@ -117,6 +119,8 @@ def candidate_table(tickers: list[str], n: int = 20, m: int = 20, trail: float =
         a = ind.atr(df, 14).to_numpy()
         for i in np.flatnonzero(cand):
             r, xi = single_trade(o, h, lo, c, a, exit_sig, i, rules)
+            if xi == len(c) - 1:
+                continue  # still open on the last bar: no real outcome yet, never a training label
             rows.append({"ticker": t, "date": df.index[i], "exit_date": df.index[xi], "ret": r,
                          **f.iloc[i].to_dict()})
     return pd.DataFrame(rows).dropna()
