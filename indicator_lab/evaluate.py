@@ -125,6 +125,8 @@ PARK: tuple[str, int] | None = None
 # Optional dynamic sizing: weight per open position = 1 / max(open positions, DYN), so with few signals each
 # position is bigger (but never above 1/DYN). None = fixed 1/SLOTS.
 DYN: int | None = None
+# Optional correlation guard: (max correlation, lookback days); skip new signals too correlated with a holding.
+CORR_MAX: tuple[float, int] | None = None
 
 
 def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int | None = None, seed: int = 0) -> pd.Series:
@@ -144,15 +146,29 @@ def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int | N
 
     allt = [(x["entry_date"], key(x), x["exit_date"], t) for t, ts in trades.items() for x in ts]
     allt.sort()
+    if CORR_MAX:
+        names = sorted({t.split("#")[0] for t in trades})
+        sret = pd.concat({u: get(u)["close"].pct_change() for u in names}, axis=1).reindex(rets.index)
     mask = np.zeros(rets.shape)
     cols = {t: i for i, t in enumerate(rets.columns)}
     idx = rets.index
     active: list[pd.Timestamp] = []
+    held: list[tuple[pd.Timestamp, str]] = []
     for ed, _, xd, t in allt:
         active = [x for x in active if x > ed]
+        held = [h for h in held if h[0] > ed]
         if len(active) >= k:
             continue
+        if CORR_MAX and held:
+            # skip a signal that moves too much like a stock already held (prior CORR_MAX[1] days)
+            i_ed = idx.searchsorted(ed)
+            win = sret.iloc[max(0, i_ed - CORR_MAX[1]):i_ed]
+            base = t.split("#")[0]
+            cs = [win[base].corr(win[h[1]]) for h in held if h[1] != base]
+            if cs and np.nanmax(cs) > CORR_MAX[0]:
+                continue
         active.append(xd)
+        held.append((xd, t.split("#")[0]))
         i0, i1 = idx.searchsorted(ed), idx.searchsorted(xd)
         mask[i0:i1 + 1, cols[t]] = 1
     if DYN:
@@ -167,10 +183,23 @@ def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int | N
     if PARK:
         # idle slots earn the parking asset, only while it is above its SMA (signal from the prior close)
         occ = occ_frac
-        px = get(PARK[0])["close"]
-        on = (px > px.rolling(PARK[1]).mean()).shift(1).reindex(idx).fillna(False).to_numpy()
-        pr = px.pct_change().reindex(idx).fillna(0).to_numpy()
-        port = port + (1 - occ) * pr * on
+        if PARK[0] == "DUAL":
+            # dual momentum: the asset with the best `PARK[2]`-day return, if it is above its SMA(PARK[1])
+            assets = PARK[3]
+            cl = pd.concat({a: get(a)["close"] for a in assets}, axis=1).reindex(idx).ffill()
+            mom = (cl / cl.shift(PARK[2]) - 1).shift(1)
+            ok = (cl > cl.rolling(PARK[1]).mean()).shift(1).fillna(False)
+            m = mom.where(ok).to_numpy(float)
+            has = np.isfinite(m).any(axis=1)
+            pick = np.argmax(np.where(np.isfinite(m), m, -np.inf), axis=1)
+            r_a = cl.pct_change().fillna(0).to_numpy(float)
+            pr = np.where(has, r_a[np.arange(len(idx)), pick], 0.0)
+            port = port + (1 - occ) * pr
+        else:
+            px = get(PARK[0])["close"]
+            on = (px > px.rolling(PARK[1]).mean()).shift(1).reindex(idx).fillna(False).to_numpy()
+            pr = px.pct_change().reindex(idx).fillna(0).to_numpy()
+            port = port + (1 - occ) * pr * on
     return port
 
 

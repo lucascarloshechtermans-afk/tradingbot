@@ -30,7 +30,11 @@ toont "Idle cash → SPY: YES/NO".
 - **Praktische tips uit sessie 2:** gebruik op beweeglijke aandelen 10 posities in plaats van 5 (in 2021-26 even
   veel rendement als buy & hold, met minder dan de helft van de max daling), en open geen nieuwe positie in de week vóór
   de kwartaalcijfers van dat bedrijf. Shorten (breakdowns) werkt níet.
-- Van ~40 geteste ideeën hebben er 3 het gehaald (v1 → v2 → v3). De rest staat hieronder, met de reden waarom ze
+- **Hoe zeker is dit? (E60)** Het sterkste en meest zekere voordeel is een **veel kleinere maximale daling** dan
+  buy & hold (in alle 6 testcellen kleiner, bv. −19% vs −33%). Op rendement wint buy & hold meestal nipt, en op
+  Sharpe is het ongeveer gelijk. Zie dit dus als "rustiger beleggen met vergelijkbaar rendement", niet als een manier
+  om de markt te verslaan.
+- Van ~90 geteste ideeën hebben er 4 het gehaald (v1 → v2 → v3 → v3.1). De rest staat hieronder, met de reden waarom ze
   afvielen. Er zijn geen echte orders geplaatst en er is niets met een broker verbonden. Geen financieel advies.
 
 ## ⭐ CURRENT BEST VERSION: v3 — v2 breakout + logistic "breakout quality" model (meta-labeling)
@@ -656,3 +660,33 @@ VOLATILE OOS 0.68/0.64/0.65 (0.75). Polynomial on the 6 stable features only: 1.
   >4% bucket (the NVDA/AMD booms).
 - **Pine:** a new table row, "Volatility 1y (ATR%)", marks ≥2.5% "good fit", 1.5–2.5% "ok fit" and <1.5% "weak fit".
   This is guidance, not a filter: E30 showed a hard filter does not improve the portfolio.
+
+### E57 — Live model trained on the broad universe (DEV+EXTRA+VOLATILE, ~135 names) instead of DEV only
+HOLDOUT 2021-26 5-slot Sharpe 1.11 vs 1.03 (better); LOCKBOX 10-slot 2021-26 0.65 vs 0.79 (worse). Not clearly better,
+so the Pine model stays DEV-trained.
+
+### E58 — Dual-momentum parking (idle cash in the stronger of SPY/QQQ(/IWM) if above SMA200)
+Composite 1.15 (126d) / 1.11 (63d) / 1.10 (with IWM) vs 1.23 for plain SPY>SMA200. **Rejected.**
+
+### E59 — Correlation guard (skip a signal that is >0.8/0.7/0.6 correlated over 60 days with a holding)
+Mean 5-slot Sharpe 1.24/1.22/1.24 (1.23). BIG and LOCKBOX move both ways (LOCKBOX OOS 0.75/0.66/0.60 vs 0.79).
+**Rejected.**
+
+### E60 — How certain are the main conclusions? (circular block bootstrap, 21-day blocks, 2,000 resamples, one slot path)
+| | DEV 15-20 | DEV 21-26 | HOLD 15-20 | HOLD 21-26 | LOCK1 15-20 | LOCK1 21-26 |
+|---|---|---|---|---|---|---|
+| P(v3 Sharpe > v2 Sharpe) | 0.26 | 0.42 | 0.78 | 0.29 | 0.17 | **1.00** |
+| P(v3.1 Sharpe > B&H) | 0.60 | 0.47 | 0.67 | 0.45 | 0.26 | 0.41 |
+| P(v3.1 return > B&H) | 0.15 | 0.21 | 0.47 | 0.48 | 0.04 | 0.22 |
+| P(v3.1 max drawdown smaller than B&H) | **0.91** | **0.79** | **0.82** | 0.48 | **0.78** | 0.51 |
+| actual MaxDD v3.1 vs B&H | −18.7 vs −32.7% | −18.3 vs −26.5% | −18.2 vs −29.3% | −19.0 vs −24.2% | −24.1 vs −41.7% | −33.4 vs −37.4% |
+- **Honest bottom line:** the version-to-version gains (v2 → v3) are real on average across universes but not
+  statistically clear in most single cells. v3.1 vs buy & hold is a coin flip on Sharpe and usually behind on raw
+  return. The one robust property is **a much smaller drawdown**: smaller in all 6 cells, and with ≥78% confidence in
+  4 of 6. What this indicator really offers is buy-and-hold-like risk-adjusted returns with a smoother ride, not a
+  way to beat the market on return.
+
+## Status (end of session 6)
+v3.1 remains the best version. Since E18, ~40 further idea families (signals, filters, exits, sizing, ranking, models,
+portfolio overlays) have been tested. Only the SPY parking rule (E48) passed every check. New tests now mostly measure
+noise, which E52 and E60 quantify.

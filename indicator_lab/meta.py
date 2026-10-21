@@ -254,6 +254,8 @@ def meta_breakout(df, p):
         tickers = data.DEV + (data.TRAIN_EXTRA if train == "dev+extra" else [])
         if train == "extra":
             tickers = data.TRAIN_EXTRA
+        if train == "big":
+            tickers = sorted(set(data.DEV + data.TRAIN_EXTRA + data.VOLATILE))
         tab = candidate_table(tickers, p["n"], p["m"], p["trail"], ib, tl)
         _MODELS[key] = YearlyModels(tab, feats=list(key[5]), keep=key[3], l2=key[4],
                                     label_min=p.get("label_min", 0.0))
