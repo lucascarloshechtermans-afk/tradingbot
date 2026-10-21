@@ -62,9 +62,14 @@ def run_ticker(strategy: Callable, params: dict, t: str):
     r, trades = simulate(df, np.asarray(entry, bool), None if exit_sig is None else np.asarray(exit_sig, bool),
                          np.asarray(atr, float), rules, size=size)
     f = features(t)
+    from indicator_lab import meta
+    pr = meta.PROB.get(id(df))
+    pr = pr[1] if pr is not None and pr[0] is df else None
     for x in trades:  # feature values on the SIGNAL bar (the bar before the fill)
         i = df.index.get_loc(x["entry_date"]) - 1
         x["feat"] = f.iloc[i].to_dict()
+        if pr is not None:
+            x["feat"]["quality"] = float(pr.iloc[i])
     return pd.Series(r, index=df.index), trades
 
 
@@ -115,6 +120,8 @@ SEEDS = 5
 # Optional rule for choosing among same-day signals when slots are scarce:
 # (feature name, True = highest first). None = random order.
 RANK: tuple[str, bool] | None = None
+# Optional cash overlay: (ticker, sma) -> idle slot capital is held in `ticker` while it is above its SMA.
+PARK: tuple[str, int] | None = None
 
 
 def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int | None = None, seed: int = 0) -> pd.Series:
@@ -145,7 +152,15 @@ def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int | N
         active.append(xd)
         i0, i1 = idx.searchsorted(ed), idx.searchsorted(xd)
         mask[i0:i1 + 1, cols[t]] = 1
-    return pd.Series((rets.to_numpy() * mask).sum(axis=1) / k, index=idx)
+    port = pd.Series((rets.to_numpy() * mask).sum(axis=1) / k, index=idx)
+    if PARK:
+        # idle slots earn the parking asset, only while it is above its SMA (signal from the prior close)
+        occ = np.minimum(mask.sum(axis=1) / k, 1.0)
+        px = get(PARK[0])["close"]
+        on = (px > px.rolling(PARK[1]).mean()).shift(1).reindex(idx).fillna(False).to_numpy()
+        pr = px.pct_change().reindex(idx).fillna(0).to_numpy()
+        port = port + (1 - occ) * pr * on
+    return port
 
 
 def score(results: dict, period: tuple[str, str], k: int | None = None) -> dict:

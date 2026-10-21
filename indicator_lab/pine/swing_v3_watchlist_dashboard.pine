@@ -121,7 +121,8 @@ f_v3() =>
 [st11, q11, sp11, c11] = request.security(s11, "D", f_v3(), lookahead = barmerge.lookahead_off)
 [st12, q12, sp12, c12] = request.security(s12, "D", f_v3(), lookahead = barmerge.lookahead_off)
 
-var table dash = table.new(position.top_right, 4, 13, bgcolor = color.new(color.black, 75), border_width = 1)
+spyPark = request.security(spySym, "D", close > ta.sma(close, 200))
+var table dash = table.new(position.top_right, 4, 14, bgcolor = color.new(color.black, 75), border_width = 1)
 f_row(int r, string sym, int st, float q, float sp, float c) =>
     txt = st == 1 ? "BUY" : st == -1 ? "SELL" : st == 2 ? "LONG" : "-"
     col = st == 1 ? color.green : st == -1 ? color.red : st == 2 ? color.new(color.green, 60) : color.new(color.gray, 70)
@@ -148,3 +149,5 @@ if barstate.islast
     f_row(10, s10, st10, q10, sp10, c10)
     f_row(11, s11, st11, q11, sp11, c11)
     f_row(12, s12, st12, q12, sp12, c12)
+    table.cell(dash, 0, 13, "Idle cash → SPY", text_color = color.white)
+    table.cell(dash, 1, 13, spyPark ? "YES" : "NO", text_color = color.white, bgcolor = spyPark ? color.new(color.green, 40) : color.new(color.orange, 40))

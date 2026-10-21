@@ -27,6 +27,12 @@ VOLATILE = ["TSLA", "SHOP", "ROKU", "TWLO", "ZM", "PTON", "SNAP", "PYPL", "BABA"
             "BIDU", "JD", "PDD", "MRNA", "REGN", "VRTX", "ILMN", "ALGN", "LRCX", "AMAT", "KLAC", "ON", "MRVL",
             "SMCI", "ANET", "FTNT", "PANW", "NOW", "WDAY", "TEAM", "SPOT", "DOCU", "ABNB", "HOOD", "CCL",
             "AAL", "UAL", "FCX", "CLF", "APA", "DVN", "OXY", "HAL"]
+# LOCKBOX (added 2026-10-21, session 4): never used for design, tuning or selection. Only for the final
+# confirmation of a candidate that already beat the current best on the development universes.
+LOCKBOX = ["DECK", "AXON", "TPL", "FICO", "CELH", "ELF", "CROX", "LULU", "BLDR", "URI", "PWR", "ETN", "VRT",
+           "TT", "FIX", "EME", "NUE", "STLD", "MOD", "APP", "DUOL", "HUBS", "MELI", "SE", "TOST", "WING", "CMG",
+           "DPZ", "ULTA", "RH", "FIVE", "TREX", "POOL", "IBKR", "LPLA", "KKR", "APO", "BX", "ARES", "ISRG",
+           "IDXX", "MPWR", "ENTG", "TER", "CDNS", "SNPS", "INTU", "ADSK", "ROP", "ODFL"]
 DEV = CORE + DEV_EXTRA
 ALL = DEV + HOLDOUT
 

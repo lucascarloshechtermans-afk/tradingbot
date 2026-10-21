@@ -191,6 +191,19 @@ class YearlyModels:
 
 _MODELS: dict = {}
 _TICKER_OF: dict = {}
+PROB: dict = {}          # id(df) -> (df, model probability series), for ranking same-day signals
+XS_UNIVERSE: list = []   # tickers whose cross-section defines momentum ranks (xs_mom filter)
+_XS: dict = {}
+
+
+def xs_rank(lookback: int) -> pd.DataFrame:
+    """Percentile rank (0..1) of each ticker's `lookback`-day return within XS_UNIVERSE, per date.
+    Only tickers with data that day take part; uses closes up to that day (no look-ahead)."""
+    key = (tuple(XS_UNIVERSE), lookback)
+    if key not in _XS:
+        cl = pd.concat({t: get(t)["close"] for t in XS_UNIVERSE}, axis=1)
+        _XS[key] = (cl / cl.shift(lookback) - 1).rank(axis=1, pct=True)
+    return _XS[key]
 
 
 def _near_earnings(df: pd.DataFrame, k: int) -> np.ndarray:
@@ -229,6 +242,11 @@ def meta_breakout(df, p):
     if p.get("univ_atr"):  # only "lively" names: trailing 1-year mean ATR% above a floor
         a14 = ind.atr(df, 14)
         cand = cand & ((a14 / df["close"] * 100).rolling(252, min_periods=200).mean() >= p["univ_atr"]).to_numpy()
+    if p.get("xs_mom"):  # cross-sectional momentum: ticker in the top (1 - xs_mom) of the universe
+        t = _TICKER_OF.get(id(df))
+        rk = xs_rank(p.get("xs_n", 126))
+        if t in rk.columns:
+            cand = cand & (rk[t].reindex(df.index) >= p["xs_mom"]).fillna(False).to_numpy()
     if p.get("earn_skip"):  # no new entry when the next earnings reaction day is <= earn_skip bars away
         cand = cand & ~_near_earnings(df, p["earn_skip"])
     size = None
@@ -238,6 +256,8 @@ def meta_breakout(df, p):
         size = np.where(pr >= th, 1.0, p["low_size"])
     else:
         entry = cand & model.take(f)
+    pr_all, _ = model.prob(f)
+    PROB[id(df)] = (df, pd.Series(pr_all, index=df.index))
     if p.get("vol_target"):  # equal-risk sizing: full size up to vol_target ATR%, scaled down above
         a14 = ind.atr(df, 14)
         vs = np.clip(p["vol_target"] / (a14 / df["close"] * 100), 0, 1).to_numpy()

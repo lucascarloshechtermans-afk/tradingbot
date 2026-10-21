@@ -2,7 +2,12 @@
 
 ## 🇳🇱 Samenvatting (voor Carlos)
 
-**Beste versie nu: v3**, een breakout-indicator met een "kwaliteitsfilter".
+**Beste versie nu: v3.1** = de v3-signalen hieronder + één portfolioregel: **geld dat niet in een positie zit, parkeer
+je in SPY zolang SPY boven zijn 200-daags gemiddelde staat (anders cash).** Dat gaf in alle 8 testcellen (4 groepen
+aandelen × 2 periodes) 1–4% meer rendement per jaar bij een vergelijkbare Sharpe (E48). De tabel in het Pine-script
+toont "Idle cash → SPY: YES/NO".
+
+**De signalen (v3)**: een breakout-indicator met een "kwaliteitsfilter".
 - **KOOP** als de slotkoers boven de hoogste koers van de vorige 20 dagen sluit, de koers boven het 200-daags
   gemiddelde staat, de dag sterk sluit (in de bovenste 30% van de dagrange) én het kwaliteitsmodel de breakout goed
   genoeg vindt. Het model is het positiefst over breakouts met veel volume, na een zwakke markt en na een rommelige,
@@ -506,3 +511,51 @@ a failing test because `pytest | tail` hid the exit code. Checks now look at the
 `request.security`, with SPY requested in a nested call inside each symbol's context, and shows a table: BUY today /
 SELL today / LONG with the current stop and risk % / flat, plus breakout quality. It compiles (validated) and is meant
 for users without TradingView's Pine Screener. The default list is volatile momentum names, as advised in E35.
+
+
+---
+
+## Session 4 (2026-10-21) — autonomous backtesting for more profit
+
+New safeguard: `data.LOCKBOX` holds 50 never-used stocks (DECK, AXON, FICO, VRT, APP, MELI, …), downloaded but not
+looked at until a final confirmation. Development universe this session: BIG = ALL + TRAIN_EXTRA + VOLATILE
+(~150 names), 10 slots.
+
+### E45 — Choosing among signals by model quality; cross-sectional momentum filter (BIG, 10 slots)
+- v3 baseline: IS 1.33 / 20.3% / −18% · OOS 0.60 / 10.1% / −28% (B&H: 1.25 / 27.0% / −35% · 0.77 / 16.4% / −37%).
+- Highest model quality first when slots are full: IS 1.14, OOS 0.54. **Worse.**
+- Only breakouts in the top 50/30/20% of 126-day momentum across the universe: OOS 0.68/0.62/0.68, IS 1.12/1.10/1.36.
+  Not monotonic, so noise. **Rejected.**
+
+### E46 — Lookback × trail × number of slots on BIG
+Breakout 20/30/40/55 × trail 3/4/5 × slots 10/15/20 (36 combinations). Robust pattern: **15–20 slots beat 10** on a
+~150-name watchlist (n=20, trail 4: OOS 0.60 → 0.69 → 0.76). Lookback 20 stays best OOS. Trail 5 is slightly better
+on BIG but was worse on DEV (E7 neighbours), so v3 keeps trail 4.
+**Advice:** with a large watchlist hold more, smaller positions (≈ watchlist size / 8, at 5–10% each).
+
+### E47 — LOCKBOX confirmation (50 fresh stocks; the lockbox is now spent)
+| 2015-20 / 2021-26, Sharpe (CAGR) | 5 slots | 7 slots | 10 slots | PF IS/OOS |
+|---|---|---|---|---|
+| v1 | 0.97 (17.6%) / 0.41 (6.9%) | 1.14 / 0.56 | 1.23 / 0.48 | 2.10 / 1.69 |
+| v2 | 0.92 / 0.55 | 1.25 / 0.53 | 1.37 / 0.46 | 2.11 / 1.64 |
+| **v3** | 0.85 / **0.76** | 1.20 / **0.78** | 1.32 (20.6%) / **0.73 (12.7%)** | 2.05 / **1.71** |
+| B&H (survivors, flattered) | 1.40 (34.8%) / 0.88 (21.4%) | | | |
+**v3's out-of-sample edge over v1/v2 is confirmed on completely fresh stocks.** It still trails B&H of today's
+survivors.
+
+### E48 — Park idle cash in SPY while SPY > SMA200 → **NEW BEST v3.1 (portfolio rule)**
+Idle slot capital earns SPY's return when SPY closed above its SMA the day before; otherwise 0%.
+| | no parking | SPY>SMA200 | SPY>SMA100 | QQQ>SMA200 |
+|---|---|---|---|---|
+| DEV/HOLD composite (Sharpe) | 1.23 | 1.23 | 1.23 | 1.19 |
+| OOS mean Sharpe | 1.06 | 1.13 | 1.16 | 1.17 |
+| CAGR per cell DEV-IS/DEV-OOS/HOLD-IS/HOLD-OOS | 15.9/15.9/16.4/12.2% | **18.9/18.0/19.9/16.1%** | 17.1/17.9/19.0/17.0% | 18.0/19.4/21.2/18.7% |
+| BIG 10-slot IS/OOS CAGR | 20.3/10.1% | 22.3/10.8% | 22.3/10.5% | 22.3/11.2% |
+| LOCKBOX 10-slot IS/OOS CAGR (Sharpe) | 20.6 (1.32) / 12.7% (0.73) | 21.7 (1.26) / 14.9% (0.79) | 21.2 / 15.2% | 21.6 / 16.7% |
+- More return in **all 8 universe×period cells** at about the same Sharpe; MaxDD a few points deeper (DEV-IS −10 → −19%).
+  The SMA length and the parking ETF don't matter much, so it is robust. SPY>SMA200 is the plainest version.
+- HOLD 2021-26 now about equals B&H's return (16.1% vs 16.3%) with a smaller drawdown (−19% vs −24%). DEV 2021-26 is
+  18.0% vs 21.4% for B&H.
+- Why it works: v3 is only ~70% invested. In uptrends the idle part now earns the market. In downtrends
+  (SPY < SMA200) it stays in cash, so the bear-market protection is kept.
+- Pine: the info table and the dashboard show "Idle cash → SPY: YES/NO".
