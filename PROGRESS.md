@@ -495,3 +495,9 @@ alone but failed in the full suite). The cache now keeps the frame and checks id
 unaffected:** every backtest used frames held for the whole run in `evaluate._DATA`, so ids were never reused. Re-run
 after the fix: v3 composite 1.23 and v2 1.18, identical to before. Lesson: the commit before this one was pushed with
 a failing test because `pytest | tail` hid the exit code. Checks now look at the exit code.
+
+### E44 — Pine watchlist dashboard
+`swing_v3_watchlist_dashboard.pine` (Pine v6) runs the full v3 state machine for 12 user-chosen symbols via
+`request.security`, with SPY requested in a nested call inside each symbol's context, and shows a table: BUY today /
+SELL today / LONG with the current stop and risk % / flat, plus breakout quality. It compiles (validated) and is meant
+for users without TradingView's Pine Screener. The default list is volatile momentum names, as advised in E35.

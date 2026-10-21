@@ -4,6 +4,7 @@
 |---|---|---|
 | `swing_v3_quality_model.pine` | **Hoofdindicator (beste versie)**: BUY/SELL-labels, trailing stop, infotabel, earnings-waarschuwing, alerts | dagelijks op de grafiek |
 | `swing_v3_strategy.pine` | Zelfde regels als **strategy**, voor de Strategy Tester van TradingView (trades, equity, statistieken) | per aandeel nakijken hoe het historisch deed |
+| `swing_v3_watchlist_dashboard.pine` | **Dashboard**: dezelfde v3-regels voor 12 tickers naar keuze in één tabel (BUY vandaag / SELL vandaag / LONG + stop / -) | elke avond je watchlist checken zonder Pine Screener |
 | `swing_v2_strong_close.pine` | v2 zonder kwaliteitsmodel (ook als schakelaar in v3) | ter vergelijking |
 | `swing_v1_donchian.pine` | eerste versie | ter vergelijking |
 | `v3_model.json` | coëfficiënten van het kwaliteitsmodel (al ingebakken in de scripts) | naslag |
@@ -32,6 +33,11 @@ kwaliteitsscore, of een van de vaste meldingen (BUY / SELL / HALF PROFIT).
 ## Hele watchlist scannen
 TradingView **Pine Screener** → kies deze indicator → filter op **Status = 1** (nieuwe BUY vandaag) of **-1** (SELL).
 Gebruik een watchlist van beweeglijke groei-/momentumaandelen en houd ~10 posities aan (zie PROGRESS.md, E35).
+
+## Watchlist-dashboard (zonder Pine Screener)
+Zet `swing_v3_watchlist_dashboard.pine` op een willekeurige **daggrafiek** en vul in de instellingen bij *Watchlist* je 12
+tickers in (standaard: NVDA, AMD, META, TSLA, AVGO, PLTR, CRWD, ANET, MU, GE, CAT, COIN — beweeglijke namen, zie E35).
+Per ticker draait de volledige v3-logica op zijn eigen historie. Pine v6 (gebruikt geneste `request.security`).
 
 ## Hoe zeker is het dat dit hetzelfde doet als de backtest?
 - Alle scripts zijn **gecompileerd en gelint** met een externe Pine-compiler (geen fouten).
