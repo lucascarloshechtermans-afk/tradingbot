@@ -17,6 +17,9 @@ useModel  = input.bool(true, "Use quality model (v3); off = v2")
 thrAdj    = input.float(0.0, "Quality threshold shift (logit, + = stricter)", step = 0.1)
 spySym    = input.symbol("AMEX:SPY", "Market reference")
 tpMult    = input.float(0.0, "Take half profit at +x ATR (0 = off; research E22 used 4)", minval = 0, step = 0.5)
+earnDays  = input.int(7, "Earnings warning window (calendar days, 0 = off)", minval = 0)
+earnBlock = input.bool(false, "Block BUY inside the earnings window (live bars only)")
+showTable = input.bool(true, "Show info table")
 
 f_z(x, mu, sd) => nz((x - mu) / sd)
 
@@ -67,6 +70,12 @@ score = -0.239166
      + +0.053219 * f_z(brkAtr, 0.488135, 0.464076)
      + -0.137207 * f_z(er20, 0.391360, 0.180358)
 quality = 1 / (1 + math.exp(-score))
+
+// next earnings report: only meaningful on recent bars (TradingView gives the upcoming date only)
+nextEarn   = earnings.future_time
+daysToEarn = na(nextEarn) ? na : (nextEarn - time_close) / 86400000.0
+earnSoon   = earnDays > 0 and not na(daysToEarn) and daysToEarn >= 0 and daysToEarn <= earnDays
+earnOk     = not (earnBlock and earnSoon)
 qualityOk = not useModel or score >= -0.436348 + thrAdj
 
 // state: 0 flat, 1 entry pending (fills next open), 2 long, 3 exit pending
@@ -110,9 +119,11 @@ else if state == 2
         if close < loM
             sellSig := true
             state := 3
-if state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and qualityOk and not sellSig and not exited
+var int entryBar = na
+if state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and qualityOk and earnOk and not sellSig and not exited
     buySig := true
     state := 1
+    entryBar := bar_index + 1
 
 plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
 plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
@@ -124,6 +135,38 @@ plotshape(sellSig, "SELL", shape.labeldown, location.abovebar, color.red, text =
 plotshape(useModel and state == 0 and close > hiN and close > trendMa and ibs >= ibsMin and not qualityOk and not sellSig and not exited,
      "Rejected breakout", shape.xcross, location.belowbar, color.new(color.orange, 30), size = size.tiny)
 plot(quality, "Breakout quality (0-1)", display = display.data_window)
+// for TradingView's Pine Screener: filter a whole watchlist on "Status" = 1 (new BUY) or -1 (SELL)
+statusCode = buySig ? 1 : sellSig ? -1 : (state == 2 or state == 3) ? 2 : 0
+plot(statusCode, "Status (1 BUY, -1 SELL, 2 long, 0 flat)", display = display.data_window)
+// ---- info table (last bar) ----
+var table info = table.new(position.top_right, 2, 7, bgcolor = color.new(color.black, 75), border_width = 1)
+if showTable and barstate.islast
+    inTrade = state == 2 or state == 3
+    statusTxt = state == 1 ? "BUY (fill next open)" : state == 3 ? "SELL (exit next open)" : inTrade ? "LONG" : sellSig ? "SOLD" : "flat"
+    statusCol = state == 1 or inTrade ? color.green : sellSig ? color.red : color.gray
+    table.cell(info, 0, 0, "Swing v3", text_color = color.white)
+    table.cell(info, 1, 0, statusTxt, text_color = color.white, bgcolor = color.new(statusCol, 40))
+    table.cell(info, 0, 1, "Breakout quality", text_color = color.white)
+    table.cell(info, 1, 1, str.tostring(quality * 100, "#") + "% " + (qualityOk ? "(ok)" : "(low)"), text_color = qualityOk ? color.lime : color.orange)
+    table.cell(info, 0, 2, "Stop", text_color = color.white)
+    table.cell(info, 1, 2, inTrade ? str.tostring(stop, format.mintick) : "-", text_color = color.white)
+    table.cell(info, 0, 3, "Risk to stop", text_color = color.white)
+    table.cell(info, 1, 3, inTrade ? str.tostring((close - stop) / close * 100, "#.#") + "%" : "-", text_color = color.white)
+    table.cell(info, 0, 4, "Bars in trade", text_color = color.white)
+    table.cell(info, 1, 4, inTrade ? str.tostring(bar_index - entryBar + 1) : "-", text_color = color.white)
+    table.cell(info, 0, 5, "Next earnings", text_color = color.white)
+    table.cell(info, 1, 5, na(daysToEarn) ? "n/a" : str.tostring(math.round(daysToEarn)) + " days", text_color = earnSoon ? color.yellow : color.white)
+    table.cell(info, 0, 6, "Trend (SMA" + str.tostring(trendLen) + ")", text_color = color.white)
+    table.cell(info, 1, 6, close > trendMa ? "up" : "down", text_color = close > trendMa ? color.lime : color.red)
+
+// earnings warning on a fresh BUY (research E38: entries in the week before earnings were weaker)
+plotshape(buySig and earnSoon, "BUY near earnings", shape.circle, location.belowbar, color.yellow, size = size.tiny)
+
+if buySig
+    alert("Swing v3 BUY " + syminfo.ticker + " @ " + str.tostring(close, format.mintick) + " | est. stop " + str.tostring(close - trailMult * atr, format.mintick) + " | quality " + str.tostring(quality * 100, "#") + "%" + (earnSoon ? " | WARNING: earnings in " + str.tostring(math.round(daysToEarn)) + " days" : ""), alert.freq_once_per_bar_close)
+if sellSig
+    alert("Swing v3 SELL " + syminfo.ticker + " @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+
 alertcondition(buySig, "Swing v3 BUY", "Swing v3 BUY on {{ticker}} at {{close}}")
 alertcondition(halfSig, "Swing v3 HALF PROFIT", "Swing v3: take half profit on {{ticker}}")
 alertcondition(sellSig, "Swing v3 SELL", "Swing v3 SELL on {{ticker}} at {{close}}")

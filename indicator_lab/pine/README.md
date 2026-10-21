@@ -1,0 +1,47 @@
+# Pine-scripts (TradingView) — handleiding
+
+| Bestand | Wat | Gebruik |
+|---|---|---|
+| `swing_v3_quality_model.pine` | **Hoofdindicator (beste versie)**: BUY/SELL-labels, trailing stop, infotabel, earnings-waarschuwing, alerts | dagelijks op de grafiek |
+| `swing_v3_strategy.pine` | Zelfde regels als **strategy**, voor de Strategy Tester van TradingView (trades, equity, statistieken) | per aandeel nakijken hoe het historisch deed |
+| `swing_v2_strong_close.pine` | v2 zonder kwaliteitsmodel (ook als schakelaar in v3) | ter vergelijking |
+| `swing_v1_donchian.pine` | eerste versie | ter vergelijking |
+| `v3_model.json` | coëfficiënten van het kwaliteitsmodel (al ingebakken in de scripts) | naslag |
+
+## Installeren
+1. TradingView → onderaan **Pine Editor** → alles weg → de inhoud van het `.pine`-bestand plakken.
+2. **Save** → **Add to chart**. Gebruik een **daggrafiek** (1D); de scripts zijn op dagbars getest.
+3. Voor de strategy: open daarna het tabblad **Strategy Tester**. Kosten (0,10% per kant) staan al ingesteld.
+
+## Wat je ziet
+- **BUY** (groen): signaal op de slotkoers → koop bij de opening van de volgende dag.
+- **SELL** (rood): de trailing stop (rode lijn) is geraakt, of de koers sloot onder het 20-daagse dieptepunt → verkoop
+  (bij een stop: op de stop; anders bij de opening van de volgende dag).
+- **Oranje ✕**: breakout die het kwaliteitsmodel afkeurt (bewust geen BUY).
+- **Gele bol** onder een BUY: er komen binnen 7 dagen kwartaalcijfers → volgens het onderzoek beter overslaan.
+- **Tabel** rechtsboven: status, breakout-kwaliteit, stop, risico tot de stop, dagen in de trade, volgende cijfers.
+
+## Alerts
+Rechtsklik op de indicator → **Add alert** → kies *"Any alert() function call"* voor een bericht mét geschatte stop en
+kwaliteitsscore, of een van de vaste meldingen (BUY / SELL / HALF PROFIT).
+
+## Hele watchlist scannen
+TradingView **Pine Screener** → kies deze indicator → filter op **Status = 1** (nieuwe BUY vandaag) of **-1** (SELL).
+Gebruik een watchlist van beweeglijke groei-/momentumaandelen en houd ~10 posities aan (zie PROGRESS.md, E35).
+
+## Hoe zeker is het dat dit hetzelfde doet als de backtest?
+- Alle scripts zijn **gecompileerd en gelint** met een externe Pine-compiler (geen fouten).
+- `indicator_lab/pine_emulator.py` voert de Pine-logica bar voor bar na in Python. Op 102 tickers gaven de BUY/SELL-signalen
+  **exact** dezelfde trades als de backtest-engine (0 onverklaarde verschillen; 32 verschillen waren posities die op de
+  laatste datadag nog open stonden). Enkel `ta.percentrank` (rekent zonder de huidige bar) verandert 4 van de 3246
+  signalen (0,1%). Een automatische test (`tests/test_pine_emulator.py`) bewaakt dit.
+- Kleine verschillen blijven mogelijk: TradingView's SPY is niet dividend-gecorrigeerd (tenzij die instelling aan staat)
+  en dataleveranciers verschillen soms een cent in hoog/laag.
+
+## Instellingen
+- **Use quality model** uit = v2. **Quality threshold shift** + = strenger (minder maar betere signalen).
+- **Take half profit at +x ATR**: 0 = uit; 4 = de "½"-variant uit onderzoek E22 (rustiger, iets minder rendement).
+- **Earnings warning window / Block BUY**: waarschuwing of blokkade vóór cijfers (werkt alleen op recente bars,
+  want TradingView kent enkel de eerstvolgende cijferdatum).
+
+Geen financieel advies. De scripts plaatsen geen orders.

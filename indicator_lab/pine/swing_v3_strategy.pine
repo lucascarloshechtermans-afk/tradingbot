@@ -1,0 +1,89 @@
+//@version=5
+// Swing v3 STRATEGY — same rules and model as swing_v3_quality_model.pine, as a TradingView
+// strategy so the built-in Strategy Tester shows trades, equity and stats on any chart.
+// Fills match the research engine: market orders on the next open, the trailing stop as a
+// stop order from the bar after it is set (gaps fill at the open), commission 0.10% per side.
+// Daily chart. Not financial advice; no live orders are sent by this script.
+strategy("Swing v3 strategy – breakout + quality model + ATR trail", overlay = true,
+     initial_capital = 10000, default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
+     commission_type = strategy.commission.percent, commission_value = 0.1, pyramiding = 0,
+     process_orders_on_close = false)
+
+n         = input.int(20, "Breakout lookback (days)", minval = 2)
+m         = input.int(20, "Exit lookback (days)", minval = 2)
+trailMult = input.float(4.0, "Trail (x ATR14)", minval = 0.5, step = 0.25)
+trendLen  = input.int(200, "Trend filter SMA", minval = 10)
+ibsMin    = input.float(0.7, "Min close position in day range (0-1)", minval = 0, maxval = 1, step = 0.05)
+useModel  = input.bool(true, "Use quality model (v3); off = v2")
+thrAdj    = input.float(0.0, "Quality threshold shift (logit, + = stricter)", step = 0.1)
+spySym    = input.symbol("AMEX:SPY", "Market reference")
+fromTime  = input.time(timestamp("2015-01-01"), "Backtest from")
+
+atr     = ta.atr(14)
+trendMa = ta.sma(close, trendLen)
+hiN     = ta.highest(high, n)[1]
+loM     = ta.lowest(low, m)[1]
+ibs     = high > low ? (close - low) / (high - low) : 0.5
+
+f_z(x, mu, sd) => nz((x - mu) / sd)
+
+// ---- model features (all known at this bar's close) ----
+spy      = request.security(spySym, "D", close)
+volRatio = volume / ta.sma(volume, 50)
+rvol     = math.log(math.max(volRatio, 0.05))
+roc21    = close / close[21] - 1
+roc63    = close / close[63] - 1
+roc126   = close / close[126] - 1
+atrPct   = atr / close * 100
+rsi14    = ta.rsi(close, 14)
+ext50    = (close - ta.sma(close, 50)) / atr
+spyRoc63 = spy / spy[63] - 1
+rs63     = roc63 - spyRoc63
+dist52   = close / ta.highest(high, 252) - 1
+bbSd     = ta.stdev(close, 20)
+bbw      = 4 * bbSd / ta.sma(close, 20)
+bbwPct   = ta.percentrank(bbw, 252) / 100
+gapAtr   = (open - close[1]) / atr[1]
+spyUp    = spy > ta.sma(spy, 200) ? 1.0 : 0.0
+rangeAtr = (high - low) / atr[1]
+brkAtr   = (close - ta.highest(high, 20)[1]) / atr
+er20     = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 20)
+
+score = -0.239166
+     + -0.013667 * f_z(ibs, 0.882077, 0.084629)
+     + +0.076333 * f_z(rvol, 0.004562, 0.362269)
+     + +0.016040 * f_z(roc21, 0.077442, 0.060907)
+     + +0.012175 * f_z(roc63, 0.126248, 0.125601)
+     + -0.138152 * f_z(roc126, 0.194296, 0.202241)
+     + +0.057250 * f_z(atrPct, 1.628976, 0.716738)
+     + +0.032266 * f_z(rsi14, 69.835640, 6.166100)
+     + -0.019922 * f_z(ext50, 4.170886, 1.825834)
+     + +0.083876 * f_z(rs63, 0.066311, 0.118742)
+     + -0.026856 * f_z(dist52, -0.021334, 0.041406)
+     + -0.045780 * f_z(bbwPct, 0.542970, 0.289047)
+     + -0.012404 * f_z(gapAtr, 0.224549, 0.546279)
+     + -0.007950 * f_z(spyUp, 0.958425, 0.199617)
+     + -0.168088 * f_z(spyRoc63, 0.059937, 0.050155)
+     + -0.014471 * f_z(rangeAtr, 1.052503, 0.485749)
+     + +0.053219 * f_z(brkAtr, 0.488135, 0.464076)
+     + -0.137207 * f_z(er20, 0.391360, 0.180358)
+qualityOk = not useModel or score >= -0.436348 + thrAdj
+
+inPos      = strategy.position_size > 0
+justClosed = strategy.closedtrades > strategy.closedtrades[1]  // engine never re-enters on an exit bar
+var float hh        = na
+var float trailStop = na
+if inPos
+    hh := na(hh) ? high : math.max(hh, high)
+    trailStop := math.max(nz(trailStop, -1e10), hh - trailMult * atr)
+    strategy.exit("Trail", "Long", stop = trailStop, comment = "trail stop")
+    if close < loM
+        strategy.close("Long", comment = "close < m-day low")
+else
+    hh := na
+    trailStop := na
+    if not justClosed and time >= fromTime and close > hiN and close > trendMa and ibs >= ibsMin and qualityOk
+        strategy.entry("Long", strategy.long, comment = "BUY")
+
+plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
+plot(inPos ? trailStop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
