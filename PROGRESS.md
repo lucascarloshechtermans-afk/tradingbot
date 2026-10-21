@@ -438,3 +438,19 @@ All 5 queued ideas are done: probe positions ✗ · volatile universe (✓ as us
 OOS ≈ B&H return at under half the drawdown) · short side ✗ · earnings (advice only) · Pine half-profit option ✓.
 **v3 remains the best version.** Next ideas: a point-in-time (survivorship-free) volatile universe; the full Alpha
 Vantage earnings history once the daily limit resets (27 names missing); and a regime switch between 5 and 10 slots.
+
+### E40 — E38 re-run with fuller earnings data (131 of 134 stocks; DVN/OXY/HAL still missing)
+- H2 per trade (entries ≤5 sessions before earnings vs the rest): DEV+HOLD +2.6 vs +3.9% (IS), +0.1 vs +3.1% (OOS) ·
+  EXTRA +0.4 vs +1.4%, +0.1 vs +1.0% · VOLATILE +3.6 vs +6.9%, +1.0 vs +1.4%. **Still worse in all 6 cells.**
+- As a filter, skip 3/5/7/10 sessions: composite 1.25/1.24/1.22/1.24 (v3 1.23). EXTRA OOS 0.50–0.69 (v3 0.45), but
+  VOLATILE 10-slot OOS 0.46–0.60 (v3 0.67) is worse.
+- **Verdict unchanged:** a real per-trade effect, no robust portfolio gain. Keep it as advice, not a rule.
+
+## Where this ends (2026-10-21)
+I am stopping the optimisation here on purpose. After ~40 idea families, the last ~22 have not produced a robust
+improvement over v3, and every extra test on the same 2015-2026 data raises the chance that a "winner" is luck.
+The highest-value next step is no longer another backtest. It is **checking v3 in reality**:
+1. Paste `indicator_lab/pine/swing_v3_quality_model.pine` into TradingView and check that the BUY/SELL marks match
+   the Python signals on a few charts (e.g. NVDA, AAPL in 2024). The Pine code has not been compiled in TradingView.
+2. Paper-trade it for 2–3 months on a watchlist of ~20–40 volatile names, with 10 positions, without trading in the
+   week before earnings, and compare with these backtest numbers.
