@@ -122,6 +122,9 @@ SEEDS = 5
 RANK: tuple[str, bool] | None = None
 # Optional cash overlay: (ticker, sma) -> idle slot capital is held in `ticker` while it is above its SMA.
 PARK: tuple[str, int] | None = None
+# Optional dynamic sizing: weight per open position = 1 / max(open positions, DYN), so with few signals each
+# position is bigger (but never above 1/DYN). None = fixed 1/SLOTS.
+DYN: int | None = None
 
 
 def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int | None = None, seed: int = 0) -> pd.Series:
@@ -152,10 +155,18 @@ def slot_portfolio(rets: pd.DataFrame, trades: dict[str, list[dict]], k: int | N
         active.append(xd)
         i0, i1 = idx.searchsorted(ed), idx.searchsorted(xd)
         mask[i0:i1 + 1, cols[t]] = 1
-    port = pd.Series((rets.to_numpy() * mask).sum(axis=1) / k, index=idx)
+    if DYN:
+        # dynamic sizing: each open position gets 1/max(open positions, DYN) of equity (>= 1/k)
+        n_open = mask.sum(axis=1)
+        w = 1.0 / np.maximum(n_open, DYN)
+        port = pd.Series((rets.to_numpy() * mask).sum(axis=1) * w, index=idx)
+        occ_frac = np.minimum(n_open * w, 1.0)
+    else:
+        port = pd.Series((rets.to_numpy() * mask).sum(axis=1) / k, index=idx)
+        occ_frac = np.minimum(mask.sum(axis=1) / k, 1.0)
     if PARK:
         # idle slots earn the parking asset, only while it is above its SMA (signal from the prior close)
-        occ = np.minimum(mask.sum(axis=1) / k, 1.0)
+        occ = occ_frac
         px = get(PARK[0])["close"]
         on = (px > px.rolling(PARK[1]).mean()).shift(1).reindex(idx).fillna(False).to_numpy()
         pr = px.pct_change().reindex(idx).fillna(0).to_numpy()

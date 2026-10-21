@@ -567,3 +567,16 @@ Idle slot capital earns SPY's return when SPY closed above its SMA the day befor
   (IS) / 17.7→18.1% (OOS) · HOLD 20.3→20.3% / 16.2→16.5% (single seed). Small but positive.
   (A first run showed lower numbers. That was a bug in the throwaway script, `~` on an object dtype, caught because
   adding interest cannot lower returns.)
+
+### E50 — Dynamic position size (bigger positions when few signals are open)
+Each open position gets 1/max(open positions, min) of equity, up to 10 positions, with SPY parking:
+min 3: composite 1.18, OOS 0.99, BIG OOS 0.70 (v3.1 10-slot 0.63), LOCKBOX 0.99/0.69 (v3.1 1.26/0.79) ·
+min 5: 1.22, OOS 1.09, BIG 0.67, LOCKBOX 1.13/0.73. Better on BIG, worse on DEV/HOLD OOS and on the lockbox.
+**Rejected.** Fixed equal slots + SPY parking (v3.1) stays the rule.
+
+## Where session 4 ends
+**v3.1 is the best version:** the v3 signals (unchanged, Pine-verified) plus parking idle cash in SPY while
+SPY > SMA200. Practical settings, from the evidence: a watchlist of volatile growth/momentum names; about 1 position
+per 8 names on the list (5–10% each); no new entries in the week before earnings; idle cash in SPY when the table says
+YES. Signal rules, filters, exits, sizing and ranking have now been searched broadly (50 experiment families), and
+the remaining ideas test as noise.
