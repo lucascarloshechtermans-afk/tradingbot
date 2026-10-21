@@ -9,8 +9,13 @@
   samengedrukte periode.
 - **VERKOOP** als de koers onder de laagste koers van de vorige 20 dagen sluit, of als de trailing stop
   (hoogste koers sinds instap − 4×ATR) geraakt wordt. Gemiddeld houd je een trade ~5-7 weken vast.
-- **TradingView:** `indicator_lab/pine/swing_v3_quality_model.pine` (plakken in de Pine Editor, op een dagchart).
-  Je kan het model uitzetten in de instellingen; dan heb je v2.
+- **TradingView** (handleiding: `indicator_lab/pine/README.md`):
+  - `swing_v3_quality_model.pine` — de indicator: BUY/SELL, trailing stop, infotabel met positiegrootte en
+    statistiek van het aandeel, waarschuwing vóór kwartaalcijfers, alerts. Model uitzetten = v2.
+  - `swing_v3_strategy.pine` — zelfde regels als strategy → Strategy Tester van TradingView.
+  - `swing_v3_watchlist_dashboard.pine` — 12 tickers in één tabel (BUY/SELL/LONG + stop).
+  - Alles is **gecompileerd** met een Pine-compiler, en een Python-emulator bewijst dat de Pine-signalen exact
+    dezelfde trades geven als de backtest (102 tickers).
 - **Resultaat** (2021-2026, getest op data waarop niets is afgesteld): op SPY/QQQ/AAPL/MSFT/NVDA + 10 andere tickers
   een Sharpe van 1,23 tegenover 1,18 voor buy & hold, met een max drawdown van −15% in plaats van −26%. Minder
   rendement dan buy & hold (16% tegenover 21% per jaar), maar veel rustiger. Kosten en slippage zitten erin.
