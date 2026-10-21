@@ -31,6 +31,8 @@ class ExitRules:
     fail_bars: int | None = None    # after this many bars, exit (next open) if close is still <= entry
     entry_close: bool = False       # fill at the SIGNAL bar's close (market-on-close) instead of next open
     side: int = 1                   # 1 = long, -1 = short (see simulate_short)
+    max_gap_atr: float | None = None  # cancel the entry if the fill bar opens > k x ATR above the signal close
+    trail_from_close: bool = False  # chandelier from the highest CLOSE since entry instead of the highest high
     tight_trail: float | None = None
 
 
@@ -84,7 +86,7 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
                 in_pos = pend_exit = False
             else:
                 ret[t] = w * (c[t] / prev - 1)
-                hh = max(hh, h[t])
+                hh = max(hh, c[t] if rules.trail_from_close else h[t])
                 a = atr[t]
                 if rules.trail_atr is not None and np.isfinite(a):
                     stop = max(stop, hh - rules.trail_atr * a)
@@ -101,11 +103,13 @@ def simulate(df: pd.DataFrame, entry: np.ndarray, exit_sig: np.ndarray | None, a
         if pend_entry:
             pend_entry = False
             a = atr[t - 1]
+            if rules.max_gap_atr is not None and o[t] > c[t - 1] + rules.max_gap_atr * a:
+                continue  # gapped too far above the signal close: skip, don't chase
             ep = o[t]
             sig_atr = a
             stop = ep - rules.stop_atr * a if rules.stop_atr is not None else -np.inf
             tgt = ep + rules.tgt_atr * a if rules.tgt_atr is not None else np.inf
-            hh = h[t]
+            hh = c[t] if rules.trail_from_close else h[t]
             ei = t
             w = 1.0 if size is None else float(np.clip(size[t - 1], 0.0, 1.0))
             in_pos = True

@@ -613,3 +613,30 @@ All are fixed, and the backtest numbers are unchanged (v3 composite 1.23).
 - Verification: 407 tests pass (a new test crashes a bar right after entry and checks that engine and Pine logic stop
   out at the same price). 102-ticker parity holds (0 unexplained differences; 6 of ~3,250 signals differ only through
   `ta.percentrank`). All three Pine files compile.
+
+---
+
+## Session 6 (2026-10-21, autonomous) — more searching, against v3.1
+
+New safeguard: `data.LOCKBOX2`, 53 never-used names (AMP, AZO, BKNG, CME, CTAS, …; ANSS dropped as delisted).
+Baseline for comparisons: v3.1 (v3 signals + SPY parking). All runs include the entry-day stop.
+
+### E52 — Entry-day stop on volatile names
+Hit 4 times on BIG (~150 names) and 0 on LOCKBOX. BIG 10-slot Sharpe IS/OOS with vs without the stop: 1.43/0.55 vs
+1.34/0.63, VOLATILE 1.18/0.75 vs 1.16/0.74, LOCKBOX identical. Four trades moving the BIG portfolio ±0.08 is
+slot path-dependence (a freed slot changes every later pick), not an edge either way. **Kept for safety.**
+Lesson: BIG 10-slot differences under ~0.1 are noise.
+
+### E53 — Trail on ATR 10/20/50, chandelier from the highest close, skip big gap-ups at the fill
+Composite (v3.1 1.23): ATR10 1.16 · ATR20 1.15 · ATR50 1.08 · trail from close 1.16 (3.5 ATR: 1.11) · skip if the
+fill opens > 0.5/1/2 ATR above the signal close 1.16/1.22/1.24 (BIG OOS 0.88/0.49/0.55, not monotonic). **All rejected.**
+
+### E54 — Pyramiding (one add-on unit per trade) vs CONTROLS
+- Add on a new v3 signal once the trade is +1/+2/+3 ATR up: composite 1.25/1.23/1.32, OOS 1.18/1.21/1.25, BIG OOS
+  0.84/1.00/0.92 (v3.1 0.55), VOLATILE OOS 0.83/0.98/0.85 (0.75). It looked like a big win.
+- **Controls:** add unconditionally after 5/10/20 bars: composite 1.31/1.26/1.16, BIG OOS 0.91/0.91/0.78, VOL OOS
+  0.79/0.92/0.99. Add when +2/+3 ATR without a new breakout: 1.18/1.29.
+- **Verdict:** the controls do as well. The gain is not "adding to winners". It is simply more capital in v3 trades
+  instead of SPY (a v3 trade beats SPY on average) plus more single-name concentration. **Not adopted as a rule.**
+  Takeaway: when only a few v3 positions are open, a larger position per trade (up to ~2 slots) adds return at the
+  cost of concentration. E50 (dynamic sizing) tested the clean version of that idea and was mixed.

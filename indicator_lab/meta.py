@@ -268,9 +268,10 @@ def meta_breakout(df, p):
         size = vs if size is None else size * vs
     lo_m = df["low"].rolling(p["m"]).min().shift(1)
     exit_sig = (df["close"] < lo_m).to_numpy()
-    a = ind.atr(df, 14)
+    a = ind.atr(df, p.get("atr_n", 14))
     rules = ExitRules(trail_atr=p["trail"], tgt_atr=p.get("tgt"), stop_atr=p.get("stop"), fail_bars=p.get("fail_bars"),
-                      entry_close=bool(p.get("entry_close")))
+                      entry_close=bool(p.get("entry_close")), max_gap_atr=p.get("max_gap"),
+                      trail_from_close=bool(p.get("trail_close")))
     return entry, exit_sig, rules, a.to_numpy(), size
 
 
@@ -323,3 +324,34 @@ def meta_mr(df, p):
     cand, exit_sig = mr_parts(df, lo, xm)
     entry = cand & _MODELS[key].take(f) if p.get("keep", 0.5) < 1 else cand
     return entry, exit_sig, ExitRules(stop_atr=stop), ind.atr(df, 14).to_numpy(), None
+
+
+def pyramid_add(df, p):
+    """Add-on unit for v3 (pyramiding): while a v3 trade is open and already `add_atr` ATR in profit,
+    a NEW qualifying v3 breakout signal adds one more unit (once per trade). The add-on has v3's exits
+    and is also closed when the base trade ends. Evaluated as a second part next to the base."""
+    from indicator_lab.engine import simulate
+    entry, exit_sig, rules, a, size = meta_breakout(df, p)
+    _, trades = simulate(df, entry, exit_sig, a, rules)
+    idx = df.index
+    c = df["close"].to_numpy()
+    add = np.zeros(len(idx), dtype=bool)
+    force_exit = np.zeros(len(idx), dtype=bool)
+    for x in trades:
+        i0, i1 = idx.get_loc(x["entry_date"]), idx.get_loc(x["exit_date"])
+        if p.get("add_mode") == "time":  # control: add after a fixed number of bars, no condition
+            t = i0 + p.get("add_bars", 10)
+            if t < i1 - 1:
+                add[t] = True
+        elif p.get("add_mode") == "profit":  # control: add once in profit by add_atr, no new breakout needed
+            for t in range(i0 + 1, i1 - 1):
+                if c[t] >= x["entry"] + p.get("add_atr", 2.0) * a[t]:
+                    add[t] = True
+                    break
+        else:
+            for t in range(i0 + 1, i1 - 1):
+                if entry[t] and c[t] >= x["entry"] + p.get("add_atr", 2.0) * a[t]:
+                    add[t] = True
+                    break
+        force_exit[max(i1 - 1, 0)] = True  # base trade ends at bar i1 -> add-on leaves at the same open
+    return add, exit_sig | force_exit, rules, a, None

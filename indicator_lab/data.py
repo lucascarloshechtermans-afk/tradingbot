@@ -33,6 +33,11 @@ LOCKBOX = ["DECK", "AXON", "TPL", "FICO", "CELH", "ELF", "CROX", "LULU", "BLDR",
            "TT", "FIX", "EME", "NUE", "STLD", "MOD", "APP", "DUOL", "HUBS", "MELI", "SE", "TOST", "WING", "CMG",
            "DPZ", "ULTA", "RH", "FIVE", "TREX", "POOL", "IBKR", "LPLA", "KKR", "APO", "BX", "ARES", "ISRG",
            "IDXX", "MPWR", "ENTG", "TER", "CDNS", "SNPS", "INTU", "ADSK", "ROP", "ODFL"]
+# LOCKBOX2 (added session 6, after LOCKBOX was spent in E47): never used for design or selection.
+LOCKBOX2 = ["ALB", "AMP", "AON", "APH", "AZO", "BKNG", "BR", "CB", "CHD", "CINF", "CME", "CPRT", "CSX",
+            "CTAS", "DHI", "DOV", "EFX", "EW", "EXPE", "FAST", "FDS", "GWW", "HCA", "HLT", "HUM", "ICE", "IT",
+            "JBHT", "KEYS", "LEN", "LH", "MAR", "MCO", "MKTX", "MLM", "MSCI", "MTD", "NDAQ", "NVR", "ORLY",
+            "PAYX", "PHM", "RCL", "RMD", "SHW", "SPGI", "TDG", "TSCO", "TYL", "VMC", "WAT", "WST", "ZBRA"]
 DEV = CORE + DEV_EXTRA
 ALL = DEV + HOLDOUT
 
