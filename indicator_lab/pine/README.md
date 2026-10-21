@@ -21,7 +21,9 @@
 - **Gele bol** onder een BUY: er komen binnen 7 dagen kwartaalcijfers → volgens het onderzoek beter overslaan.
 - **Tabel** rechtsboven: status, breakout-kwaliteit, stop, risico tot de stop, dagen in de trade, volgende cijfers,
   **positiegrootte** als je nu koopt (instellingen *Account size*, *Risk per trade %*, *Max position %*: standaard
-  1% risico tot de initiële stop, max 10% van de rekening per positie ≈ 10 posities) en een check op daggrafiek.
+  1% risico tot de initiële stop, max 10% van de rekening per positie ≈ 10 posities), een check op daggrafiek, en
+  **statistiek van dit aandeel**: aantal trades, winrate, profit factor en gemiddelde trade sinds 2015 (instelbaar),
+  met kosten en exact dezelfde vulregels als de backtest (getest in `tests/test_pine_emulator.py`).
 
 ## Alerts
 Rechtsklik op de indicator → **Add alert** → kies *"Any alert() function call"* voor een bericht mét geschatte stop en
@@ -39,6 +41,14 @@ Gebruik een watchlist van beweeglijke groei-/momentumaandelen en houd ~10 positi
   signalen (0,1%). Een automatische test (`tests/test_pine_emulator.py`) bewaakt dit.
 - Kleine verschillen blijven mogelijk: TradingView's SPY is niet dividend-gecorrigeerd (tenzij die instelling aan staat)
   en dataleveranciers verschillen soms een cent in hoog/laag.
+
+## Pine-versie
+De scripts zijn `//@version=5` en compileren ook als `//@version=6` (getest). TradingView ondersteunt beide.
+
+## Niet-Amerikaanse aandelen
+Het kwaliteitsmodel gebruikt SPY als marktreferentie (getraind op Amerikaanse aandelen). Voor bv. Euronext-aandelen kan
+je bij *Market reference* een lokale index-ETF kiezen, maar het model is daar niet op getest: gebruik dan eventueel
+*Use quality model = uit* (v2-regels, die marktneutraal zijn).
 
 ## Instellingen
 - **Use quality model** uit = v2. **Quality threshold shift** + = strenger (minder maar betere signalen).

@@ -35,3 +35,13 @@ def test_pine_state_machine_matches_engine_signal_for_signal():
         assert len(trades) >= 5
         assert pine_buy == eng_buy
         assert {i for i in np.flatnonzero(sell) if i <= last_exit} == eng_sell
+
+
+def test_pine_chart_statistics_book_the_same_returns_as_the_engine():
+    df = _trending_ohlc(7)
+    p = {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7}
+    entry, ex, rules, atr, _ = S.breakout(df, p)
+    _, trades = simulate(df, entry, ex, atr, rules, cost=0.001)
+    _, _, rets = PE.run(df, df["close"], use_model=False, cost_pct=0.1, with_trades=True)
+    assert len(trades) >= 5
+    assert np.allclose(rets[:len(trades)], [x["ret"] for x in trades])

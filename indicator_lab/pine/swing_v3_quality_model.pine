@@ -23,6 +23,8 @@ showTable = input.bool(true, "Show info table")
 acctSize  = input.float(10000, "Account size (for position size)", minval = 0, group = "Position size")
 riskPct   = input.float(1.0, "Risk per trade (% of account)", minval = 0.05, step = 0.25, group = "Position size")
 maxPosPct = input.float(10.0, "Max position (% of account; ~10 positions)", minval = 1, maxval = 100, group = "Position size")
+statsFrom = input.time(timestamp("2015-01-01"), "Count trades from", group = "Chart statistics")
+costPct   = input.float(0.1, "Cost per side % (commission + slippage)", minval = 0, step = 0.05, group = "Chart statistics")
 
 f_z(x, mu, sd) => nz((x - mu) / sd)
 
@@ -92,11 +94,32 @@ buySig  = false
 sellSig = false
 exited  = false  // the engine never re-enters on the bar it exits
 
+// ---- per-chart trade statistics (same fills as the research engine) ----
+var float entryPx = na
+var bool  counted = false
+var int   nTr = 0
+var int   nWin = 0
+var float sumWin = 0.0
+var float sumLoss = 0.0
+var float sumRet = 0.0
+f_book(exitPx) =>
+    r = exitPx * (1 - costPct / 100) / (entryPx * (1 + costPct / 100)) - 1
+    r
+
 if state == 3
+    if counted
+        r3 = f_book(open)
+        nTr += 1
+        nWin += r3 > 0 ? 1 : 0
+        sumWin += math.max(r3, 0)
+        sumLoss += math.max(-r3, 0)
+        sumRet += r3
     state := 0
     stop := na
     exited := true
 if state == 1
+    entryPx := open
+    counted := time >= statsFrom
     state := 2
     hh := high
     stop := hh - trailMult * atr
@@ -110,6 +133,13 @@ if state == 1
         state := 3
 else if state == 2
     if low <= stop
+        if counted
+            r2 = f_book(math.min(open, stop))
+            nTr += 1
+            nWin += r2 > 0 ? 1 : 0
+            sumWin += math.max(r2, 0)
+            sumLoss += math.max(-r2, 0)
+            sumRet += r2
         sellSig := true
         state := 0
         stop := na
@@ -148,7 +178,7 @@ estStop  = close - trailMult * atr
 riskPerSh = close - estStop
 sizeSh   = riskPerSh > 0 ? math.floor(math.min(acctSize * riskPct / 100 / riskPerSh, acctSize * maxPosPct / 100 / close)) : 0
 
-var table info = table.new(position.top_right, 2, 9, bgcolor = color.new(color.black, 75), border_width = 1)
+var table info = table.new(position.top_right, 2, 10, bgcolor = color.new(color.black, 75), border_width = 1)
 if showTable and barstate.islast
     inTrade = state == 2 or state == 3
     statusTxt = state == 1 ? "BUY (fill next open)" : state == 3 ? "SELL (exit next open)" : inTrade ? "LONG" : sellSig ? "SOLD" : "flat"
@@ -171,6 +201,9 @@ if showTable and barstate.islast
     table.cell(info, 1, 7, str.tostring(sizeSh) + " sh (" + str.tostring(sizeSh * close, "#") + ") stop " + str.tostring(estStop, format.mintick), text_color = color.white)
     table.cell(info, 0, 8, "Chart", text_color = color.white)
     table.cell(info, 1, 8, timeframe.isdaily ? "daily ✓" : "use a DAILY chart!", text_color = timeframe.isdaily ? color.white : color.yellow)
+    pf = sumLoss > 0 ? sumWin / sumLoss : na
+    table.cell(info, 0, 9, "This chart since " + str.format_time(statsFrom, "yyyy"), text_color = color.white)
+    table.cell(info, 1, 9, nTr == 0 ? "no closed trades" : str.tostring(nTr) + " trades | win " + str.tostring(100.0 * nWin / nTr, "#") + "% | PF " + (na(pf) ? "∞" : str.tostring(pf, "#.##")) + " | avg " + str.tostring(100 * sumRet / nTr, "#.#") + "%", text_color = color.white)
 
 // earnings warning on a fresh BUY (research E38: entries in the week before earnings were weaker)
 plotshape(buySig and earnSoon, "BUY near earnings", shape.circle, location.belowbar, color.yellow, size = size.tiny)

@@ -454,3 +454,36 @@ The highest-value next step is no longer another backtest. It is **checking v3 i
    the Python signals on a few charts (e.g. NVDA, AAPL in 2024). The Pine code has not been compiled in TradingView.
 2. Paper-trade it for 2–3 months on a watchlist of ~20–40 volatile names, with 10 positions, without trading in the
    week before earnings, and compare with these backtest numbers.
+
+
+---
+
+## Session 3 (2026-10-21) — the Pine Script itself
+
+Focus moved from finding new rules to making the TradingView script the user will actually run correct and useful.
+
+### E41 — Is the Pine script correct?
+- **Compilation:** all Pine files (v1, v2, v3 indicator, v3 strategy) were compiled with an external Pine compiler
+  (TextToQuant `validate_indicator`) and linted: 0 errors, 0 warnings. The validator is real: it rejects, for example,
+  duplicate declarations, which caught one bug in the first draft of the strategy file. v3 also compiles as `@version=6`.
+- **Logic parity:** `indicator_lab/pine_emulator.py` re-implements the Pine script bar by bar with Pine semantics.
+  On 102 tickers (DEV+HOLDOUT+VOLATILE), its BUY/SELL marks reproduce the research engine's trades **exactly**
+  (32 differences, all positions still open on the last data day, which the engine does not log). Pine's
+  `ta.percentrank` (which excludes the current bar) changes 4 of 3,246 signals (0.1%).
+  `tests/test_pine_emulator.py` guards both the signals and the per-trade returns on synthetic data (runs in CI, no
+  network). `tests/test_pine_model_sync.py` checks that both Pine files embed exactly `v3_model.json`.
+- Runtime check on real bars was not possible: the TextToQuant free plan runs crypto only, and its preview output
+  was truncated. Compile + emulator parity is the strongest check available here.
+
+### E42 — Pine features added (signal logic unchanged, so parity holds)
+- `swing_v3_strategy.pine`: the same rules as a TradingView **strategy** (next-open market orders, the trail as a stop
+  order from the next bar, gaps fill at the open, 0.10% per side, no re-entry on an exit bar). The Strategy Tester
+  works on any ticker.
+- Indicator v3: an **info table** (status, breakout quality, stop, risk to stop, bars in trade, next earnings, trend,
+  **position size** at a chosen account/risk %, daily-chart check, and **this chart's trade statistics** since 2015
+  with costs) · an **earnings window** via `earnings.future_time` (yellow dot on a BUY within 7 days, optional block;
+  live bars only) · a dynamic `alert()` with estimated stop, quality and size · a **status plot** for TradingView's
+  **Pine Screener** to scan a whole watchlist (1 = BUY today, −1 = SELL) · optional ½-profit target.
+- Model check: retraining the embedded model on DEV+EXTRA (48 more tickers) is not clearly better on the fresh
+  VOLATILE names (5 slots better, 10-slot OOS 0.60 vs 0.67), so the Pine file keeps the validated v3 fit.
+- Dutch user guide: `indicator_lab/pine/README.md`.

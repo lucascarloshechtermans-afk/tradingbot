@@ -65,8 +65,9 @@ def pine_score(f: pd.DataFrame, model: dict | None = None) -> pd.Series:
 
 
 def run(df: pd.DataFrame, spy: pd.Series, n=20, m=20, trail=4.0, trend_len=200, ibs_min=0.7,
-        use_model=True, model: dict | None = None):
-    """Returns (buy, sell) boolean arrays exactly as the Pine script marks them."""
+        use_model=True, model: dict | None = None, cost_pct=0.1, with_trades=False):
+    """Returns (buy, sell) boolean arrays exactly as the Pine script marks them; with
+    with_trades=True also the per-trade returns the Pine "chart statistics" row books."""
     model = model or json.load(open(MODEL))
     c, h, lo = df["close"].to_numpy(), df["high"].to_numpy(), df["low"].to_numpy()
     a = ind.atr(df, 14).to_numpy()
@@ -76,20 +77,26 @@ def run(df: pd.DataFrame, spy: pd.Series, n=20, m=20, trail=4.0, trend_len=200, 
     ibs = ind.ibs(df).to_numpy()
     score = pine_score(pine_features(df, spy), model).to_numpy()
     ok = (score >= model["logit_thr"]) if use_model else np.ones(len(c), bool)
-    state, hh, stop = 0, np.nan, np.nan
+    o = df["open"].to_numpy()
+    k = cost_pct / 100
+    state, hh, stop, entry_px = 0, np.nan, np.nan, np.nan
+    rets: list[float] = []
     buy = np.zeros(len(c), bool)
     sell = np.zeros(len(c), bool)
     for t in range(len(c)):
         exited = False
         if state == 3:
+            rets.append(o[t] * (1 - k) / (entry_px * (1 + k)) - 1)
             state, stop, exited = 0, np.nan, True
         if state == 1:
+            entry_px = o[t]
             state, hh = 2, h[t]
             stop = hh - trail * a[t]
             if c[t] < lo_m[t]:
                 sell[t], state = True, 3
         elif state == 2:
             if lo[t] <= stop:
+                rets.append(min(o[t], stop) * (1 - k) / (entry_px * (1 + k)) - 1)
                 sell[t], state, stop = True, 0, np.nan
             else:
                 hh = max(hh, h[t])
@@ -100,6 +107,8 @@ def run(df: pd.DataFrame, spy: pd.Series, n=20, m=20, trail=4.0, trend_len=200, 
         if (state == 0 and not sell[t] and not exited and c[t] > hi_n[t] and c[t] > tma[t]
                 and ibs[t] >= ibs_min and ok[t]):
             buy[t], state = True, 1
+    if with_trades:
+        return buy, sell, rets
     return buy, sell
 
 
