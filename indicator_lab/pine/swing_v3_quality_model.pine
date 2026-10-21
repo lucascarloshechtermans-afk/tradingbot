@@ -200,7 +200,10 @@ estStop  = close - trailMult * atr
 riskPerSh = close - estStop
 sizeSh   = riskPerSh > 0 ? math.floor(math.min(acctSize * riskPct / 100 / riskPerSh, acctSize * maxPosPct / 100 / close)) : 0
 
-var table info = table.new(position.top_right, 2, 11, bgcolor = color.new(color.black, 75), border_width = 1)
+// research E30/E56: v3's edge per trade grows with a stock's typical volatility (1-year mean ATR%)
+atr1y = ta.sma(atr / close * 100, 252)
+
+var table info = table.new(position.top_right, 2, 12, bgcolor = color.new(color.black, 75), border_width = 1)
 if showTable and barstate.islast
     inTrade = state == 2 or state == 3
     statusTxt = state == 1 ? "BUY (fill next open)" : state == 3 ? "SELL (exit next open)" : inTrade ? "LONG" : sellSig ? "SOLD" : "flat"
@@ -226,6 +229,8 @@ if showTable and barstate.islast
     // v3.1 portfolio rule (research E48): keep idle cash in SPY while SPY > its 200-day SMA, else in cash
     table.cell(info, 0, 10, "Idle cash → SPY", text_color = color.white)
     table.cell(info, 1, 10, spyUp == 1.0 ? "YES (SPY > SMA200)" : "NO, hold cash", text_color = spyUp == 1.0 ? color.lime : color.orange)
+    table.cell(info, 0, 11, "Volatility 1y (ATR%)", text_color = color.white)
+    table.cell(info, 1, 11, na(atr1y) ? "n/a" : str.tostring(atr1y, "#.#") + "% " + (atr1y >= 2.5 ? "good fit" : atr1y >= 1.5 ? "ok fit" : "weak fit"), text_color = na(atr1y) ? color.gray : atr1y >= 2.5 ? color.lime : atr1y >= 1.5 ? color.white : color.orange)
     pf = sumLoss > 0 ? sumWin / sumLoss : na
     table.cell(info, 0, 9, "This chart since " + str.format_time(statsFrom, "yyyy"), text_color = color.white)
     table.cell(info, 1, 9, nTr == 0 ? "no closed trades" : str.tostring(nTr) + " trades | win " + str.tostring(100.0 * nWin / nTr, "#") + "% | PF " + (na(pf) ? "∞" : str.tostring(pf, "#.##")) + " | avg " + str.tostring(100 * sumRet / nTr, "#.#") + "%", text_color = color.white)

@@ -640,3 +640,19 @@ fill opens > 0.5/1/2 ATR above the signal close 1.16/1.22/1.24 (BIG OOS 0.88/0.4
   instead of SPY (a v3 trade beats SPY on average) plus more single-name concentration. **Not adopted as a rule.**
   Takeaway: when only a few v3 positions are open, a larger position per trade (up to ~2 slots) adds return at the
   cost of concentration. E50 (dynamic sizing) tested the clean version of that idea and was mixed.
+
+### E55 — Non-linear quality model (squares and pairwise products of the 6 sign-stable features)
+17 linear + 21 polynomial terms, l2 100/300/1000: composite 1.21/1.24/1.25 (v3.1 1.23), BIG OOS 0.62/0.58/0.51 (0.55),
+VOLATILE OOS 0.68/0.64/0.65 (0.75). Polynomial on the 6 stable features only: 1.23, BIG 0.51, VOL 0.67.
+**Rejected.** The linear model is as good on DEV/HOLD and better on the volatile names.
+
+### E56 — How much of "volatile names work better" is real edge vs. just bigger swings? (all ~150 names, v3 trades)
+| 1-year mean ATR% at signal | ≤1.5 | 1.5–2 | 2–2.5 | 2.5–3 | 3–4 | >4 |
+|---|---|---|---|---|---|---|
+| avg trade 2015-20 / 2021-26 | +0.9 / +0.4% | +1.1 / +0.6% | +2.6 / +0.8% | +2.6 / +1.2% | +3.2 / +1.6% | +15.9 / +2.5% |
+| avg in risk units (R = 4×ATR) 2015-20 / 2021-26 | 0.19 / 0.08 | 0.16 / 0.08 | 0.30 / 0.08 | 0.23 / 0.10 | 0.23 / 0.12 | 0.72 / 0.11 |
+- Most of the % difference is scale: volatile names move more, so trades are bigger in both directions. The edge per
+  unit of risk rises only modestly in 2021-26 (0.08 → 0.10–0.12 R from about 2.5% ATR). 2015-20 is flat except the
+  >4% bucket (the NVDA/AMD booms).
+- **Pine:** a new table row, "Volatility 1y (ATR%)", marks ≥2.5% "good fit", 1.5–2.5% "ok fit" and <1.5% "weak fit".
+  This is guidance, not a filter: E30 showed a hard filter does not improve the portfolio.

@@ -66,7 +66,24 @@ def feature_frame(df: pd.DataFrame) -> pd.DataFrame:
         "rsi2": ind.rsi(c, 2),
         "roc5": ind.roc(c, 5),
         "ext200": (c - ind.sma(c, 200)) / a,
-    }).join(market_breadth().reindex(df.index).ffill())
+    }).join(market_breadth().reindex(df.index).ffill()).pipe(_poly)
+
+
+POLY_BASE = ["rvol", "spy_roc63", "er20", "bbw_pct", "rs63", "roc126"]
+
+
+def _poly(f: pd.DataFrame) -> pd.DataFrame:
+    """Squares and pairwise products of the sign-stable features (E55), for a non-linear model."""
+    out = {}
+    for i, a in enumerate(POLY_BASE):
+        out[f"{a}^2"] = f[a] ** 2
+        for b in POLY_BASE[i + 1:]:
+            out[f"{a}*{b}"] = f[a] * f[b]
+    return f.join(pd.DataFrame(out, index=f.index))
+
+
+POLY_FEATS = POLY_BASE + [f"{a}^2" for a in POLY_BASE] + [f"{a}*{b}" for i, a in enumerate(POLY_BASE)
+                                                          for b in POLY_BASE[i + 1:]]
 
 
 def base_candidates(df: pd.DataFrame, n: int = 20, ibs_min: float = 0.0, trend_len: int | None = 200) -> pd.Series:
