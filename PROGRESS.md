@@ -559,3 +559,11 @@ Idle slot capital earns SPY's return when SPY closed above its SMA the day befor
 - Why it works: v3 is only ~70% invested. In uptrends the idle part now earns the market. In downtrends
   (SPY < SMA200) it stays in cash, so the bear-market protection is kept.
 - Pine: the info table and the dashboard show "Idle cash → SPY: YES/NO".
+
+### E49 — v3.1 robustness checks
+- Slots 3/5/8/10, composite Sharpe without → with parking: 1.23→1.24 · 1.23→1.23 · 1.22→1.22 · 1.17→1.17. CAGR rises
+  in every cell at every slot count (+2.5 to +6 points per year; the more slots, the more idle cash to park).
+- With realistic cash (3-month T-bill rate on the part that is neither invested nor parked): v3.1 CAGR DEV 17.8→17.9%
+  (IS) / 17.7→18.1% (OOS) · HOLD 20.3→20.3% / 16.2→16.5% (single seed). Small but positive.
+  (A first run showed lower numbers. That was a bug in the throwaway script, `~` on an object dtype, caught because
+  adding interest cannot lower returns.)
