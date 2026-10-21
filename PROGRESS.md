@@ -487,3 +487,11 @@ Focus moved from finding new rules to making the TradingView script the user wil
 - Model check: retraining the embedded model on DEV+EXTRA (48 more tickers) is not clearly better on the fresh
   VOLATILE names (5 slots better, 10-slot OOS 0.60 vs 0.67), so the Pine file keeps the validated v3 fit.
 - Dutch user guide: `indicator_lab/pine/README.md`.
+
+### E43 — Bug fix: indicator cache keyed on `id(df)`
+`strategies.C` cached indicators by `id(df)`. After a DataFrame is freed, Python can reuse its id for a new frame,
+which would then get the old frame's indicators. This surfaced in the new synthetic-data Pine tests (a test passed
+alone but failed in the full suite). The cache now keeps the frame and checks identity. **Research results are
+unaffected:** every backtest used frames held for the whole run in `evaluate._DATA`, so ids were never reused. Re-run
+after the fix: v3 composite 1.23 and v2 1.18, identical to before. Lesson: the commit before this one was pushed with
+a failing test because `pytest | tail` hid the exit code. Checks now look at the exit code.

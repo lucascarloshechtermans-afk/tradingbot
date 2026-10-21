@@ -13,10 +13,13 @@ _cache: dict = {}
 
 
 def C(df: pd.DataFrame, key: str, fn):
+    # Keyed by id(df), so keep a reference to the frame and check it: once a frame is freed
+    # Python may hand its id to a new one, which must not get the old frame's indicators.
     k = (id(df), key)
-    if k not in _cache:
-        _cache[k] = fn()
-    return _cache[k]
+    hit = _cache.get(k)
+    if hit is None or hit[0] is not df:
+        hit = _cache[k] = (df, fn())
+    return hit[1]
 
 
 def base(df):
