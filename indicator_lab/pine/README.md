@@ -19,7 +19,9 @@
   (bij een stop: op de stop; anders bij de opening van de volgende dag).
 - **Oranje ✕**: breakout die het kwaliteitsmodel afkeurt (bewust geen BUY).
 - **Gele bol** onder een BUY: er komen binnen 7 dagen kwartaalcijfers → volgens het onderzoek beter overslaan.
-- **Tabel** rechtsboven: status, breakout-kwaliteit, stop, risico tot de stop, dagen in de trade, volgende cijfers.
+- **Tabel** rechtsboven: status, breakout-kwaliteit, stop, risico tot de stop, dagen in de trade, volgende cijfers,
+  **positiegrootte** als je nu koopt (instellingen *Account size*, *Risk per trade %*, *Max position %*: standaard
+  1% risico tot de initiële stop, max 10% van de rekening per positie ≈ 10 posities) en een check op daggrafiek.
 
 ## Alerts
 Rechtsklik op de indicator → **Add alert** → kies *"Any alert() function call"* voor een bericht mét geschatte stop en

@@ -20,6 +20,9 @@ tpMult    = input.float(0.0, "Take half profit at +x ATR (0 = off; research E22 
 earnDays  = input.int(7, "Earnings warning window (calendar days, 0 = off)", minval = 0)
 earnBlock = input.bool(false, "Block BUY inside the earnings window (live bars only)")
 showTable = input.bool(true, "Show info table")
+acctSize  = input.float(10000, "Account size (for position size)", minval = 0, group = "Position size")
+riskPct   = input.float(1.0, "Risk per trade (% of account)", minval = 0.05, step = 0.25, group = "Position size")
+maxPosPct = input.float(10.0, "Max position (% of account; ~10 positions)", minval = 1, maxval = 100, group = "Position size")
 
 f_z(x, mu, sd) => nz((x - mu) / sd)
 
@@ -139,7 +142,13 @@ plot(quality, "Breakout quality (0-1)", display = display.data_window)
 statusCode = buySig ? 1 : sellSig ? -1 : (state == 2 or state == 3) ? 2 : 0
 plot(statusCode, "Status (1 BUY, -1 SELL, 2 long, 0 flat)", display = display.data_window)
 // ---- info table (last bar) ----
-var table info = table.new(position.top_right, 2, 7, bgcolor = color.new(color.black, 75), border_width = 1)
+// position size for a new BUY: risk riskPct of the account between the next open (~close) and the initial stop,
+// capped at maxPosPct of the account (research: ~10 positions on volatile names)
+estStop  = close - trailMult * atr
+riskPerSh = close - estStop
+sizeSh   = riskPerSh > 0 ? math.floor(math.min(acctSize * riskPct / 100 / riskPerSh, acctSize * maxPosPct / 100 / close)) : 0
+
+var table info = table.new(position.top_right, 2, 9, bgcolor = color.new(color.black, 75), border_width = 1)
 if showTable and barstate.islast
     inTrade = state == 2 or state == 3
     statusTxt = state == 1 ? "BUY (fill next open)" : state == 3 ? "SELL (exit next open)" : inTrade ? "LONG" : sellSig ? "SOLD" : "flat"
@@ -158,12 +167,16 @@ if showTable and barstate.islast
     table.cell(info, 1, 5, na(daysToEarn) ? "n/a" : str.tostring(math.round(daysToEarn)) + " days", text_color = earnSoon ? color.yellow : color.white)
     table.cell(info, 0, 6, "Trend (SMA" + str.tostring(trendLen) + ")", text_color = color.white)
     table.cell(info, 1, 6, close > trendMa ? "up" : "down", text_color = close > trendMa ? color.lime : color.red)
+    table.cell(info, 0, 7, "Size if BUY now", text_color = color.white)
+    table.cell(info, 1, 7, str.tostring(sizeSh) + " sh (" + str.tostring(sizeSh * close, "#") + ") stop " + str.tostring(estStop, format.mintick), text_color = color.white)
+    table.cell(info, 0, 8, "Chart", text_color = color.white)
+    table.cell(info, 1, 8, timeframe.isdaily ? "daily ✓" : "use a DAILY chart!", text_color = timeframe.isdaily ? color.white : color.yellow)
 
 // earnings warning on a fresh BUY (research E38: entries in the week before earnings were weaker)
 plotshape(buySig and earnSoon, "BUY near earnings", shape.circle, location.belowbar, color.yellow, size = size.tiny)
 
 if buySig
-    alert("Swing v3 BUY " + syminfo.ticker + " @ " + str.tostring(close, format.mintick) + " | est. stop " + str.tostring(close - trailMult * atr, format.mintick) + " | quality " + str.tostring(quality * 100, "#") + "%" + (earnSoon ? " | WARNING: earnings in " + str.tostring(math.round(daysToEarn)) + " days" : ""), alert.freq_once_per_bar_close)
+    alert("Swing v3 BUY " + syminfo.ticker + " @ " + str.tostring(close, format.mintick) + " | est. stop " + str.tostring(close - trailMult * atr, format.mintick) + " | quality " + str.tostring(quality * 100, "#") + "% | size " + str.tostring(sizeSh) + " sh" + (earnSoon ? " | WARNING: earnings in " + str.tostring(math.round(daysToEarn)) + " days" : ""), alert.freq_once_per_bar_close)
 if sellSig
     alert("Swing v3 SELL " + syminfo.ticker + " @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
 
