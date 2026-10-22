@@ -690,3 +690,35 @@ Mean 5-slot Sharpe 1.24/1.22/1.24 (1.23). BIG and LOCKBOX move both ways (LOCKBO
 v3.1 remains the best version. Since E18, ~40 further idea families (signals, filters, exits, sizing, ranking, models,
 portfolio overlays) have been tested. Only the SPY parking rule (E48) passed every check. New tests now mostly measure
 noise, which E52 and E60 quantify.
+
+---
+
+## Session 7 (2026-10-22) — reliability round (no new edge; the signal logic only changes where a step says so)
+
+Test tickers for before/after: NVDA, AAPL, JPM (+ KO and ASML.AS for parity). Chart statistics come from
+`indicator_lab/pine_sim.py`, a bar-by-bar simulation of the Pine indicator with a switch per step. Pine was
+compile-validated after every change; it cannot be run on real bars from here.
+
+### R1 — Pine ↔ Python feature parity (`indicator_lab/pine_parity.py`, `pine_ta.py`)
+`pine_ta.py` re-implements TradingView's `ta.*` exactly (RMA seeded with an SMA, percentrank over the PREVIOUS n values,
+population stdev, …). `pine_parity.py` computes all 17 features plus score and quality as the Pine code defines them
+and compares them with `meta.feature_frame` (the training features) on 20 random dates per ticker. Max |diff| in z-units:
+- **US, original Pine:** all < 0.05 z after warm-up (worst `bbw_pct` 0.014 z, from percentrank: previous 252 vs window
+  incl. current). `ta.stdev` biased = pandas `ddof=0`: identical. Score diff ≤ 0.0006 logit.
+- **Early history (first ~400 bars of PLTR/COIN/RIVN/ABNB), original Pine:** `atr_pct` up to **14.6 z**, `rsi14` 3.8 z,
+  `brk_atr` 5.6 z, `range_atr` 2.0 z. `ta.rma` seeds with an SMA, but pandas `ewm(adjust=False)` (the training) seeds
+  with the first value. The gap only dies out after a few hundred bars, and ATR also drives the stops. `dist52` and
+  `bbw_pct` were na for 52/153 bars where Python already had values (`min_periods` 200/100).
+- **Fix (Pine now follows Python):** `f_rma_py` reproduces pandas' ewm for ATR and RSI; `dist52` uses a ≤252-bar high
+  with ≥200 bars; `bbw_pct` is a rank incl. the current bar (average ties, ≥100 values) via `f_rank_incl`. Result:
+  **US 0.000 z on every feature, including the first 400 bars after an IPO.**
+- **Remaining, explained:** (a) Python fills RSI with 100 for the first 14 bars; Pine keeps na. (b) Python computes SPY's
+  SMA200/ROC63 on the *ticker's* bars, so `spy_up` = 0 for a new listing's first 200 bars, a Python quirk. Neither
+  can produce a signal (SMA200 trend needs 200 bars). (c) **Euronext (ASML.AS):** `spy_roc63` 0.35–0.69 z and
+  `spy_up` up to 5 z, quality up to 1.7–3.2 %-pt. Pine deliberately uses the PREVIOUS SPY close outside New York;
+  following Python there would mean using a close that doesn't exist yet at the Euronext close (look-ahead). Python
+  never trained or tested on non-US stocks.
+- **Debug mode:** input "Debug: show the raw model features in the Data Window" plots all 17 features + the logit score.
+- **Structure:** the feature/model/debug code is now generated (`python -m indicator_lab.export_pine`) into
+  `// <<GEN:...>>` regions of all three v3 files. `tests/test_pine_model_sync.py` fails if a region drifts.
+- **Effect on NVDA/AAPL/JPM:** none (identical trades). These have history since 2012, so the warm-up differences are long gone.

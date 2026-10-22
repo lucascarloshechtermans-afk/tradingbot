@@ -1,10 +1,21 @@
-"""Refresh the v3 quality model and write it into every Pine file that embeds it.
+"""Generate the model-dependent parts of the v3 Pine files (never edit those parts by hand).
 
-    python -m indicator_lab.export_pine            # retrain on all closed DEV breakouts, update files
-    python -m indicator_lab.export_pine --check    # only report whether the files are in sync
+Every Pine file marks generated regions as
 
-Run it once a year (or after adding data) so the live TradingView model includes the latest
-closed trades, the same way the backtest refit the model every year.
+    // <<GEN:NAME>>
+    ...generated code...
+    // <</GEN:NAME>>
+
+and this script rewrites the content between the markers (keeping the marker's indentation):
+
+  HELPERS   pandas-compatible helper functions (Python = reference, see pine_parity.py)
+  FEATURES  the 17 model features
+  MODEL     the model fits + `score`/`quality`
+  DEBUG     raw features in the Data Window when the debug input is on (indicator only)
+
+    python -m indicator_lab.export_pine            # refit the final model (+ yearly fits) and regenerate
+    python -m indicator_lab.export_pine --render   # regenerate from the stored JSON, no refit
+    python -m indicator_lab.export_pine --check    # exit 1 if any file is out of sync with the JSON
 """
 from __future__ import annotations
 
@@ -13,56 +24,152 @@ import os
 import re
 import sys
 
-from indicator_lab import meta
-
 PINE_DIR = os.path.join(os.path.dirname(__file__), "pine")
 FILES = ["swing_v3_quality_model.pine", "swing_v3_strategy.pine", "swing_v3_watchlist_dashboard.pine"]
+FINAL = os.path.join(PINE_DIR, "v3_model.json")
+YEARLY = os.path.join(PINE_DIR, "v3_model_yearly.json")
 VAR = {"ibs": "ibs", "rvol": "rvol", "roc21": "roc21", "roc63": "roc63", "roc126": "roc126", "atr_pct": "atrPct",
        "rsi14": "rsi14", "ext50": "ext50", "rs63": "rs63", "dist52": "dist52", "bbw_pct": "bbwPct", "gap": "gapAtr",
        "spy_up": "spyUp", "spy_roc63": "spyRoc63", "range_atr": "rangeAtr", "brk_atr": "brkAtr", "er20": "er20"}
-SCORE_BLOCK = re.compile(r"^( *)score = [-+]?\d+\.\d+\n(?:\1 +\+ .*\n)+", re.M)
-THRESHOLD = re.compile(r"(minQual   = input\.float\()\d+(?:\.\d+)?")
+REGION = re.compile(r"^( *)// <<GEN:(\w+)>>\n.*?^\1// <</GEN:\2>>\n", re.M | re.S)
+
+HELPERS = '''\
+// Python (meta.feature_frame, pandas) is the reference for every model feature; pine_parity.py checks it.
+// ta.rma seeds with an SMA, pandas ewm(adjust=False) with the first value: this reproduces pandas.
+f_rma_py(float src, simple int len) =>
+    var float s = na
+    var int cnt = 0
+    if not na(src)
+        s := na(s) ? src : (src + (len - 1) * s) / len
+        cnt += 1
+    cnt >= len ? s : na
+
+// pandas rolling(len, min_periods = minCnt).rank(pct = True): current bar included, ties averaged
+// (ta.percentrank counts only the PREVIOUS len values).
+f_rank_incl(float x, simple int len, simple int minCnt) =>
+    float res = na
+    if not na(x)
+        int cnt = 0
+        int less = 0
+        int eq = 0
+        for i = 0 to len - 1
+            v = x[i]
+            if not na(v)
+                cnt += 1
+                less += v < x ? 1 : 0
+                eq += v == x ? 1 : 0
+        res := cnt >= minCnt ? (less + (eq + 1) / 2.0) / cnt : na
+    res
+
+f_z(x, mu, sd) => nz((x - mu) / sd)
+'''
+
+FEATURES = '''\
+trueRange = na(close[1]) ? high - low : math.max(high - low, math.abs(high - close[1]), math.abs(low - close[1]))
+atr       = f_rma_py(trueRange, 14)
+chg       = ta.change(close)
+rsiUp     = f_rma_py(na(chg) ? na : math.max(chg, 0), 14)
+rsiDn     = f_rma_py(na(chg) ? na : math.max(-chg, 0), 14)
+spyToday  = request.security(spySym, "D", close)
+spyPrev   = request.security(spySym, "D", close[1])
+spy       = syminfo.timezone == "America/New_York" ? spyToday : spyPrev
+volRatio  = volume / ta.sma(volume, 50)
+ibs       = high > low ? (close - low) / (high - low) : 0.5
+rvol      = na(volRatio) ? na : math.log(math.max(volRatio, 0.05))
+roc21     = close / close[21] - 1
+roc63     = close / close[63] - 1
+roc126    = close / close[126] - 1
+atrPct    = atr / close * 100
+rsi14     = na(rsiUp) or na(rsiDn) ? na : rsiDn == 0 ? 100.0 : 100 - 100 / (1 + rsiUp / rsiDn)
+ext50     = (close - ta.sma(close, 50)) / atr
+spyRoc63  = spy / spy[63] - 1
+rs63      = roc63 - spyRoc63
+hi52      = bar_index >= 199 ? ta.highest(high, math.min(bar_index + 1, 252)) : na
+dist52    = close / hi52 - 1
+bbw       = 4 * ta.stdev(close, 20) / ta.sma(close, 20)
+bbwPct    = f_rank_incl(bbw, 252, 100)
+gapAtr    = (open - close[1]) / atr[1]
+spyUp     = spy > ta.sma(spy, 200) ? 1.0 : 0.0
+rangeAtr  = (high - low) / atr[1]
+brkAtr    = (close - ta.highest(high, 20)[1]) / atr
+er20      = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 20)
+'''
 
 
-def render(model: dict, indent: str) -> str:
-    lines = [f"{indent}score = {model['b']:+.6f}"]
-    for f, mu, sd, w in zip(model["feats"], model["mu"], model["sd"], model["w"]):
-        lines.append(f"{indent}     + {w:+.6f} * f_z({VAR[f]}, {mu:.6f}, {sd:.6f})")
+def model_block(final: dict, yearly: dict | None) -> str:
+    lines = [f"// final fit: {final['n_train']} closed DEV breakouts; threshold = {final['thr']:.6f} "
+             f"(v3_model.json 'thr', the {round((1 - 0.75) * 100)}th pct of training predictions)",
+             f"score = {final['b']:+.6f}"]
+    for f, mu, sd, w in zip(final["feats"], final["mu"], final["sd"], final["w"]):
+        lines.append(f"     + {w:+.6f} * f_z({VAR[f]}, {mu:.6f}, {sd:.6f})")
+    lines.append("quality = 1 / (1 + math.exp(-score))")
     return "\n".join(lines) + "\n"
 
 
-def apply(model: dict, src: str) -> str:
-    src, n = SCORE_BLOCK.subn(lambda m: render(model, m.group(1)), src)
-    if n != 1:
-        raise ValueError(f"expected exactly one score block, found {n}")
-    thr = round(model["thr"] * 100, 4)
-    src, n = THRESHOLD.subn(lambda m: m.group(1) + f"{thr}", src)
-    if n != 1:
-        raise ValueError(f"expected exactly one minQual input, found {n}")
-    return src
+DEBUG = "\n".join(f'plot(debugFeat ? {v} : na, "f {k}", display = display.data_window)' for k, v in VAR.items()) + \
+    '\nplot(debugFeat ? score : na, "f score (logit)", display = display.data_window)\n'
 
 
-def main(argv: list[str]) -> int:
-    path = os.path.join(PINE_DIR, "v3_model.json")
-    if "--check" in argv:
-        model = json.load(open(path))
-        stale = [f for f in FILES if apply(model, open(os.path.join(PINE_DIR, f)).read())
-                 != open(os.path.join(PINE_DIR, f)).read()]
-        print("in sync" if not stale else f"out of sync: {stale}")
-        return 1 if stale else 0
-    model = meta.export_final()
-    # render every file first (read fully before writing), so a failure leaves all files untouched
+def blocks(final: dict, yearly: dict | None) -> dict:
+    return {"HELPERS": HELPERS, "FEATURES": FEATURES, "MODEL": model_block(final, yearly), "DEBUG": DEBUG}
+
+
+def _indent(text: str, ind: str) -> str:
+    return "".join((ind + ln if ln.strip() else ln) for ln in text.splitlines(keepends=True))
+
+
+def apply(src: str, bl: dict) -> str:
+    def rep(m):
+        ind, name = m.group(1), m.group(2)
+        if name not in bl:
+            raise KeyError(f"unknown generated region {name}")
+        return f"{ind}// <<GEN:{name}>>\n{_indent(bl[name], ind)}{ind}// <</GEN:{name}>>\n"
+    out, n = REGION.subn(rep, src)
+    if n == 0:
+        raise ValueError("no generated regions found")
+    return out
+
+
+def _load():
+    final = json.load(open(FINAL))
+    yearly = json.load(open(YEARLY)) if os.path.exists(YEARLY) else None
+    return final, yearly
+
+
+def render() -> dict[str, str]:
+    bl = blocks(*_load())
     out = {}
     for f in FILES:
         fp = os.path.join(PINE_DIR, f)
         with open(fp) as fh:
-            out[fp] = apply(model, fh.read())
+            out[fp] = apply(fh.read(), bl)
+    return out
+
+
+def write(out: dict[str, str]) -> None:
     for fp, src in out.items():
         with open(fp, "w") as fh:
             fh.write(src)
-    with open(path, "w") as fh:
-        json.dump(model, fh, indent=1)
-    print(f"model refit on {model['n_train']} closed breakouts; threshold {model['thr']:.4f}; updated {FILES}")
+
+
+def main(argv: list[str]) -> int:
+    if "--check" in argv:
+        out = render()
+        stale = [os.path.basename(fp) for fp, src in out.items() if src != open(fp).read()]
+        print("in sync" if not stale else f"out of sync: {stale}")
+        return 1 if stale else 0
+    if "--render" not in argv:
+        from indicator_lab import meta
+        final = meta.export_final()
+        with open(FINAL, "w") as fh:
+            json.dump(final, fh, indent=1)
+        yearly = meta.export_yearly() if hasattr(meta, "export_yearly") else None
+        if yearly:
+            with open(YEARLY, "w") as fh:
+                json.dump(yearly, fh, indent=1)
+    out = render()  # renders every file before writing any
+    write(out)
+    print(f"regenerated {FILES}")
     return 0
 
 

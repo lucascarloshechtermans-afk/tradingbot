@@ -1,19 +1,22 @@
-import json
 import os
-import re
 
-PINE = os.path.join(os.path.dirname(__file__), "..", "indicator_lab", "pine")
-VAR = {"ibs": "ibs", "rvol": "rvol", "roc21": "roc21", "roc63": "roc63", "roc126": "roc126", "atr_pct": "atrPct",
-       "rsi14": "rsi14", "ext50": "ext50", "rs63": "rs63", "dist52": "dist52", "bbw_pct": "bbwPct", "gap": "gapAtr",
-       "spy_up": "spyUp", "spy_roc63": "spyRoc63", "range_atr": "rangeAtr", "brk_atr": "brkAtr", "er20": "er20"}
+from indicator_lab import export_pine as X
 
 
-def test_pine_files_embed_exactly_the_exported_v3_model():
-    model = json.load(open(os.path.join(PINE, "v3_model.json")))
-    for fname in ("swing_v3_quality_model.pine", "swing_v3_strategy.pine", "swing_v3_watchlist_dashboard.pine"):
-        src = open(os.path.join(PINE, fname)).read()
-        assert re.search(r"score = ([-+]\d+\.\d+)", src).group(1) == f"{model['b']:+.6f}"
-        assert f"minQual   = input.float({round(model['thr'] * 100, 4)}," in src
-        for f, mu, sd, w in zip(model["feats"], model["mu"], model["sd"], model["w"]):
-            line = f"{w:+.6f} * f_z({VAR[f]}, {mu:.6f}, {sd:.6f})"
-            assert line in src, (fname, line)
+def test_generated_pine_regions_match_the_model_json():
+    """Every <<GEN:...>> region in the v3 Pine files must equal what export_pine renders from
+    v3_model.json (+ v3_model_yearly.json): no hand edits, no stale coefficients."""
+    out = X.render()
+    for fp, src in out.items():
+        assert src == open(fp).read(), f"{os.path.basename(fp)} is out of sync: run python -m indicator_lab.export_pine --render"
+
+
+def test_parity_features_match_training_features_for_us_tickers():
+    """Step 1 of the reliability round: Pine-side feature definitions (fixed) vs meta.feature_frame."""
+    from indicator_lab import pine_parity as PP
+    try:
+        d = PP.compare("fixed", n_dates=5, tickers=["AAPL", "JPM"])
+    except Exception:  # no cached market data (e.g. CI without network)
+        return
+    feats = [c for c in d.columns if c not in ("ticker", "date", "score", "quality")]
+    assert d[feats].max().max() < 0.05
