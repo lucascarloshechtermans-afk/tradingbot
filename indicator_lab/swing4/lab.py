@@ -11,7 +11,8 @@ import pandas as pd
 
 from indicator_lab.swing4 import protocol as P
 
-P.install_dev_cutoff()
+if P._MODE["mode"] is None:   # phase 3 calls protocol.install_final() before importing this module
+    P.install_dev_cutoff()
 
 from indicator_lab import data, earnings, ind, meta  # noqa: E402
 from indicator_lab.evaluate import get  # noqa: E402
@@ -57,12 +58,13 @@ def _sector_map(index: pd.DatetimeIndex) -> pd.DataFrame:
     return mom, mom.rank(axis=1, pct=True), cl.pct_change()
 
 
-def build() -> dict:
+def build(univ=None) -> dict:
+    univ = univ or UNIV
     m_v3, m_st = C.model(), C.model(STABLE)
     spy = get("SPY")
     sec_mom, sec_rank, sec_ret = _sector_map(spy.index)
     ctx = {}
-    for t in UNIV:
+    for t in univ:
         df = get(t)
         f = meta.feature_frame(df)
         c = df["close"]
@@ -119,19 +121,20 @@ def build() -> dict:
             }}
     # cross-sectional momentum percentile within the development universe (tickers with data that day)
     for key in ("mom126", "mom252", "mom_12_1"):
-        panel = pd.concat({t: pd.Series(ctx[t]["x"][key], index=ctx[t]["arr"]["index"]) for t in UNIV}, axis=1)
+        panel = pd.concat({t: pd.Series(ctx[t]["x"][key], index=ctx[t]["arr"]["index"]) for t in univ}, axis=1)
         rk = panel.rank(axis=1, pct=True)
-        for t in UNIV:
+        for t in univ:
             ctx[t]["x"][key + "_xs"] = rk[t].reindex(ctx[t]["arr"]["index"]).to_numpy()
     return ctx
 
 
-def load_ctx(rebuild: bool = False) -> dict:
-    if os.path.exists(CACHE) and not rebuild:
-        with open(CACHE, "rb") as fh:
+def load_ctx(rebuild: bool = False, univ=None, path=None) -> dict:
+    path = path or CACHE
+    if os.path.exists(path) and not rebuild:
+        with open(path, "rb") as fh:
             return pickle.load(fh)
-    ctx = build()
-    with open(CACHE, "wb") as fh:
+    ctx = build(univ)
+    with open(path, "wb") as fh:
         pickle.dump(ctx, fh)
     return ctx
 
@@ -142,9 +145,9 @@ def v3_entry(cx) -> np.ndarray:
         return cx["cand"] & (cx["p_v3"] >= cx["thr_v3"])
 
 
-def run(ctx: dict, entry_fn=v3_entry, pol: S2.Policy = S2.Policy(), univ=None) -> dict:
+def run(ctx: dict, entry_fn=v3_entry, pol: S2.Policy = S2.Policy(), univ=None, period=None) -> dict:
     """{ticker: (daily returns in the period, trades with signal-bar info)}."""
-    a0, b0 = PERIOD
+    a0, b0 = period or PERIOD
     out = {}
     for t in univ or UNIV:
         cx = ctx[t]
@@ -228,12 +231,13 @@ def pstats(res, key=None, size=None, seeds=SEEDS, park=False) -> dict:
     out = {m: float(np.mean([x[m] for x in runs])) for m in ("cagr", "maxdd", "mar", "sharpe", "exposure")}
     out["mar_lo"] = float(np.min([x["mar"] for x in runs]))
     out["mar_hi"] = float(np.max([x["mar"] for x in runs]))
-    tk = [pd.DataFrame(x["taken"]) for x in runs]
+    tk = [pd.DataFrame(x["taken"]) for x in runs if x["taken"]]
     tm = [C.trade_metrics(d) for d in tk]
-    out["taken"] = {m: float(np.mean([z[m] for z in tm])) for m in ("n", "win", "exp_pct", "exp_R", "pf", "hold")}
-    yr = pd.concat([d.assign(year=d.entry_date.dt.year).groupby("year").agg(win=("R", lambda r: (r > 0).mean()),
-                                                                             exp_R=("R", "mean")) for d in tk])
-    out["taken_year"] = yr.groupby(level=0).mean()
+    out["taken"] = {m: float(np.mean([z[m] for z in tm])) if tm else np.nan
+                    for m in ("n", "win", "exp_pct", "exp_R", "pf", "hold")}
+    yr = [d.assign(year=d.entry_date.dt.year).groupby("year").agg(win=("R", lambda r: (r > 0).mean()),
+                                                                   exp_R=("R", "mean")) for d in tk]
+    out["taken_year"] = pd.concat(yr).groupby(level=0).mean() if yr else pd.DataFrame()
     out["equity"] = runs[0]["equity"]
     out["ports"] = [x["port"] for x in runs]
     return out
