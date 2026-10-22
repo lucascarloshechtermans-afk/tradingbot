@@ -850,3 +850,36 @@ row (+ optional in-sample row); inputs default to the training constants with a 
 on `TRAIN_N`; `minQual` = `FINAL_THR` × 100 with its source; no `nz()` imputation, "te weinig historie (x/252 bars)";
 half-profit booked 50/50; per-trade drawdown and holding time; strategy fills documented, `margin_long = 0`;
 position-size stop labelled "geschat"; SPY ROC63/SMA200 on SPY's own bars.
+
+## Session 8 (2026-10-22) — swing v4 round: protocol + phase 1 diagnosis
+
+Goal of the round: higher win rate AND profitability (expectancy may drop ≤ 15% vs v3, portfolio MAR must not drop),
+mainly by taking profit earlier, better trade selection and entry timing. Code: `indicator_lab/swing4/`.
+
+**Protocol (set up before any test).** `swing4/holdout.json` (committed first, 6e3bdeb): time holdout from 2024-10-22
+and 84 S&P-500-of-2015 tickers never used in this repo (IPG/EA/EQR dropped: no data, i.e. delisted: survivorship in
+action). `protocol.install_dev_cutoff()` cuts every series before the holdout and refuses holdout tickers.
+`experiments.csv` logs every trial; bootstrap CIs on expectancy; acceptance = better in ≥ 70% of years, in both
+halves of the ticker set, ≤ 2 new free parameters, one-sentence economic story. `swing4/core.py` re-implements the
+v3 trade simulation with R/MFE/MAE per trade (identical to the engine, `tests/test_swing4.py`) and a 10-position
+portfolio. Development universe = the 253 tickers of all earlier universes (all already seen), 2015-01 .. 2024-10.
+
+**Phase 1 findings** (full report: `swing4/reports/phase1.md`):
+- Baseline v3: 6146 trades, win 44.1%, 2.28% / 0.200R per trade (95% CI 0.171–0.231R), PF 1.73, 10-position
+  portfolio CAGR 14.7%, max DD −25.1%, MAR 0.60 (mean of 20 random selection orders; range 0.44–0.81).
+- Coefficients: only er20 (−), spy_roc63 (−) and rvol (+) keep their sign in all 10 yearly fits; spy_up (−) in 9/10
+  (its 2015 weight is 0). The other 13 flip. Confirms the user's impression.
+- The model barely adds anything per trade: v2 (no model) 0.197R / 43.5% vs v3 0.200R / 44.1%. Mean yearly AUC 0.55
+  (3 stable features: 0.56). Quintiles are not monotone: Q1–Q4 ≈ 0.10–0.16R, only Q5 is clearly better (0.34R, 49%
+  win). v3 keeps the top 75%, so it hardly uses the part that works.
+- Anatomy: 41.5% of trades touch +1R; of those 5.4% still end as a loss and 16.8% within ±0.25R. Winners give back
+  56% of their best open profit (≈ 1.0R). But the top 10% of trades make 151% of the net P&L; the other 90% lose
+  −0.08R on average. Taking profit early must not cut that tail.
+- Winners vs losers at the BUY: the market regime separates most (lower spy_roc63, SPY below SMA200, lower breadth);
+  stock features hardly do (|d| < 0.07).
+- Portfolio: 89% of the signals find all 10 slots full (1365 of 1643 signal days crowded); the choice is random.
+  The random order alone moves CAGR between 11.3% and 18.4%: ranking is the biggest lever, and portfolio comparisons
+  need many orders or a deterministic rank.
+- Survivorship: no delisted ticker in any universe. Hindsight-picked groups do better (DEV mega caps 0.33R, LOCKBOX
+  winners 0.27R) than neutral large caps (TRAIN_EXTRA 0.12R): a large part of the 0.20R may be selection. The
+  2015-membership holdout tickers will show it.
