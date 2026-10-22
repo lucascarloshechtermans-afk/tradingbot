@@ -1,0 +1,26 @@
+{
+ "frozen": "2026-10-22, before the single holdout run",
+ "name": "swing v4 = v3 + market-regime entry rule (F1)",
+ "entry": "v3 candidate (close > prior 20-day high, IBS >= 0.7, close > SMA200) AND v3 quality model (walk-forward yearly fits on DEV, keep 0.75) AND SPY 63-day return at the signal close <= 0.03",
+ "new_free_parameters": {
+  "spy_roc63_max": 0.03
+ },
+ "plateau": {
+  "0.00": "accepted",
+  "0.03": "accepted (chosen: middle)",
+  "0.06": "accepted"
+ },
+ "story": "breakouts that happen after a weak market lead the next leg up; after a strong 3-month run of the market a new breakout is late (the model gave spy_roc63 a negative weight in every walk-forward year)",
+ "exits": "unchanged v3: next-open fill, protective stop fill - 4 x ATR(signal bar), 4 x ATR chandelier trail, exit at the next open after a close below the prior 20-day low",
+ "portfolio": "max 10 positions of 10% each; same-day signals in random order (20 orders averaged)",
+ "not_accepted": "all 37 profit-taking variants (A), ranking/filters (B), setup filters (C), entry timing (D), model variants (E), other regime rules (F2/F3) and every component stacked on top of F1 (G): see reports/phase2.md",
+ "holdout_run": {
+  "time_holdout": "253 development tickers, entries 2024-10-22 .. latest",
+  "ticker_holdout": "84 holdout tickers, entries 2015-01-01 .. latest (and the 2024-10-22+ part separately)",
+  "compared": [
+   "v3 baseline",
+   "v4 (this spec)"
+  ],
+  "rule": "run once; no fitting or changes afterwards"
+ }
+}
