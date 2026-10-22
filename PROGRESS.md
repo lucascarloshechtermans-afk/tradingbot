@@ -772,3 +772,22 @@ still the honest one to show, and it is now the default.
   4690 VOLATILE signals taken since 2015**. Python was left as is (changing it changes no trade).
 - Effect (pine_sim, na-block on vs off): NVDA/AAPL/JPM 102 → 102 trades, VOLATILE 1553 → 1553, LOCKBOX 1524 → 1524,
   identical returns. It only protects charts with short history or gaps.
+
+### R5 — honest statistics: half-profit booked 50/50, drawdown and holding time per trade
+- With `tpMult > 0` the chart statistics booked the WHOLE position at the final exit, although the indicator tells you
+  to sell half at the target. Now `f_machine` books the half at the target (or the open on a gap above it, each half
+  with its own exit cost): trade return = 50% half + 50% rest.
+- New table row **"OOS per trade"**: max drawdown inside the trade (peak since the fill to a later low; intrabar order
+  unknown, so a bar's high is assumed to come before its low, i.e. conservative), worst and average, plus the
+  average holding period in bars. Comment added: when stop and target are both touched on one bar, the stop wins.
+- `pine_sim` mirrors this exactly (`half_book`, `stats()["mae"/"dd_avg"/"bars"]`).
+
+| ticker | tpMult 4, before: n / win / PF / avg | tpMult 4, after (50/50): n / win / PF / avg | default tpMult 0 (unchanged) |
+|---|---|---|---|
+| NVDA | 37 / 59.5% / 5.87 / 13.1% | 37 / 59.5% / **4.41 / 9.2%** | 37 / 59.5% / 5.87 / 13.1% |
+| AAPL | 29 / 58.6% / 4.27 / 5.1% | 29 / 58.6% / **3.59 / 4.1%** | 29 / 58.6% / 4.27 / 5.1% |
+| JPM  | 36 / 44.4% / 2.26 / 2.2% | 36 / 44.4% / **2.05 / 1.9%** | 36 / 44.4% / 2.26 / 2.2% |
+
+New row values (default settings): max drawdown in trade worst / avg, avg hold: NVDA −19.7% / −11.5% / 36 bars,
+AAPL −11.5% / −7.2% / 38 bars, JPM −8.5% / −6.2% / 37 bars. Taking half at +4 ATR costs PF on all three: the
+table used to hide that.

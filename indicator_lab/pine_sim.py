@@ -8,6 +8,9 @@ cfg keys (all default to the ORIGINAL pre-round behaviour):
   na_block   bool                  quality = na and no BUY when any feature is na (step 4)
   half_book  bool                  book the half-profit exit 50/50 (step 5; only matters with tp_mult > 0)
   tp_mult    float                 half-profit target in ATR (0 = off)
+
+stats(): "mae" is the worst and "dd_avg" the average per-trade max drawdown (peak since the fill to a later low,
+a bar's high assumed before its low), "bars" the average holding period: the Pine table row "OOS per trade".
 """
 from __future__ import annotations
 
@@ -106,7 +109,7 @@ def run(df: pd.DataFrame, ticker: str, cfg: dict | None = None) -> dict:
         if state == 1:
             entry_px, ebar, counted = o[t], t, df.index[t] >= stats_from
             state, hh = 2, h[t]
-            peak, mae = max(o[t], c[t]), min(0.0, lo[t] / o[t] - 1)
+            peak, mae = o[t], min(0.0, lo[t] / o[t] - 1)  # Pine: a bar's high is assumed before its low
             istop = o[t] - cfg["trail"] * a[t - 1]
             stop = max(istop, hh - cfg["trail"] * a[t])
             tp = o[t] + tpm * a[t - 1] if tpm > 0 else np.nan
@@ -117,6 +120,7 @@ def run(df: pd.DataFrame, ticker: str, cfg: dict | None = None) -> dict:
             else:
                 if tpm > 0 and h[t] >= tp:
                     half_off, half_ret = True, book(tp)
+                peak = max(o[t], c[t])
                 if c[t] < lo_m[t]:
                     sell[t], state = True, 3
         elif state == 2:
@@ -140,11 +144,13 @@ def run(df: pd.DataFrame, ticker: str, cfg: dict | None = None) -> dict:
 
 def stats(trades: list[dict]) -> dict:
     if not trades:
-        return {"n": 0, "win": np.nan, "pf": np.nan, "avg": np.nan, "worst": np.nan, "mae": np.nan, "bars": np.nan}
+        return {"n": 0, "win": np.nan, "pf": np.nan, "avg": np.nan, "worst": np.nan, "mae": np.nan, "dd_avg": np.nan,
+                "bars": np.nan}
     r = np.array([x["ret"] for x in trades])
     gl = -r[r < 0].sum()
     return {"n": len(r), "win": float((r > 0).mean()), "pf": float(r[r > 0].sum() / gl) if gl > 0 else np.inf,
             "avg": float(r.mean()), "worst": float(r.min()), "mae": float(min(x["mae"] for x in trades)),
+            "dd_avg": float(np.mean([x["mae"] for x in trades])),
             "bars": float(np.mean([x["bars"] for x in trades]))}
 
 

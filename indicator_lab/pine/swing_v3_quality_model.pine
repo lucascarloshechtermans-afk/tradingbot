@@ -185,6 +185,12 @@ f_machine(bool entryOk) =>
     var float sumWin = 0.0
     var float sumLoss = 0.0
     var float sumRet = 0.0
+    var float halfRet = na   // booked return of the half sold at the target (tpMult > 0)
+    var float peak = na      // highest price since the fill, for the drawdown inside the trade
+    var float tradeDD = 0.0
+    var int   sumBars = 0
+    var float sumDD = 0.0
+    var float worstDD = 0.0
     halfSig = false
     buySig  = false
     sellSig = false
@@ -192,6 +198,7 @@ f_machine(bool entryOk) =>
     float exitPx = na
     if state == 3
         exitPx := open
+        tradeDD := math.min(tradeDD, open / peak - 1)
         state := 0
         stop := na
         exited := true
@@ -200,10 +207,14 @@ f_machine(bool entryOk) =>
         counted := time >= statsFrom
         state := 2
         hh := high
+        // drawdown inside a trade: intrabar order is unknown, so a bar's high is assumed to come before its low
+        peak := open
+        tradeDD := math.min(0.0, low / open - 1)
         // protective stop from the fill itself: open - trailMult x ATR(signal bar); never hit in the 2015-26 tests,
         // but it covers a crash on the entry day (research E51)
         initStop = open - trailMult * atr[1]
         stop := math.max(initStop, hh - trailMult * atr)
+        // the stop is checked before the target: if both are touched on one bar, the stop wins (conservative)
         if low <= initStop
             exitPx := initStop
             sellSig := true
@@ -214,12 +225,16 @@ f_machine(bool entryOk) =>
         if state == 2 and tpMult > 0 and high >= tp
             halfSig := true
             halfOff := true
+            halfRet := tp * (1 - costPct / 100) / (entryPx * (1 + costPct / 100)) - 1
+        peak := math.max(open, close)
         if state == 2 and close < loM
             sellSig := true
             state := 3
     else if state == 2
+        // the stop is checked before the target: if both are touched on one bar, the stop wins (conservative)
         if low <= stop
             exitPx := math.min(open, stop)  // a gap below the stop fills at the open
+            tradeDD := math.min(tradeDD, exitPx / peak - 1)
             sellSig := true
             state := 0
             stop := na
@@ -227,26 +242,36 @@ f_machine(bool entryOk) =>
             if tpMult > 0 and not halfOff and high >= tp
                 halfSig := true
                 halfOff := true
+                halfRet := math.max(open, tp) * (1 - costPct / 100) / (entryPx * (1 + costPct / 100)) - 1  // a gap above fills at the open
+            peak := math.max(peak, high)
+            tradeDD := math.min(tradeDD, low / peak - 1)
             hh := math.max(hh, high)
             stop := math.max(stop, hh - trailMult * atr)
             if close < loM
                 sellSig := true
                 state := 3
     if not na(exitPx) and counted
-        r = exitPx * (1 - costPct / 100) / (entryPx * (1 + costPct / 100)) - 1
+        rRest = exitPx * (1 - costPct / 100) / (entryPx * (1 + costPct / 100)) - 1
+        // half sold at the target: the trade's return is 50% that half + 50% the rest (each pays its own exit cost)
+        r = halfOff and not na(halfRet) ? 0.5 * halfRet + 0.5 * rRest : rRest
         nTr += 1
         nWin += r > 0 ? 1 : 0
         sumWin += math.max(r, 0)
         sumLoss += math.max(-r, 0)
         sumRet += r
+        sumBars += bar_index - entryBar
+        sumDD += tradeDD
+        worstDD := math.min(worstDD, tradeDD)
+    if not na(exitPx)
+        halfRet := na
     if state == 0 and isCand and entryOk and not sellSig and not exited
         buySig := true
         state := 1
         entryBar := bar_index + 1
-    [state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet]
+    [state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD]
 
-[state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet] = f_machine(qualityOk and earnOk)
-[stIs, stopIs, tpIs, hoIs, hsIs, bsIs, ssIs, exIs, ebIs, nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs] = f_machine(qualityOkIs and earnOk)
+[state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD] = f_machine(qualityOk and earnOk)
+[stIs, stopIs, tpIs, hoIs, hsIs, bsIs, ssIs, exIs, ebIs, nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs, sbIs, sddIs, wddIs] = f_machine(qualityOkIs and earnOk)
 
 plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
 plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
@@ -301,7 +326,7 @@ f_statTxt(int k, int w, float sw, float sl, float sr) =>
     pfx = sl > 0 ? sw / sl : na
     k == 0 ? "no closed trades" : str.tostring(k) + " trades | win " + str.tostring(100.0 * w / k, "#") + "% | PF " + (na(pfx) ? "∞" : str.tostring(pfx, "#.##")) + " | avg " + str.tostring(100 * sr / k, "#.#") + "%"
 
-var table info = table.new(position.top_right, 2, 14, bgcolor = color.new(color.black, 75), border_width = 1)
+var table info = table.new(position.top_right, 2, 15, bgcolor = color.new(color.black, 75), border_width = 1)
 if showTable and barstate.islast
     inTrade = state == 2 or state == 3
     statusTxt = state == 1 ? "BUY (fill next open)" : state == 3 ? "SELL (exit next open)" : inTrade ? "LONG" : sellSig ? "SOLD" : "flat"
@@ -335,6 +360,8 @@ if showTable and barstate.islast
     table.cell(info, 1, 11, na(atr1y) ? "n/a" : str.tostring(atr1y, "#.#") + "% " + (atr1y >= 2.5 ? "good fit" : atr1y >= 1.5 ? "ok fit" : "weak fit"), text_color = na(atr1y) ? color.gray : atr1y >= 2.5 ? color.lime : atr1y >= 1.5 ? color.white : color.orange)
     table.cell(info, 0, 9, "OOS since " + str.format_time(statsFrom, "yyyy"), text_color = color.white)
     table.cell(info, 1, 9, f_statTxt(nTr, nWin, sumWin, sumLoss, sumRet), text_color = color.white)
+    table.cell(info, 0, 14, "OOS per trade", text_color = color.white)
+    table.cell(info, 1, 14, nTr == 0 ? "-" : "max drawdown in trade: worst " + str.tostring(100 * worstDD, "#.#") + "% | avg " + str.tostring(100 * sumDD / nTr, "#.#") + "% | avg hold " + str.tostring(sumBars / nTr, "#") + " bars", text_color = color.white)
     if paramsOff
         table.cell(info, 0, 13, "⚠ Settings", text_color = color.black, bgcolor = color.yellow)
         table.cell(info, 1, 13, TRAIN_TXT + ": quality + stats not valid for these settings", text_color = color.black, bgcolor = color.yellow)
