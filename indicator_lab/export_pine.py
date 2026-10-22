@@ -8,6 +8,7 @@ Every Pine file marks generated regions as
 
 and this script rewrites the content between the markers (keeping the marker's indentation):
 
+  TRAIN     the settings the model was trained with + the final threshold (inputs default to them)
   HELPERS   pandas-compatible helper functions (Python = reference, see pine_parity.py)
   FEATURES  the 17 model features
   MODEL     the model fits + `score`/`quality`
@@ -91,7 +92,7 @@ bbwPct    = f_rank_incl(bbw, 252, 100)
 gapAtr    = (open - close[1]) / atr[1]
 spyUp     = spy > ta.sma(spy, 200) ? 1.0 : 0.0
 rangeAtr  = (high - low) / atr[1]
-brkAtr    = (close - ta.highest(high, 20)[1]) / atr
+brkAtr    = (close - ta.highest(high, TRAIN_N)[1]) / atr  // feature definition: the TRAINING lookback, not input n
 er20      = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 20)
 '''
 
@@ -106,12 +107,27 @@ def _expr(fit: dict, feats: list[str]) -> str:
     return out
 
 
+def train_block(final: dict) -> str:
+    p = final["params"]
+    return "\n".join([
+        "// The quality model was trained on breakouts with exactly these rules (v3_model.json \"params\"); the inputs",
+        "// default to them, and with the model on, any other value gets a warning (the model never saw those trades).",
+        f"TRAIN_N     = {p['n']}",
+        f"TRAIN_M     = {p['m']}",
+        f"TRAIN_TRAIL = {p['trail']:.2f}",
+        f"TRAIN_IBS   = {p['ibs_min']:.2f}",
+        f"TRAIN_TREND = {p['trend_len']}",
+        f"TRAIN_TXT   = \"model getraind op n={p['n']}/m={p['m']}/trail={p['trail']:g}/ibs={p['ibs_min']:g}/SMA{p['trend_len']}\"",
+        f"// Threshold of the final fit = v3_model.json \"thr\" {final['thr']:.6f}: the {100 * (1 - p['keep']):g}th percentile of its",
+        f"// predictions on its own {final['n_train']} training breakouts (keep {p['keep']:g}). minQual defaults to it (in %).",
+        f"FINAL_THR   = {final['thr']:.6f}",
+    ]) + "\n"
+
+
 def model_block(final: dict, yearly: dict | None) -> str:
     feats = final["feats"]
     lines = [
-        (f"// FINAL fit: {final['n_train']} closed DEV breakouts up to {yearly['train_end'] if yearly else '?'}; "
-         f"threshold {final['thr']:.6f} = v3_model.json \"thr\" (25th pct of its training predictions)."),
-        f"FINAL_THR = {final['thr']:.6f}",
+        f"// FINAL fit: {final['n_train']} closed DEV breakouts up to {yearly['train_end'] if yearly else '?'}.",
         "scoreIs = " + _expr(final, feats),
     ]
     if yearly:
@@ -151,7 +167,7 @@ DEBUG = "\n".join(f'plot(debugFeat ? {v} : na, "f {k}", display = display.data_w
 
 
 def blocks(final: dict, yearly: dict | None) -> dict:
-    return {"HELPERS": HELPERS, "FEATURES": FEATURES, "MODEL": model_block(final, yearly), "DEBUG": DEBUG}
+    return {"TRAIN": train_block(final), "HELPERS": HELPERS, "FEATURES": FEATURES, "MODEL": model_block(final, yearly), "DEBUG": DEBUG}
 
 
 def _indent(text: str, ind: str) -> str:

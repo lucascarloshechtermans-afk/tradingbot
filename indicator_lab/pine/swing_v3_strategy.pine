@@ -10,13 +10,27 @@ strategy("Swing v3 strategy – breakout + quality model + ATR trail", overlay =
      commission_type = strategy.commission.percent, commission_value = 0.1, pyramiding = 0,
      process_orders_on_close = false)
 
-n         = input.int(20, "Breakout lookback (days)", minval = 2)
-m         = input.int(20, "Exit lookback (days)", minval = 2)
-trailMult = input.float(4.0, "Trail (x ATR14)", minval = 0.5, step = 0.25)
-trendLen  = input.int(200, "Trend filter SMA", minval = 10)
-ibsMin    = input.float(0.7, "Min close position in day range (0-1)", minval = 0, maxval = 1, step = 0.05)
+// <<GEN:TRAIN>>
+// The quality model was trained on breakouts with exactly these rules (v3_model.json "params"); the inputs
+// default to them, and with the model on, any other value gets a warning (the model never saw those trades).
+TRAIN_N     = 20
+TRAIN_M     = 20
+TRAIN_TRAIL = 4.00
+TRAIN_IBS   = 0.70
+TRAIN_TREND = 200
+TRAIN_TXT   = "model getraind op n=20/m=20/trail=4/ibs=0.7/SMA200"
+// Threshold of the final fit = v3_model.json "thr" 0.393009: the 25th percentile of its
+// predictions on its own 3633 training breakouts (keep 0.75). minQual defaults to it (in %).
+FINAL_THR   = 0.393009
+// <</GEN:TRAIN>>
+
+n         = input.int(TRAIN_N, "Breakout lookback (days)", minval = 2)
+m         = input.int(TRAIN_M, "Exit lookback (days)", minval = 2)
+trailMult = input.float(TRAIN_TRAIL, "Trail (x ATR14)", minval = 0.5, step = 0.25)
+trendLen  = input.int(TRAIN_TREND, "Trend filter SMA", minval = 10)
+ibsMin    = input.float(TRAIN_IBS, "Min close position in day range (0-1)", minval = 0, maxval = 1, step = 0.05)
 useModel  = input.bool(true, "Use quality model (v3); off = v2")
-minQual   = input.float(39.3009, "Min breakout quality % (default = model threshold; higher = stricter)", minval = 0, maxval = 100, step = 1)
+minQual   = input.float(FINAL_THR * 100, "Min breakout quality % (default = model threshold; higher = stricter)", minval = 0, maxval = 100, step = 1)
 spySym    = input.symbol("AMEX:SPY", "Market reference")
 fromTime  = input.time(timestamp("2015-01-01"), "Backtest from")
 
@@ -78,7 +92,7 @@ bbwPct    = f_rank_incl(bbw, 252, 100)
 gapAtr    = (open - close[1]) / atr[1]
 spyUp     = spy > ta.sma(spy, 200) ? 1.0 : 0.0
 rangeAtr  = (high - low) / atr[1]
-brkAtr    = (close - ta.highest(high, 20)[1]) / atr
+brkAtr    = (close - ta.highest(high, TRAIN_N)[1]) / atr  // feature definition: the TRAINING lookback, not input n
 er20      = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 20)
 // <</GEN:FEATURES>>
 
@@ -87,8 +101,7 @@ hiN     = ta.highest(high, n)[1]
 loM     = ta.lowest(low, m)[1]
 
 // <<GEN:MODEL>>
-// FINAL fit: 3633 closed DEV breakouts up to 2026-10-20; threshold 0.393009 = v3_model.json "thr" (25th pct of its training predictions).
-FINAL_THR = 0.393009
+// FINAL fit: 3633 closed DEV breakouts up to 2026-10-20.
 scoreIs = -0.243512 - 0.012028 * f_z(ibs, 0.882207, 0.084672) + 0.077133 * f_z(rvol, 0.003919, 0.361995) + 0.015587 * f_z(roc21, 0.077099, 0.060410) + 0.016426 * f_z(roc63, 0.126093, 0.125672) - 0.139563 * f_z(roc126, 0.194343, 0.202689) + 0.049966 * f_z(atrPct, 1.623357, 0.713240) + 0.026913 * f_z(rsi14, 69.836667, 6.165982) - 0.021419 * f_z(ext50, 4.176703, 1.826246) + 0.089082 * f_z(rs63, 0.066030, 0.118733) - 0.014834 * f_z(dist52, -0.021020, 0.041071) - 0.046283 * f_z(bbwPct, 0.542481, 0.289020) - 0.015639 * f_z(gapAtr, 0.222430, 0.543220) - 0.010637 * f_z(spyUp, 0.958161, 0.200220) - 0.169306 * f_z(spyRoc63, 0.060063, 0.050280) - 0.010604 * f_z(rangeAtr, 1.051659, 0.484647) + 0.053239 * f_z(brkAtr, 0.487312, 0.462300) - 0.134906 * f_z(er20, 0.391484, 0.180468)
 // OOS: on history each bar uses the walk-forward fit of its own year, trained only on breakouts whose
 // trade closed before 1 Jan of that year (v3_model_yearly.json). Bars after TRAIN_END (the last bar
@@ -153,6 +166,12 @@ else
         strategy.entry("Long", strategy.long, comment = "BUY")
         // protective stop active from the fill bar: trailMult x ATR below the (unknown yet) fill price
         strategy.exit("Trail", "Long", loss = trailMult * atr / syminfo.mintick, comment = "initial stop")
+
+// with the model on, rules other than the training rules select trades the model never saw: warn (step R3)
+paramsOff = useModel and (n != TRAIN_N or m != TRAIN_M or trailMult != TRAIN_TRAIL or ibsMin != TRAIN_IBS or trendLen != TRAIN_TREND)
+var table warn = table.new(position.top_right, 1, 1)
+if barstate.islast and paramsOff
+    table.cell(warn, 0, 0, "⚠ " + TRAIN_TXT + ": quality filter not valid for these settings", text_color = color.black, bgcolor = color.yellow)
 
 plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
 plot(inPos ? trailStop : na, "Trailing stop", color = color.red, style = plot.style_linebr)

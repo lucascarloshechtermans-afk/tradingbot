@@ -747,3 +747,15 @@ Wider check (all trades pooled): DEV 15 tickers IS PF 2.37 → OOS 2.45; HOLDOUT
 **Conclusion:** the in-sample statistics were NOT materially inflated: the model is heavily regularised (l2 100) and
 only removes the weakest 25%, so the final fit and the yearly fits pick nearly the same trades. The OOS row is
 still the honest one to show, and it is now the default.
+
+### R3 — inputs pinned to the model
+- New generated region `TRAIN` (from `v3_model.json "params"`, now exported by `meta.export_final`): `TRAIN_N 20`,
+  `TRAIN_M 20`, `TRAIN_TRAIL 4`, `TRAIN_IBS 0.7`, `TRAIN_TREND 200` (training also used the SMA200 trend filter), and
+  `FINAL_THR 0.393009` with its source (25th percentile of the final fit's predictions on its own 3633 training
+  breakouts, keep 0.75). The inputs default to these constants; `minQual` defaults to `FINAL_THR * 100` (39.3009).
+- `brkAtr` used a hard-coded 20: now `TRAIN_N`. It is a feature definition and must stay at the training lookback even
+  if the user changes n (before, it was also fixed at 20, so behaviour is identical; it is now explicit and tied to the JSON).
+- With the model on and n/m/trail/ibsMin/trendLen ≠ training values: a yellow row
+  "⚠ model getraind op n=20/m=20/trail=4/ibs=0.7/SMA200: quality + stats not valid for these settings"
+  (indicator table; a one-cell table in the strategy; a merged row in the dashboard).
+- Effect on NVDA/AAPL/JPM at default settings: none (identical trades); it only warns when settings drift.

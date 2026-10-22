@@ -301,7 +301,8 @@ def export_final(n=20, m=20, trail=4.0, ibs_min=0.7, keep=0.75, l2=100.0, year=2
     ym = YearlyModels(tab, keep=keep, l2=l2, first_year=year, last_year=year)
     mu, sd, w, b, thr = ym.models[year]
     return {"feats": FEATS, "mu": mu.tolist(), "sd": sd.tolist(), "w": w.tolist(), "b": float(b),
-            "thr": float(thr), "logit_thr": float(np.log(thr / (1 - thr))), "n_train": len(tab)}
+            "thr": float(thr), "logit_thr": float(np.log(thr / (1 - thr))), "n_train": len(tab),
+            "params": {"n": n, "m": m, "trail": trail, "ibs_min": ibs_min, "trend_len": 200, "keep": keep, "l2": l2}}
 
 
 # ---------------------------------------------------------------------------------
@@ -389,4 +390,4 @@ def export_yearly(n=20, m=20, trail=4.0, ibs_min=0.7, keep=0.75, l2=100.0, first
                      "thr": float(thr), "n_train": n_tr})
     train_end = max(get(t).index[-1] for t in data.DEV)
     return {"feats": FEATS, "fits": fits, "train_end": str(train_end.date()),
-            "params": {"n": n, "m": m, "trail": trail, "ibs_min": ibs_min, "keep": keep, "l2": l2}}
+            "params": {"n": n, "m": m, "trail": trail, "ibs_min": ibs_min, "trend_len": 200, "keep": keep, "l2": l2}}
