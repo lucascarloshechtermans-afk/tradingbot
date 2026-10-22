@@ -791,3 +791,24 @@ still the honest one to show, and it is now the default.
 New row values (default settings): max drawdown in trade worst / avg, avg hold: NVDA −19.7% / −11.5% / 36 bars,
 AAPL −11.5% / −7.2% / 38 bars, JPM −8.5% / −6.2% / 37 bars. Taking half at +4 ATR costs PF on all three: the
 table used to hide that.
+
+### R6 — strategy companion with identical fills (`swing_v3_strategy.pine`)
+- The strategy already used next-open market entries, `strategy.exit(stop=...)` for the trail, the entry-bar
+  protective stop via `loss`, `strategy.close` on close < m-day low (fills next open), commission 0.1%,
+  `process_orders_on_close=false`, and no re-entry on an exit bar; it now also shares the OOS model (R2), the na rule
+  (R4) and the settings warning (R3). Added `margin_long = 0` (no margin call when the next open gaps above the signal
+  close with 100% of equity) and a header documenting every fill rule. `strategy()` only takes constants, so
+  commission cannot follow the `costPct` input: the header says to change both together.
+- **Verification** (TradingView cannot be run from here): `pine_sim.run_strategy` emulates the strategy script as an
+  order book under TradingView's broker rules, independently from `pine_sim.run` (the indicator's state machine) and
+  from the research engine (`evaluate.run_ticker(BEST)`).
+
+| ticker | indicator table n / avg | strategy (TV rules) n / avg | Python engine n / avg | same entry+exit dates |
+|---|---|---|---|---|
+| NVDA | 37 / 13.061% | 37 / 13.074% | 37 / 13.061% | all 37 |
+| AAPL | 29 / 5.136% | 29 / 5.141% | 29 / 5.136% | all 29 |
+| JPM  | 36 / 2.235% | 36 / 2.237% | 36 / 2.235% | all 36 |
+
+  Tolerance asked: 1 trade / 0.1 %-pt. Result: 0 trades, ≤ 0.013 %-pt (TradingView takes commission on the traded
+  value on both sides; the engine divides by entry × (1 + cost)). The indicator table and the engine agree exactly.
+  `tests/test_pine_sim.py` locks this in (AAPL, JPM).

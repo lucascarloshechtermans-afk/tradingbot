@@ -160,3 +160,66 @@ def table(tickers, cfg: dict | None = None) -> pd.DataFrame:
         s = stats(run(get(t), t, cfg)["trades"])
         rows.append({"ticker": t, **s})
     return pd.DataFrame(rows).set_index("ticker")
+
+
+def run_strategy(df: pd.DataFrame, ticker: str, cfg: dict | None = None, from_time: str = "2015-01-01") -> list[dict]:
+    """Emulates `swing_v3_strategy.pine` under TradingView's broker rules, written as an order book (independent
+    of `run`, which follows the indicator's state machine), so the two can be compared:
+    - the script runs at each bar's close; orders it places execute from the next bar (process_orders_on_close=false)
+    - market orders fill at the next open; a stop order fills at the open if the open is already through it,
+      otherwise at the stop price when the low reaches it
+    - the entry's exit order uses `loss` = trailMult x ATR(signal bar) ticks below the fill, so it is live on the fill bar
+    - commission: percent of traded value on both sides (TradingView's formula, not the engine's)."""
+    cfg = {**DEFAULT, **(cfg or {})}
+    o, h, lo, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
+    a = T.atr_py(h, lo, c, 14)
+    tma = T.sma(c, cfg["trend_len"])
+    hi_n = T.shift(T.highest(h, cfg["n"]))
+    lo_m = T.shift(pd.Series(lo).rolling(cfg["m"], min_periods=cfg["m"]).min().to_numpy())
+    rng = h - lo
+    ibs = np.where(rng > 0, (c - lo) / np.where(rng > 0, rng, 1), 0.5)
+    q, thr = quality(df, ticker, cfg)
+    with np.errstate(invalid="ignore"):
+        ok = q >= thr
+    k = cfg["cost_pct"] / 100
+    t0 = pd.Timestamp(from_time)
+    pos_px = np.nan                         # open position's fill price (nan = flat)
+    entry_order, close_order = False, False  # market orders waiting for the next open
+    loss_dist, stop_order = np.nan, np.nan  # exit order: `loss` distance (until replaced) / stop price
+    hh = trail = sig_atr = np.nan
+    ebar = 0
+    trades = []
+
+    def fill_exit(t, px):
+        trades.append({"entry_date": df.index[ebar], "exit_date": df.index[t], "bars": t - ebar,
+                       "ret": (px - pos_px) / pos_px - k * (1 + px / pos_px)})
+
+    for t in range(len(c)):
+        closed = False
+        # ---- broker: orders placed at the previous close ----
+        if entry_order:
+            pos_px, ebar, entry_order = o[t], t, False
+            stop_order = pos_px - loss_dist   # `loss` becomes a stop price once the fill is known
+        if not np.isnan(pos_px):
+            if close_order or o[t] <= stop_order:  # market close, or a gap through the stop: both fill at the open
+                fill_exit(t, o[t])
+                closed = True
+            elif lo[t] <= stop_order:
+                fill_exit(t, stop_order)
+                closed = True
+            if closed:
+                pos_px, close_order, stop_order = np.nan, False, np.nan
+        # ---- script at the close ----
+        if not np.isnan(pos_px):
+            hh = h[t] if np.isnan(hh) else max(hh, h[t])
+            trail = max(pos_px - cfg["trail"] * sig_atr if np.isnan(trail) else trail, hh - cfg["trail"] * a[t])
+            stop_order = trail
+            if c[t] < lo_m[t]:
+                close_order = True
+        else:
+            hh = trail = np.nan
+            cand = c[t] > hi_n[t] and c[t] > tma[t] and ibs[t] >= cfg["ibs_min"]
+            if not closed and df.index[t] >= t0 and cand and bool(ok[t]):
+                sig_atr = a[t]
+                entry_order, loss_dist = True, cfg["trail"] * a[t]
+    return trades
