@@ -62,7 +62,9 @@ f_rank_incl(float x, simple int len, simple int minCnt) =>
         res := cnt >= minCnt ? (less + (eq + 1) / 2.0) / cnt : na
     res
 
-f_z(x, mu, sd) => nz((x - mu) / sd)
+// No nz(): a missing feature makes the score na, so quality is na and there is no BUY (the training dropped
+// such rows instead of imputing them; R4 found no taken trade with a missing feature in Python either).
+f_z(x, mu, sd) => (x - mu) / sd
 // <</GEN:HELPERS>>
 
 // <<GEN:FEATURES>>

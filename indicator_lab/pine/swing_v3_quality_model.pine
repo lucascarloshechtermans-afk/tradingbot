@@ -71,7 +71,9 @@ f_rank_incl(float x, simple int len, simple int minCnt) =>
         res := cnt >= minCnt ? (less + (eq + 1) / 2.0) / cnt : na
     res
 
-f_z(x, mu, sd) => nz((x - mu) / sd)
+// No nz(): a missing feature makes the score na, so quality is na and there is no BUY (the training dropped
+// such rows instead of imputing them; R4 found no taken trade with a missing feature in Python either).
+f_z(x, mu, sd) => (x - mu) / sd
 // <</GEN:HELPERS>>
 
 // ---- model features (all known at this bar's close) ----
@@ -256,7 +258,7 @@ plotshape(halfSig, "½ PROFIT", shape.diamond, location.abovebar, color.teal, si
 plotshape(sellSig and barstate.isconfirmed, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
 plotshape(sellSig and not barstate.isconfirmed, "SELL? (bar not closed)", shape.labeldown, location.abovebar, color.new(color.red, 60), text = "SELL?", textcolor = color.white)
 // breakouts the model rejected, for context
-plotshape(useModel and state == 0 and isCand and not qualityOk and not sellSig and not exited,
+plotshape(useModel and state == 0 and isCand and not qualityOk and not na(quality) and not sellSig and not exited,
      "Rejected breakout", shape.xcross, location.belowbar, color.new(color.orange, 30), size = size.tiny)
 plot(quality, "Breakout quality (0-1)", display = display.data_window)
 // for TradingView's Pine Screener: filter a whole watchlist on "Status" = 1 (new BUY) or -1 (SELL)
@@ -307,7 +309,11 @@ if showTable and barstate.islast
     table.cell(info, 0, 0, "Swing v3", text_color = color.white)
     table.cell(info, 1, 0, statusTxt, text_color = color.white, bgcolor = color.new(statusCol, 40))
     table.cell(info, 0, 1, "Breakout quality", text_color = color.white)
-    table.cell(info, 1, 1, isCand ? str.tostring(quality * 100, "#") + "% " + (qualityOk ? "(ok)" : "(too low)") : "no breakout today", text_color = not isCand ? color.gray : qualityOk ? color.lime : color.orange)
+    // quality is na while any model feature is missing: usually too little history (the longest feature needs ~200
+    // bars, the full 52-week window 252), otherwise a data gap (Debug input shows which feature is na)
+    qualNa  = useModel and na(quality)
+    qualTxt = qualNa ? (bar_index + 1 < 252 ? "te weinig historie (" + str.tostring(bar_index + 1) + "/252 bars)" : "model feature missing (Debug: Data Window)") : isCand ? str.tostring(quality * 100, "#") + "% " + (qualityOk ? "(ok)" : "(too low)") : "no breakout today"
+    table.cell(info, 1, 1, qualTxt, text_color = qualNa ? color.yellow : not isCand ? color.gray : qualityOk ? color.lime : color.orange)
     table.cell(info, 0, 2, "Stop", text_color = color.white)
     table.cell(info, 1, 2, inTrade ? str.tostring(stop, format.mintick) : "-", text_color = color.white)
     table.cell(info, 0, 3, "Risk to stop", text_color = color.white)

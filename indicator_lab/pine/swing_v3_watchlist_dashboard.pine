@@ -68,7 +68,9 @@ f_rank_incl(float x, simple int len, simple int minCnt) =>
         res := cnt >= minCnt ? (less + (eq + 1) / 2.0) / cnt : na
     res
 
-f_z(x, mu, sd) => nz((x - mu) / sd)
+// No nz(): a missing feature makes the score na, so quality is na and there is no BUY (the training dropped
+// such rows instead of imputing them; R4 found no taken trade with a missing feature in Python either).
+f_z(x, mu, sd) => (x - mu) / sd
 // <</GEN:HELPERS>>
 
 // full v3 state machine for the requested symbol; returns [status, quality, stop, close]
@@ -216,7 +218,7 @@ f_row(int r, string sym, int st, float q, float sp, float c) =>
     parts = str.split(sym, ":")
     table.cell(dash, 0, r, array.get(parts, array.size(parts) - 1), text_color = color.white)
     table.cell(dash, 1, r, txt, text_color = color.white, bgcolor = col)
-    table.cell(dash, 2, r, na(q) ? "-" : str.tostring(q * 100, "#") + "%", text_color = color.white)
+    table.cell(dash, 2, r, na(q) ? "n/a (history)" : str.tostring(q * 100, "#") + "%", text_color = na(q) ? color.yellow : color.white)
     table.cell(dash, 3, r, st == 2 and not na(sp) ? "stop " + str.tostring(sp, "#.##") + " (" + str.tostring((c - sp) / c * 100, "#.#") + "%)" : "", text_color = color.white)
 
 if barstate.islast

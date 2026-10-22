@@ -759,3 +759,16 @@ still the honest one to show, and it is now the default.
   "⚠ model getraind op n=20/m=20/trail=4/ibs=0.7/SMA200: quality + stats not valid for these settings"
   (indicator table; a one-cell table in the strategy; a merged row in the dashboard).
 - Effect on NVDA/AAPL/JPM at default settings: none (identical trades); it only warns when settings drift.
+
+### R4 — missing data: no silent imputation
+- Pine `f_z` no longer wraps in `nz()`: if any of the 17 features is na, score and quality are na and `qualityOk` is
+  false, so no BUY. The table shows "te weinig historie (x/252 bars)" (or "model feature missing" after 252 bars,
+  e.g. a data gap; the Debug input shows which one). The dashboard shows "n/a (history)". A na quality no longer
+  draws a "rejected breakout" cross.
+- **Did Python do the same?** Training: yes, `candidate_table(...).dropna()` drops rows instead of imputing, and it
+  dropped **0 of 3656** DEV candidates (the SMA200 trend condition already needs 200 bars, by which time every feature
+  exists). Prediction: no. `YearlyModels.prob/take` use `np.nan_to_num(z)` (a missing feature counts as the training
+  mean). But that never mattered: **0 imputed features among 2035 DEV, 1870 HOLDOUT, 5017 LOCKBOX, 6129 LOCKBOX2 and
+  4690 VOLATILE signals taken since 2015**. Python was left as is (changing it changes no trade).
+- Effect (pine_sim, na-block on vs off): NVDA/AAPL/JPM 102 → 102 trades, VOLATILE 1553 → 1553, LOCKBOX 1524 → 1524,
+  identical returns. It only protects charts with short history or gaps.
