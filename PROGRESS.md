@@ -722,3 +722,28 @@ and compares them with `meta.feature_frame` (the training features) on 20 random
 - **Structure:** the feature/model/debug code is now generated (`python -m indicator_lab.export_pine`) into
   `// <<GEN:...>>` regions of all three v3 files. `tests/test_pine_model_sync.py` fails if a region drifts.
 - **Effect on NVDA/AAPL/JPM:** none (identical trades). These have history since 2012, so the warm-up differences are long gone.
+
+### R2 — OOS chart statistics (walk-forward fits in Pine)
+- `meta.export_yearly()` → `pine/v3_model_yearly.json`: the 12 walk-forward fits (2015–2026) the research engine used,
+  each trained only on DEV breakouts whose trade closed before 1 Jan of that year (coefs, mu/sd, threshold, n_train).
+- `export_pine.py` generates `scoreYear = switch year(time)` with one arm per fit + `thrYear`; bars after TRAIN_END
+  (2026-10-20, the last bar the final fit saw) use the final fit. Generated, never by hand; a test evaluates every
+  generated expression against the JSON. One term is skipped on purpose: `spy_up` in the 2015 fit was constant in
+  training (sd 1e-9, weight exactly 0), so it contributes nothing in Python either (instead of dividing by 0.000000).
+- `minQual` keeps its meaning: on OOS bars the same shift vs the final threshold is applied to that year's threshold.
+- The indicator's state machine is now a function `f_machine(entryOk)` that runs twice with its own `var` state:
+  with the OOS quality (the signals you see) and with the in-sample quality (statistics only). Table row is
+  **"OOS since 2015"**; input "Also show the in-sample statistics" adds an **"In-sample (final fit) — optimistic"** row.
+- Strategy and dashboard use the same OOS score for their signals (same generated MODEL region).
+- Pine note: `switch` cannot sit inside a ternary; it is generated as its own variable. Compile-validated.
+
+| ticker | in-sample (final fit) n / win / PF / avg | OOS (walk-forward) n / win / PF / avg | PF OOS − IS |
+|---|---|---|---|
+| NVDA | 38 / 57.9% / 5.30 / 12.4% | 37 / 59.5% / 5.87 / 13.1% | +0.56 |
+| AAPL | 32 / 59.4% / 4.24 / 5.7% | 29 / 58.6% / 4.27 / 5.1% | +0.03 |
+| JPM  | 36 / 44.4% / 2.31 / 2.3% | 36 / 44.4% / 2.26 / 2.2% | −0.05 |
+
+Wider check (all trades pooled): DEV 15 tickers IS PF 2.37 → OOS 2.45; HOLDOUT 16: 1.84 → 1.97; LOCKBOX 50: 1.87 → 1.86.
+**Conclusion:** the in-sample statistics were NOT materially inflated: the model is heavily regularised (l2 100) and
+only removes the weakest 25%, so the final fit and the yearly fits pick nearly the same trades. The OOS row is
+still the honest one to show, and it is now the default.

@@ -31,7 +31,7 @@ YEARLY = os.path.join(PINE_DIR, "v3_model_yearly.json")
 VAR = {"ibs": "ibs", "rvol": "rvol", "roc21": "roc21", "roc63": "roc63", "roc126": "roc126", "atr_pct": "atrPct",
        "rsi14": "rsi14", "ext50": "ext50", "rs63": "rs63", "dist52": "dist52", "bbw_pct": "bbwPct", "gap": "gapAtr",
        "spy_up": "spyUp", "spy_roc63": "spyRoc63", "range_atr": "rangeAtr", "brk_atr": "brkAtr", "er20": "er20"}
-REGION = re.compile(r"^( *)// <<GEN:(\w+)>>\n.*?^\1// <</GEN:\2>>\n", re.M | re.S)
+REGION = re.compile(r"^( *)// <<GEN:(\w+)>>\n.*?^\1// <</GEN:\2>>\n", re.MULTILINE | re.DOTALL)
 
 HELPERS = '''\
 // Python (meta.feature_frame, pandas) is the reference for every model feature; pine_parity.py checks it.
@@ -96,13 +96,53 @@ er20      = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 2
 '''
 
 
+def _expr(fit: dict, feats: list[str]) -> str:
+    out = f"{fit['b']:.6f}"
+    for f, mu, sd, w in zip(feats, fit["mu"], fit["sd"], fit["w"]):
+        if w == 0:  # e.g. spy_up in 2015: constant in training (sd = 1e-9), weight 0 -> contributes nothing
+            continue
+        assert sd > 1e-6, (fit.get("year"), f, sd)
+        out += f" {'+' if w >= 0 else '-'} {abs(w):.6f} * f_z({VAR[f]}, {mu:.6f}, {sd:.6f})"
+    return out
+
+
 def model_block(final: dict, yearly: dict | None) -> str:
-    lines = [f"// final fit: {final['n_train']} closed DEV breakouts; threshold = {final['thr']:.6f} "
-             f"(v3_model.json 'thr', the {round((1 - 0.75) * 100)}th pct of training predictions)",
-             f"score = {final['b']:+.6f}"]
-    for f, mu, sd, w in zip(final["feats"], final["mu"], final["sd"], final["w"]):
-        lines.append(f"     + {w:+.6f} * f_z({VAR[f]}, {mu:.6f}, {sd:.6f})")
-    lines.append("quality = 1 / (1 + math.exp(-score))")
+    feats = final["feats"]
+    lines = [
+        (f"// FINAL fit: {final['n_train']} closed DEV breakouts up to {yearly['train_end'] if yearly else '?'}; "
+         f"threshold {final['thr']:.6f} = v3_model.json \"thr\" (25th pct of its training predictions)."),
+        f"FINAL_THR = {final['thr']:.6f}",
+        "scoreIs = " + _expr(final, feats),
+    ]
+    if yearly:
+        y_end = yearly["train_end"].split("-")
+        lines += [
+            "// OOS: on history each bar uses the walk-forward fit of its own year, trained only on breakouts whose",
+            "// trade closed before 1 Jan of that year (v3_model_yearly.json). Bars after TRAIN_END (the last bar",
+            "// the final fit has seen) use the final fit. Before the first fit year there is no model (no BUY).",
+            f"TRAIN_END = timestamp(\"UTC\", {int(y_end[0])}, {int(y_end[1])}, {int(y_end[2])}, 23, 59)",
+            "fitYear   = year(time)",
+            "scoreYear = switch fitYear",
+        ]
+        for fit in yearly["fits"]:
+            lines.append(f"    {fit['year']} => " + _expr(fit, feats))
+        lines.append("    => float(na)")
+        lines.append("thrYear   = switch fitYear")
+        for fit in yearly["fits"]:
+            lines.append(f"    {fit['year']} => {fit['thr']:.6f}")
+        lines.append("    => float(na)")
+        lines += ["scoreOos  = time > TRAIN_END ? scoreIs : scoreYear",
+                  "thrOos    = time > TRAIN_END ? FINAL_THR : thrYear"]
+    else:
+        lines += ["scoreOos  = scoreIs", "thrOos    = FINAL_THR"]
+    lines += [
+        "score     = scoreOos  // the signals use the out-of-sample score",
+        "quality   = 1 / (1 + math.exp(-scoreOos))",
+        "qualityIs = 1 / (1 + math.exp(-scoreIs))",
+        "// minQual is an absolute threshold for the final fit; on OOS bars the same shift is applied to that year's own threshold",
+        "qualityOk   = not useModel or (not na(quality) and quality * 100 >= thrOos * 100 + (minQual - FINAL_THR * 100))",
+        "qualityOkIs = not useModel or (not na(qualityIs) and qualityIs * 100 >= minQual)",
+    ]
     return "\n".join(lines) + "\n"
 
 
@@ -130,9 +170,14 @@ def apply(src: str, bl: dict) -> str:
     return out
 
 
+def _read(path: str) -> str:
+    with open(path) as fh:
+        return fh.read()
+
+
 def _load():
-    final = json.load(open(FINAL))
-    yearly = json.load(open(YEARLY)) if os.path.exists(YEARLY) else None
+    final = json.loads(_read(FINAL))
+    yearly = json.loads(_read(YEARLY)) if os.path.exists(YEARLY) else None
     return final, yearly
 
 
@@ -141,8 +186,7 @@ def render() -> dict[str, str]:
     out = {}
     for f in FILES:
         fp = os.path.join(PINE_DIR, f)
-        with open(fp) as fh:
-            out[fp] = apply(fh.read(), bl)
+        out[fp] = apply(_read(fp), bl)
     return out
 
 
@@ -155,7 +199,7 @@ def write(out: dict[str, str]) -> None:
 def main(argv: list[str]) -> int:
     if "--check" in argv:
         out = render()
-        stale = [os.path.basename(fp) for fp, src in out.items() if src != open(fp).read()]
+        stale = [os.path.basename(fp) for fp, src in out.items() if src != _read(fp)]
         print("in sync" if not stale else f"out of sync: {stale}")
         return 1 if stale else 0
     if "--render" not in argv:

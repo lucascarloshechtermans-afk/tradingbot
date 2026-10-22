@@ -94,7 +94,8 @@ def score(f: pd.DataFrame, model: dict) -> tuple[pd.Series, pd.Series]:
 
 
 def compare(version: str = "current", n_dates: int = 20, seed: int = 7, tickers=TICKERS):
-    model = json.load(open(MODEL))
+    with open(MODEL) as fh:
+        model = json.load(fh)
     sd = dict(zip(model["feats"], model["sd"]))
     rng = np.random.default_rng(seed)
     rows = []
@@ -121,7 +122,8 @@ def compare(version: str = "current", n_dates: int = 20, seed: int = 7, tickers=
 def main(argv):
     version = argv[argv.index("--version") + 1] if "--version" in argv else "current"
     d = compare(version)
-    feats = json.load(open(MODEL))["feats"]
+    with open(MODEL) as fh:
+        feats = json.load(fh)["feats"]
     print(f"Pine '{version}' vs Python training features — max |diff| in z-units over {len(d)} ticker-dates")
     for scope, sub in (("US (AAPL NVDA JPM KO)", d[d.ticker != "ASML.AS"]), ("Euronext (ASML.AS)", d[d.ticker == "ASML.AS"])):
         print(f"  {scope}:")

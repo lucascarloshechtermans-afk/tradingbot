@@ -374,3 +374,19 @@ def pyramid_add(df, p):
                     break
         force_exit[max(i1 - 1, 0)] = True  # base trade ends at bar i1 -> add-on leaves at the same open
     return add, exit_sig | force_exit, rules, a, None
+
+
+def export_yearly(n=20, m=20, trail=4.0, ibs_min=0.7, keep=0.75, l2=100.0, first_year=2015, last_year=2026) -> dict:
+    """The walk-forward fits the backtest actually traded with: for each calendar year Y, a model trained
+    only on DEV breakouts whose trade closed before 1 Jan Y. Plus `train_end`, the last bar of the data
+    the final fit (export_final) has seen; bars after it are genuinely out of sample for the final fit."""
+    tab = candidate_table(data.DEV, n, m, trail, ibs_min)
+    ym = YearlyModels(tab, keep=keep, l2=l2, first_year=first_year, last_year=last_year)
+    fits = []
+    for y, (mu, sd, w, b, thr) in sorted(ym.models.items()):
+        n_tr = int((tab["exit_date"] < pd.Timestamp(f"{y}-01-01")).sum())
+        fits.append({"year": int(y), "mu": mu.tolist(), "sd": sd.tolist(), "w": w.tolist(), "b": float(b),
+                     "thr": float(thr), "n_train": n_tr})
+    train_end = max(get(t).index[-1] for t in data.DEV)
+    return {"feats": FEATS, "fits": fits, "train_end": str(train_end.date()),
+            "params": {"n": n, "m": m, "trail": trail, "ibs_min": ibs_min, "keep": keep, "l2": l2}}

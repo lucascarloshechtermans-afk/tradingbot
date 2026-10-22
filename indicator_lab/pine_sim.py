@@ -11,7 +11,6 @@ cfg keys (all default to the ORIGINAL pre-round behaviour):
 """
 from __future__ import annotations
 
-import json
 import os
 
 import numpy as np
@@ -28,10 +27,8 @@ DEFAULT = {"features": "current", "model": "final", "na_block": False, "half_boo
 
 
 def load_models():
-    final = json.load(open(os.path.join(PINE_DIR, "v3_model.json")))
-    path = os.path.join(PINE_DIR, "v3_model_yearly.json")
-    yearly = json.load(open(path)) if os.path.exists(path) else None
-    return final, yearly
+    from indicator_lab.export_pine import _load
+    return _load()
 
 
 def quality(df: pd.DataFrame, ticker: str, cfg: dict) -> tuple[np.ndarray, np.ndarray]:
