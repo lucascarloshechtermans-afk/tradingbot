@@ -68,6 +68,14 @@ f_rank_incl(float x, simple int len, simple int minCnt) =>
         res := cnt >= minCnt ? (less + (eq + 1) / 2.0) / cnt : na
     res
 
+// SPY's 63-day return and its SMA200 trend, computed on SPY's OWN daily bars (lookbacks in SPY trading days, also
+// when the chart is on another exchange with other holidays) + the same values one SPY day earlier.
+f_spyFeat() =>
+    roc = close / close[63] - 1
+    ma  = ta.sma(close, 200)
+    up  = na(ma) ? na : close > ma ? 1.0 : 0.0
+    [roc, up, roc[1], up[1]]
+
 // No nz(): a missing feature makes the score na, so quality is na and there is no BUY (the training dropped
 // such rows instead of imputing them; R4 found no taken trade with a missing feature in Python either).
 f_z(x, mu, sd) => (x - mu) / sd
@@ -82,9 +90,9 @@ f_v3() =>
     chg       = ta.change(close)
     rsiUp     = f_rma_py(na(chg) ? na : math.max(chg, 0), 14)
     rsiDn     = f_rma_py(na(chg) ? na : math.max(-chg, 0), 14)
-    spyToday  = request.security(spySym, "D", close)
-    spyPrev   = request.security(spySym, "D", close[1])
-    spy       = syminfo.timezone == "America/New_York" ? spyToday : spyPrev
+    [spyRoc0, spyUp0, spyRoc1, spyUp1] = request.security(spySym, "D", f_spyFeat())
+    // Outside New York the chart's bar closes before SPY's bar of the same date: use the previous SPY day (no look-ahead)
+    spyUS     = syminfo.timezone == "America/New_York"
     volRatio  = volume / ta.sma(volume, 50)
     ibs       = high > low ? (close - low) / (high - low) : 0.5
     rvol      = na(volRatio) ? na : math.log(math.max(volRatio, 0.05))
@@ -94,14 +102,14 @@ f_v3() =>
     atrPct    = atr / close * 100
     rsi14     = na(rsiUp) or na(rsiDn) ? na : rsiDn == 0 ? 100.0 : 100 - 100 / (1 + rsiUp / rsiDn)
     ext50     = (close - ta.sma(close, 50)) / atr
-    spyRoc63  = spy / spy[63] - 1
+    spyRoc63  = spyUS ? spyRoc0 : spyRoc1
     rs63      = roc63 - spyRoc63
     hi52      = bar_index >= 199 ? ta.highest(high, math.min(bar_index + 1, 252)) : na
     dist52    = close / hi52 - 1
     bbw       = 4 * ta.stdev(close, 20) / ta.sma(close, 20)
     bbwPct    = f_rank_incl(bbw, 252, 100)
     gapAtr    = (open - close[1]) / atr[1]
-    spyUp     = spy > ta.sma(spy, 200) ? 1.0 : 0.0
+    spyUp     = spyUS ? spyUp0 : spyUp1
     rangeAtr  = (high - low) / atr[1]
     brkAtr    = (close - ta.highest(high, TRAIN_N)[1]) / atr  // feature definition: the TRAINING lookback, not input n
     er20      = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 20)

@@ -27,6 +27,8 @@ PINE_DIR = os.path.join(os.path.dirname(__file__), "pine")
 DEFAULT = {"features": "current", "model": "final", "na_block": False, "half_book": False, "tp_mult": 0.0,
            "n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7, "trend_len": 200, "cost_pct": 0.1,
            "stats_from": "2015-01-01"}
+# the Pine files at the end of the reliability round (steps 1-7)
+FINAL = {"features": "fixed", "model": "oos", "na_block": True, "half_book": True}
 
 
 def load_models():

@@ -812,3 +812,41 @@ table used to hide that.
   Tolerance asked: 1 trade / 0.1 %-pt. Result: 0 trades, ≤ 0.013 %-pt (TradingView takes commission on the traded
   value on both sides; the engine divides by entry × (1 + cost)). The indicator table and the engine agree exactly.
   `tests/test_pine_sim.py` locks this in (AAPL, JPM).
+
+### R7 — small fixes
+- **Position size labelled "geschat"**: the size/stop row and the BUY alert say the stop is estimated from today's
+  close; the real stop is fill − trailMult × ATR(signal bar) (the table shows that distance), to be recomputed after the fill.
+- **Stop before target on the same bar**: commented in `f_machine` (R5); the engine and `pine_sim` do the same.
+- **SPY features on SPY's own bars**: `f_spyFeat()` runs inside `request.security(SPY)` and returns ROC63 and the
+  SMA200 trend computed on SPY's daily bars (lookbacks in SPY trading days), plus the same values one SPY day earlier
+  for non-New-York charts. Before, they were computed on the CHART's bars, so on Euronext the 63/200 lookbacks
+  counted Euronext days. Parity on ASML.AS: `spy_up` 4.99 z → 0.00 z, `spy_roc63` 0.69 → 0.35 z, quality max
+  3.2 → 1.7 %-pt (the rest is the deliberate previous SPY day: no look-ahead). US tickers: 0.000 z, 0 trades changed;
+  ASML.AS 41 → 40 trades (PF 1.52 → 1.60). Side effect: the dashboard needs 1 SPY request per symbol instead of 2
+  (25 `request.*` calls instead of 37, limit 40).
+
+### Reliability round: before/after per step (NVDA / AAPL / JPM, pine_sim, cumulative)
+
+| step | NVDA n / win / PF / avg | AAPL n / win / PF / avg | JPM n / win / PF / avg |
+|---|---|---|---|
+| 0 original Pine | 38 / 57.9% / 5.30 / 12.44% | 32 / 59.4% / 4.24 / 5.68% | 36 / 44.4% / 2.31 / 2.30% |
+| 1 feature parity | 38 / 57.9% / 5.30 / 12.44% | 32 / 59.4% / 4.24 / 5.68% | 36 / 44.4% / 2.31 / 2.30% |
+| 2 OOS walk-forward fits | 37 / 59.5% / 5.87 / 13.06% | 29 / 58.6% / 4.27 / 5.14% | 36 / 44.4% / 2.26 / 2.23% |
+| 3 inputs pinned | = | = | = |
+| 4 na blocks BUY | = | = | = |
+| 5 50/50 half-profit (tpMult 0) | = | = | = |
+| 5 with tpMult 4: old booking → 50/50 | PF 5.87 → 4.41, avg 13.06 → 9.15% | PF 4.27 → 3.59, avg 5.14 → 4.07% | PF 2.26 → 2.05, avg 2.23 → 1.87% |
+| 6 strategy (TradingView rules) | 37 / 59.5% / 5.87 / 13.07% | 29 / 58.6% / 4.27 / 5.14% | 36 / 44.4% / 2.26 / 2.24% |
+| 7 SPY on SPY bars (final) | 37 / 59.5% / 5.87 / 13.06% | 29 / 58.6% / 4.27 / 5.14% | 36 / 44.4% / 2.26 / 2.23% |
+
+New table rows at the end (final): max drawdown inside a trade worst / avg, avg hold: NVDA −19.7% / −11.5% / 36 bars,
+AAPL −11.5% / −7.2% / 38 bars, JPM −8.5% / −6.2% / 37 bars. Final indicator table = Python research engine, trade
+for trade (R6). Nothing in the round changed the signal logic except where a step required it (R2 OOS model, R4 na,
+R7 SPY definition); none of it raised the edge, and on these US tickers the honest numbers are the old ones.
+
+**Changelog (Pine v3 files):** generated regions TRAIN/HELPERS/FEATURES/MODEL/DEBUG from the JSON (never by hand);
+pandas-exact ATR/RSI/52w-high/BB-rank; debug Data-Window features; per-year walk-forward fits with an "OOS since 2015"
+row (+ optional in-sample row); inputs default to the training constants with a yellow warning when changed; `brkAtr`
+on `TRAIN_N`; `minQual` = `FINAL_THR` × 100 with its source; no `nz()` imputation, "te weinig historie (x/252 bars)";
+half-profit booked 50/50; per-trade drawdown and holding time; strategy fills documented, `margin_long = 0`;
+position-size stop labelled "geschat"; SPY ROC63/SMA200 on SPY's own bars.

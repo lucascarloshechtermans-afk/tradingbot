@@ -16,7 +16,7 @@ def test_strategy_indicator_and_engine_take_the_same_trades(ticker):
     from indicator_lab import evaluate as E
     from indicator_lab import pine_sim as S
     from indicator_lab.strategies import BEST
-    cfg = {"features": "step1", "model": "oos", "na_block": True}
+    cfg = S.FINAL
     df = E.get(ticker)
     ind = S.run(df, ticker, cfg)["trades"]
     st = S.run_strategy(df, ticker, cfg)
