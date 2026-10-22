@@ -2,7 +2,7 @@
 // Swing buy/sell indicator v3 — v2 (Donchian 20/20 breakout + strong close + 4xATR trail)
 // filtered by a logistic "breakout quality" model (meta-labeling).
 // Port of indicator_lab/meta.py::meta_breakout {"n":20,"m":20,"trail":4.0,"ibs_min":0.7,"keep":0.75,"l2":100}.
-// Model coefficients = indicator_lab/pine/v3_model.json (trained on 3656 DEV breakouts 2013-2026).
+// Model coefficients = indicator_lab/pine/v3_model.json (trained on 3633 closed DEV breakouts 2013-2026).
 // In the backtests the model was refit every year on past data only; this file holds the latest fit.
 // BUY = signal at this close, enter next open. SELL = close below prior m-day low (exit next open)
 // or trailing stop touched (exit at stop). Daily chart. Not financial advice.
