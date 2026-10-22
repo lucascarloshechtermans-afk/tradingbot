@@ -20,7 +20,7 @@ if DRY:
 else:
     P.install_final()
 
-from indicator_lab.swing4 import lab as L  # noqa: E402
+from indicator_lab.swing4 import lab as L
 
 OUT = os.path.join(P.HERE, "reports") if not os.environ.get("SWING4_DRYRUN") else os.environ.get("SWING4_CACHE", "/tmp")
 SPEC = json.load(open(os.path.join(P.HERE, "final_spec.json")))  # noqa: SIM115
@@ -120,10 +120,10 @@ def main():
     plt.close(fig)
 
     L_ = ["# Swing v4 — phase 3: the single holdout run\n",
-          f"Frozen spec (`final_spec.json`, committed before this run): v3 + only take a breakout when SPY's 63-day "
-          f"return ≤ {F1_MAX:.2f}. Exits unchanged. Costs 0.1% per side; R = 4 x ATR(signal bar); portfolio max 10 positions "
-          "(mean of 20 random selection orders). Model: v3's walk-forward yearly fits on DEV (the 2025/2026 fits now see "
-          "data up to their year start, as in real use). Trades still open at the last bar are not counted.\n",
+          (f"Frozen spec (`final_spec.json`, committed before this run): v3 + only take a breakout when SPY's 63-day "
+           f"return ≤ {F1_MAX:.2f}. Exits unchanged. Costs 0.1% per side; R = 4 x ATR(signal bar); portfolio max 10 "
+           "positions (mean of 20 random selection orders). Model: v3's walk-forward yearly fits on DEV (the 2025/2026 "
+           "fits now see data up to their year start, as in real use). Trades still open at the last bar are not counted.\n"),
           "| cell / system | trades | win | exp % | exp R [95% CI] | PF | avg win / loss | CAGR | max DD | MAR | hold | expo | top-10% share / mean R |",
           "|" + "---|" * 13]
     for cell, d in out.items():

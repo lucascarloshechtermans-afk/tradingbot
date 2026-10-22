@@ -26,9 +26,11 @@ from indicator_lab.evaluate import get
 PINE_DIR = os.path.join(os.path.dirname(__file__), "pine")
 DEFAULT = {"features": "current", "model": "final", "na_block": False, "half_book": False, "tp_mult": 0.0,
            "n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7, "trend_len": 200, "cost_pct": 0.1,
-           "stats_from": "2015-01-01"}
+           "stats_from": "2015-01-01", "regime_max": None}
 # the Pine files at the end of the reliability round (steps 1-7)
 FINAL = {"features": "fixed", "model": "oos", "na_block": True, "half_book": True}
+# swing_v4.pine: v3 + only BUY when SPY's 63-day return <= REGIME_MAX (swing4/final_spec.json)
+V4 = {**FINAL, "regime_max": 0.03}
 
 
 def load_models():
@@ -67,6 +69,9 @@ def quality(df: pd.DataFrame, ticker: str, cfg: dict) -> tuple[np.ndarray, np.nd
     q = 1 / (1 + np.exp(-s))
     if cfg["na_block"]:
         q = np.where(has_na, np.nan, q)
+    if cfg.get("regime_max") is not None:  # v4: the regime rule blocks the BUY like a failed quality check
+        with np.errstate(invalid="ignore"):
+            q = np.where(f["spy_roc63"].to_numpy(float) <= cfg["regime_max"], q, np.nan)
     return q, thr
 
 

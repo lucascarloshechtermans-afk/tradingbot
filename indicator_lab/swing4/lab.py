@@ -14,11 +14,11 @@ from indicator_lab.swing4 import protocol as P
 if P._MODE["mode"] is None:   # phase 3 calls protocol.install_final() before importing this module
     P.install_dev_cutoff()
 
-from indicator_lab import data, earnings, ind, meta  # noqa: E402
-from indicator_lab.evaluate import get  # noqa: E402
-from indicator_lab.metrics import equity_stats  # noqa: E402
-from indicator_lab.swing4 import core as C  # noqa: E402
-from indicator_lab.swing4 import sim2 as S2  # noqa: E402
+from indicator_lab import data, earnings, ind, meta
+from indicator_lab.evaluate import get
+from indicator_lab.metrics import equity_stats
+from indicator_lab.swing4 import core as C
+from indicator_lab.swing4 import sim2 as S2
 
 UNIV = P.DEV_UNIVERSE
 PERIOD = P.DEV_PERIOD
@@ -62,7 +62,7 @@ def build(univ=None) -> dict:
     univ = univ or UNIV
     m_v3, m_st = C.model(), C.model(STABLE)
     spy = get("SPY")
-    sec_mom, sec_rank, sec_ret = _sector_map(spy.index)
+    _, sec_rank, sec_ret = _sector_map(spy.index)
     ctx = {}
     for t in univ:
         df = get(t)
@@ -145,7 +145,7 @@ def v3_entry(cx) -> np.ndarray:
         return cx["cand"] & (cx["p_v3"] >= cx["thr_v3"])
 
 
-def run(ctx: dict, entry_fn=v3_entry, pol: S2.Policy = S2.Policy(), univ=None, period=None) -> dict:
+def run(ctx: dict, entry_fn=v3_entry, pol: S2.Policy = S2.DEFAULT, univ=None, period=None) -> dict:
     """{ticker: (daily returns in the period, trades with signal-bar info)}."""
     a0, b0 = period or PERIOD
     out = {}

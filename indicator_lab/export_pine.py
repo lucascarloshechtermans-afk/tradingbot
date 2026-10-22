@@ -13,6 +13,7 @@ and this script rewrites the content between the markers (keeping the marker's i
   FEATURES  the 17 model features
   MODEL     the model fits + `score`/`quality`
   DEBUG     raw features in the Data Window when the debug input is on (indicator only)
+  REGIME    the v4 market-regime threshold from swing4/final_spec.json (v4 files only)
 
     python -m indicator_lab.export_pine            # refit the final model (+ yearly fits) and regenerate
     python -m indicator_lab.export_pine --render   # regenerate from the stored JSON, no refit
@@ -26,7 +27,9 @@ import re
 import sys
 
 PINE_DIR = os.path.join(os.path.dirname(__file__), "pine")
-FILES = ["swing_v3_quality_model.pine", "swing_v3_strategy.pine", "swing_v3_watchlist_dashboard.pine"]
+FILES = ["swing_v3_quality_model.pine", "swing_v3_strategy.pine", "swing_v3_watchlist_dashboard.pine",
+         "swing_v4.pine", "swing_v4_strategy.pine", "swing_v4_watchlist_dashboard.pine"]
+SPEC = os.path.join(os.path.dirname(__file__), "swing4", "final_spec.json")
 FINAL = os.path.join(PINE_DIR, "v3_model.json")
 YEARLY = os.path.join(PINE_DIR, "v3_model_yearly.json")
 VAR = {"ibs": "ibs", "rvol": "rvol", "roc21": "roc21", "roc63": "roc63", "roc126": "roc126", "atr_pct": "atrPct",
@@ -176,8 +179,16 @@ DEBUG = "\n".join(f'plot(debugFeat ? {v} : na, "f {k}", display = display.data_w
     '\nplot(debugFeat ? score : na, "f score (logit)", display = display.data_window)\n'
 
 
+def regime_block() -> str:
+    spec = json.loads(_read(SPEC))
+    v = spec["new_free_parameters"]["spy_roc63_max"]
+    return (f"// v4 regime rule = swing4/final_spec.json (frozen {spec['frozen']}); accepted at 0.00 / 0.03 / 0.06, "
+            "the middle was chosen\n"
+            f"REGIME_MAX = {v:.4f}\n")
+
+
 def blocks(final: dict, yearly: dict | None) -> dict:
-    return {"TRAIN": train_block(final), "HELPERS": HELPERS, "FEATURES": FEATURES, "MODEL": model_block(final, yearly), "DEBUG": DEBUG}
+    return {"TRAIN": train_block(final), "REGIME": regime_block(), "HELPERS": HELPERS, "FEATURES": FEATURES, "MODEL": model_block(final, yearly), "DEBUG": DEBUG}
 
 
 def _indent(text: str, ind: str) -> str:

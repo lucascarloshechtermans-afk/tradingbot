@@ -48,7 +48,10 @@ class Policy:
     earn_frac: float = 1.0           #   sell earn_frac at the next open
 
 
-def simulate(a: dict, entry: np.ndarray, pol: Policy = Policy(), cost: float = 0.001):
+DEFAULT = Policy()
+
+
+def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.001):
     """`a`: per-bar arrays o h l c atr exit_sig (+ sma50 rsi14 hi_n earn_k as needed), index (DatetimeIndex)."""
     o, h, lo, c, atr = a["o"], a["h"], a["l"], a["c"], a["atr"]
     exit_sig = a["exit_sig"] if pol.exit_low else np.zeros(len(c), bool)

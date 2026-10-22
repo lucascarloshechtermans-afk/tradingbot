@@ -883,3 +883,32 @@ portfolio. Development universe = the 253 tickers of all earlier universes (all 
 - Survivorship: no delisted ticker in any universe. Hindsight-picked groups do better (DEV mega caps 0.33R, LOCKBOX
   winners 0.27R) than neutral large caps (TRAIN_EXTRA 0.12R): a large part of the 0.20R may be selection. The
   2015-membership holdout tickers will show it.
+
+### Swing v4 phase 2 (101 logged trials, development data) — `swing4/reports/phase2.md`, `phase2_tables.md`
+- New simulator `swing4/sim2.py`: partial exits, break-even, tight trail, time stop, over-extension, fixed target,
+  pre-earnings exit, buy-stop and pullback entries; stop beats target on the same bar, gaps fill at the open
+  (`tests/test_swing4_fills.py`); default policy = engine exactly. Harness `swing4/lab.py` (context, 10-position
+  portfolio with ranking / sizing / SPY parking, acceptance checks); every trial logged in `swing4/experiments.csv`.
+- **Accepted: one idea — F1, only buy when SPY's 63-day return ≤ 3%** (passes at 0 / 3 / 6%): win 44.1 → 49.4%,
+  0.200 → 0.338R, PF 1.73 → 2.53, MAR 0.60 → 0.67, max DD −25.1 → −20.4%, exposure 92 → 61% (CAGR 14.7 → 13.4%).
+  7/10 years and both ticker halves better; month-clustered 95% CI of exp R 0.17–0.50; deflated Sharpe 0.99.
+- Rejected: all 37 profit-taking variants (they cut the top-10% trades that make 151% of the P&L), rankings
+  (none beat random), setup filters, entry timing (buy-stop 3d came close), relabelled / GBM models, score or regime
+  sizing, other regime rules, and every component stacked on top of F1.
+
+### Swing v4 phase 3: the single holdout run — `swing4/reports/phase3.md` (spec frozen first: `final_spec.json`)
+| cell | v3 win / exp R / MAR | v4 win / exp R / MAR | SPY MAR |
+|---|---|---|---|
+| DEV tickers 2015–2024-10 | 44.8% / 0.224 / 0.62 | 49.5% / 0.344 / 0.77 | 0.39 |
+| TIME holdout (DEV tickers, 2024-10-22 →) | 37.8% / 0.018 / −0.01 | 41.1% / 0.069 / 0.03 | 0.87 |
+| TICKER holdout (84 new, 2015–2024-10) | 40.9% / 0.055 / 0.21 | 46.5% / 0.134 / 0.22 | 0.39 |
+| TICKER + TIME holdout | 38.5% / 0.047 / 0.00 | 39.0% / 0.047 / 0.45 | 0.87 |
+v4 beats v3 on all three criteria in every clean cell. But the strategy itself is far weaker on clean data than on
+the (survivor-biased) development universe, and neither version beats buy & hold of SPY there.
+
+### Pine v4 (`indicator_lab/pine/swing_v4*.pine`, v3 files untouched)
+v4 = v3 + the regime rule (generated `GEN:REGIME` region from `final_spec.json`, input to switch it off, a grey
+marker for breakouts blocked by the regime, a "Regime (SPY 63d)" table row; strategy and dashboard likewise).
+No new exits (none were accepted). Parity: `pine_sim` (V4) = TradingView-rules strategy emulation = swing4 engine,
+trade for trade (`tests/test_pine_sim.py`). Compile-checked. Chart stats OOS v3 → v4: NVDA 37 → 17 trades, PF
+5.87 → 6.36; AAPL 29 → 13, PF 4.27 → 3.48; JPM 36 → 14, PF 2.26 → 4.21, win 44 → 57%.
