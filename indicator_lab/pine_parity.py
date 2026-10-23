@@ -38,6 +38,7 @@ def _spy_series(df: pd.DataFrame, us: bool, version: str):
                       "up": (sc > ssma200).astype(float), "up1": T.shift((sc > ssma200).astype(float), 1)},
                      index=spy.index)
     s.loc[~np.isfinite(ssma200), "up"] = np.nan
+    s["day"] = spy.index.normalize()
     m = s.reindex(df.index, method="ffill")
     if version in ("current", "step1"):
         # current Pine: spy = today's/previous SPY close mapped to chart bars; roc63 and SMA200 computed
@@ -47,6 +48,12 @@ def _spy_series(df: pd.DataFrame, us: bool, version: str):
         sma = T.sma(spy_chart, 200)
         up = np.where(np.isfinite(sma), (spy_chart > sma).astype(float), np.nan)
         return roc, up
+    if version == "v41" and not us:
+        # v4.1: on a chart date where SPY has no bar (US holiday), request.security already returns SPY's previous
+        # (closed) day, so [0] is the right value; [1] would be two SPY days old. On other dates use [1] as before.
+        same = (m["day"] == df.index.normalize()).to_numpy()
+        return (np.where(same, m["roc63_1"], m["roc63"]).astype(float),
+                np.where(same, m["up1"], m["up"]).astype(float))
     # fixed (step 7): computed inside request.security on SPY's own bars
     return (m["roc63"] if us else m["roc63_1"]).to_numpy(float), (m["up"] if us else m["up1"]).to_numpy(float)
 

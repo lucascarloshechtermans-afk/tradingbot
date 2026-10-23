@@ -28,7 +28,9 @@ import sys
 
 PINE_DIR = os.path.join(os.path.dirname(__file__), "pine")
 FILES = ["swing_v3_quality_model.pine", "swing_v3_strategy.pine", "swing_v3_watchlist_dashboard.pine",
-         "swing_v4.pine", "swing_v4_strategy.pine", "swing_v4_watchlist_dashboard.pine"]
+         "swing_v4.pine", "swing_v4_strategy.pine", "swing_v4_watchlist_dashboard.pine",
+         "swing_v4_1.pine", "swing_v4_1_strategy.pine"]
+V41_FILES = {"swing_v4_1.pine", "swing_v4_1_strategy.pine"}   # FEATURES with the SPY-holiday fix (FEATURES_V41)
 SPEC = os.path.join(os.path.dirname(__file__), "swing4", "final_spec.json")
 FINAL = os.path.join(PINE_DIR, "v3_model.json")
 YEARLY = os.path.join(PINE_DIR, "v3_model_yearly.json")
@@ -108,6 +110,20 @@ rangeAtr  = (high - low) / atr[1]
 brkAtr    = (close - ta.highest(high, TRAIN_N)[1]) / atr  // feature definition: the TRAINING lookback, not input n
 er20      = math.abs(close - close[20]) / math.sum(math.abs(ta.change(close)), 20)
 '''
+
+# v4.1: on a non-US chart date where SPY has no bar (a US holiday), request.security returns SPY's last earlier bar, which
+# is already closed, so its [0] value is the right one; [1] would be two SPY days old. Same logic as
+# pine_parity._spy_series(version="v41"). Signals on US charts are unchanged.
+FEATURES_V41 = FEATURES.replace(
+    """spyUS     = syminfo.timezone == "America/New_York"
+""",
+    """spyUS     = syminfo.timezone == "America/New_York"
+spyYmd    = request.security(spySym, "D", year * 10000 + month * 100 + dayofmonth)
+// SPY bar from an earlier date than this chart bar (US holiday): it closed before this bar, so use it as is
+spyLag0   = spyUS or spyYmd < year * 10000 + month * 100 + dayofmonth
+""").replace("spyRoc63  = spyUS ? spyRoc0 : spyRoc1", "spyRoc63  = spyLag0 ? spyRoc0 : spyRoc1").replace(
+    "spyUp     = spyUS ? spyUp0 : spyUp1", "spyUp     = spyLag0 ? spyUp0 : spyUp1")
+assert FEATURES_V41.count("spyLag0") == 3
 
 
 def _expr(fit: dict, feats: list[str]) -> str:
@@ -223,7 +239,7 @@ def render() -> dict[str, str]:
     out = {}
     for f in FILES:
         fp = os.path.join(PINE_DIR, f)
-        out[fp] = apply(_read(fp), bl)
+        out[fp] = apply(_read(fp), {**bl, "FEATURES": FEATURES_V41} if f in V41_FILES else bl)
     return out
 
 

@@ -31,6 +31,8 @@ DEFAULT = {"features": "current", "model": "final", "na_block": False, "half_boo
 FINAL = {"features": "fixed", "model": "oos", "na_block": True, "half_book": True}
 # swing_v4.pine: v3 + only BUY when SPY's 63-day return <= REGIME_MAX (swing4/final_spec.json)
 V4 = {**FINAL, "regime_max": 0.03}
+# swing_v4_1.pine: v4 + the SPY-holiday fix for non-US charts (features "v41"); signals on US charts are unchanged
+V41 = {**V4, "features": "v41"}
 
 
 def load_models():
@@ -79,17 +81,36 @@ def run(df: pd.DataFrame, ticker: str, cfg: dict | None = None) -> dict:
     cfg = {**DEFAULT, **(cfg or {})}
     o, h, lo, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
     a = T.atr(h, lo, c, 14) if cfg["features"] == "current" else T.atr_py(h, lo, c, 14)
+    q, thr = quality(df, ticker, cfg)
+    with np.errstate(invalid="ignore"):
+        ok = q >= thr
+    entry_ok, exit_sig = signals(o, h, lo, c, cfg, ok)
+    return machine(df.index, o, h, lo, c, a, entry_ok, exit_sig, cfg)
+
+
+def signals(o, h, lo, c, cfg: dict, ok) -> tuple[np.ndarray, np.ndarray]:
+    """BUY condition (breakout + trend + strong close + the model/regime check `ok`) and the exit signal
+    (close below the prior m-day low), as the Pine script computes them."""
     tma = T.sma(c, cfg["trend_len"])
     hi_n = T.shift(T.highest(h, cfg["n"]))
     lo_m = T.shift(pd.Series(lo).rolling(cfg["m"], min_periods=cfg["m"]).min().to_numpy())
     rng = h - lo
     ibs = np.where(rng > 0, (c - lo) / np.where(rng > 0, rng, 1), 0.5)
-    q, thr = quality(df, ticker, cfg)
     with np.errstate(invalid="ignore"):
-        ok = q >= thr
+        cand = (c > hi_n) & (c > tma) & (ibs >= cfg["ibs_min"])
+        return cand & np.asarray(ok, bool), c < lo_m
+
+
+def machine(index, o, h, lo, c, a, entry_ok, exit_sig, cfg: dict | None = None) -> dict:
+    """The indicator's state machine (f_machine in the Pine file) on given BUY conditions and exit signals.
+    Returns per-bar buy / sell marks, the label price of each SELL (`sell_px`: the fill when the stop was hit inside
+    the bar or gapped through, NaN when the exit fills at the next open), and the counted trades with their exit
+    kind ("initial stop", "trail stop", "m-day low")."""
+    cfg = {**DEFAULT, **(cfg or {})}
     k = cfg["cost_pct"] / 100
     tpm = cfg["tp_mult"]
     stats_from = pd.Timestamp(cfg["stats_from"])
+    n = len(c)
 
     def book(px):
         return px * (1 - k) / (entry_px * (1 + k)) - 1
@@ -97,24 +118,27 @@ def run(df: pd.DataFrame, ticker: str, cfg: dict | None = None) -> dict:
     state, hh, stop, entry_px, tp, half_off, half_ret = 0, np.nan, np.nan, np.nan, np.nan, False, np.nan
     counted, ebar, peak, mae = False, 0, np.nan, 0.0
     trades = []
-    buy = np.zeros(len(c), bool)
-    sell = np.zeros(len(c), bool)
+    buy = np.zeros(n, bool)
+    sell = np.zeros(n, bool)
+    sell_px = np.full(n, np.nan)
+    in_trade = np.zeros(n, bool)
 
-    def close_trade(t, px):
+    def close_trade(t, px, kind):
         r = book(px)
         if cfg["half_book"] and half_off:
             r = 0.5 * half_ret + 0.5 * r
         if counted:
-            trades.append({"entry_date": df.index[ebar], "exit_date": df.index[t], "ret": r, "bars": t - ebar,
-                           "mae": min(mae, px / peak - 1)})
+            trades.append({"entry_date": index[ebar], "exit_date": index[t], "ret": r, "bars": t - ebar,
+                           "mae": min(mae, px / peak - 1), "entry": entry_px, "exit": px, "kind": kind,
+                           "half": bool(half_off)})
 
-    for t in range(len(c)):
+    for t in range(n):
         exited = False
         if state == 3:
-            close_trade(t, o[t])
+            close_trade(t, o[t], "m-day low")
             state, stop, exited = 0, np.nan, True
         if state == 1:
-            entry_px, ebar, counted = o[t], t, df.index[t] >= stats_from
+            entry_px, ebar, counted = o[t], t, index[t] >= stats_from
             state, hh = 2, h[t]
             peak, mae = h[t], min(0.0, lo[t] / h[t] - 1)  # Pine: on every bar the high is assumed before the low
             istop = o[t] - cfg["trail"] * a[t - 1]
@@ -123,19 +147,19 @@ def run(df: pd.DataFrame, ticker: str, cfg: dict | None = None) -> dict:
             half_off = False
             if lo[t] <= istop:
                 mae = min(0.0, istop / h[t] - 1)       # flat at the stop: the path below it does not count
-                close_trade(t, istop)
-                sell[t], state, stop = True, 0, np.nan
+                close_trade(t, istop, "initial stop")
+                sell[t], sell_px[t], state, stop = True, istop, 0, np.nan
             else:
                 if tpm > 0 and h[t] >= tp:
                     half_off, half_ret = True, book(tp)
-                if c[t] < lo_m[t]:
+                if exit_sig[t]:
                     sell[t], state = True, 3
         elif state == 2:
             if lo[t] <= stop:
                 if o[t] > stop:                        # stop inside the bar: the bar's high came first
                     peak = max(peak, h[t])
-                close_trade(t, min(o[t], stop))
-                sell[t], state, stop = True, 0, np.nan
+                close_trade(t, min(o[t], stop), "trail stop")
+                sell[t], sell_px[t], state, stop = True, min(o[t], stop), 0, np.nan
             else:
                 if tpm > 0 and not half_off and h[t] >= tp:
                     half_off, half_ret = True, book(max(o[t], tp))  # gap above target fills at the open
@@ -143,12 +167,13 @@ def run(df: pd.DataFrame, ticker: str, cfg: dict | None = None) -> dict:
                 mae = min(mae, lo[t] / peak - 1)
                 hh = max(hh, h[t])
                 stop = max(stop, hh - cfg["trail"] * a[t])
-                if c[t] < lo_m[t]:
+                if exit_sig[t]:
                     sell[t], state = True, 3
-        cand = c[t] > hi_n[t] and c[t] > tma[t] and ibs[t] >= cfg["ibs_min"]
-        if state == 0 and not sell[t] and not exited and cand and bool(ok[t]):
+        in_trade[t] = state in (2, 3)
+        if state == 0 and not sell[t] and not exited and bool(entry_ok[t]):
             buy[t], state = True, 1
-    return {"buy": buy, "sell": sell, "trades": trades}
+    return {"buy": buy, "sell": sell, "sell_px": sell_px, "trades": trades, "in_trade": in_trade,
+            "open_position": state in (1, 2, 3)}
 
 
 def stats(trades: list[dict]) -> dict:
@@ -172,24 +197,26 @@ def table(tickers, cfg: dict | None = None) -> pd.DataFrame:
 
 
 def run_strategy(df: pd.DataFrame, ticker: str, cfg: dict | None = None, from_time: str = "2015-01-01") -> list[dict]:
-    """Emulates `swing_v3_strategy.pine` under TradingView's broker rules, written as an order book (independent
-    of `run`, which follows the indicator's state machine), so the two can be compared:
+    """Emulates the Pine STRATEGY files under TradingView's broker rules (see `book`) on real data."""
+    cfg = {**DEFAULT, **(cfg or {})}
+    o, h, lo, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
+    a = T.atr_py(h, lo, c, 14)
+    q, thr = quality(df, ticker, cfg)
+    with np.errstate(invalid="ignore"):
+        ok = q >= thr
+    entry_ok, exit_sig = signals(o, h, lo, c, cfg, ok)
+    return book(df.index, o, h, lo, c, a, entry_ok, exit_sig, cfg, from_time)
+
+
+def book(index, o, h, lo, c, a, entry_ok, exit_sig, cfg: dict | None = None, from_time: str = "2015-01-01") -> list[dict]:
+    """The strategy file's orders under TradingView's broker rules, written as an order book (independent
+    of `machine`, which follows the indicator's state machine), so the two can be compared:
     - the script runs at each bar's close; orders it places execute from the next bar (process_orders_on_close=false)
     - market orders fill at the next open; a stop order fills at the open if the open is already through it,
       otherwise at the stop price when the low reaches it
     - the entry's exit order uses `loss` = trailMult x ATR(signal bar) ticks below the fill, so it is live on the fill bar
     - commission: percent of traded value on both sides (TradingView's formula, not the engine's)."""
     cfg = {**DEFAULT, **(cfg or {})}
-    o, h, lo, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
-    a = T.atr_py(h, lo, c, 14)
-    tma = T.sma(c, cfg["trend_len"])
-    hi_n = T.shift(T.highest(h, cfg["n"]))
-    lo_m = T.shift(pd.Series(lo).rolling(cfg["m"], min_periods=cfg["m"]).min().to_numpy())
-    rng = h - lo
-    ibs = np.where(rng > 0, (c - lo) / np.where(rng > 0, rng, 1), 0.5)
-    q, thr = quality(df, ticker, cfg)
-    with np.errstate(invalid="ignore"):
-        ok = q >= thr
     k = cfg["cost_pct"] / 100
     t0 = pd.Timestamp(from_time)
     pos_px = np.nan                         # open position's fill price (nan = flat)
@@ -200,8 +227,8 @@ def run_strategy(df: pd.DataFrame, ticker: str, cfg: dict | None = None, from_ti
     trades = []
 
     def fill_exit(t, px):
-        trades.append({"entry_date": df.index[ebar], "exit_date": df.index[t], "bars": t - ebar,
-                       "ret": (px - pos_px) / pos_px - k * (1 + px / pos_px)})
+        trades.append({"entry_date": index[ebar], "exit_date": index[t], "bars": t - ebar,
+                       "ret": (px - pos_px) / pos_px - k * (1 + px / pos_px), "exit": px})
 
     for t in range(len(c)):
         closed = False
@@ -223,12 +250,11 @@ def run_strategy(df: pd.DataFrame, ticker: str, cfg: dict | None = None, from_ti
             hh = h[t] if np.isnan(hh) else max(hh, h[t])
             trail = max(pos_px - cfg["trail"] * sig_atr if np.isnan(trail) else trail, hh - cfg["trail"] * a[t])
             stop_order = trail
-            if c[t] < lo_m[t]:
+            if exit_sig[t]:
                 close_order = True
         else:
             hh = trail = np.nan
-            cand = c[t] > hi_n[t] and c[t] > tma[t] and ibs[t] >= cfg["ibs_min"]
-            if not closed and df.index[t] >= t0 and cand and bool(ok[t]):
+            if not closed and index[t] >= t0 and bool(entry_ok[t]):
                 sig_atr = a[t]
                 entry_order, loss_dist = True, cfg["trail"] * a[t]
     return trades
