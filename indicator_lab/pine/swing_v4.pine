@@ -13,7 +13,7 @@
 // Signals on history use the walk-forward (out-of-sample) fit of each bar's year; see the MODEL region.
 // BUY = signal at this close, enter next open. SELL = close below prior m-day low (exit next open)
 // or trailing stop touched (exit at stop). Daily chart. Not financial advice.
-indicator("Swing v4 – breakout + quality model + market regime + ATR trail", overlay = true)
+indicator("Swing v4 – breakout + quality model + market regime + ATR trail", overlay = true, max_labels_count = 500)
 
 // <<GEN:TRAIN>>
 // The quality model was trained on breakouts with exactly these rules (v3_model.json "params"); the inputs
@@ -42,6 +42,9 @@ tpMult    = input.float(0.0, "Take half profit at +x ATR (0 = off; research E22 
 earnDays  = input.int(7, "Earnings warning window (calendar days, 0 = off)", minval = 0)
 earnBlock = input.bool(false, "Block BUY inside the earnings window (live bars only)")
 showTable = input.bool(true, "Show info table")
+fullTable = input.bool(false, "Full table (all rows); off = compact")
+tblSize   = input.string("small", "Table text size", options = ["tiny", "small", "normal"])
+showPx    = input.bool(true, "Show the price under BUY / SELL")
 acctSize  = input.float(10000, "Account size (for position size)", minval = 0, group = "Position size")
 riskPct   = input.float(1.0, "Risk per trade (% of account)", minval = 0.05, step = 0.25, group = "Position size")
 maxPosPct = input.float(10.0, "Max position (% of account; ~10 positions)", minval = 1, maxval = 100, group = "Position size")
@@ -288,19 +291,25 @@ f_machine(bool entryOk) =>
         buySig := true
         state := 1
         entryBar := bar_index + 1
-    [state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD]
+    [state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD, exitPx]
 
-[state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD] = f_machine(qualityOk and earnOk and regimeOk)
-[stIs, stopIs, tpIs, hoIs, hsIs, bsIs, ssIs, exIs, ebIs, nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs, sbIs, sddIs, wddIs] = f_machine(qualityOkIs and earnOk and regimeOk)
+[state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD, sellPx] = f_machine(qualityOk and earnOk and regimeOk)
+[stIs, stopIs, tpIs, hoIs, hsIs, bsIs, ssIs, exIs, ebIs, nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs, sbIs, sddIs, wddIs, pxIs] = f_machine(qualityOkIs and earnOk and regimeOk)
 
 plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
 plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
 // confirmed at the close vs provisional while the daily bar is still forming (can still disappear)
-plotshape(buySig and barstate.isconfirmed, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+plotshape(buySig and barstate.isconfirmed and not showPx, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+// BUY / SELL with the price underneath (confirmed bars only). BUY: the signal close (the fill is the next open).
+// SELL: the stop price when the stop was hit inside the bar, otherwise the close (the exit fills at the next open).
+if showPx and barstate.isconfirmed and buySig
+    label.new(bar_index, low, "BUY\n" + str.tostring(close, format.mintick), yloc = yloc.belowbar, style = label.style_label_up, color = color.green, textcolor = color.white, size = size.small)
+if showPx and barstate.isconfirmed and sellSig
+    label.new(bar_index, high, "SELL\n" + str.tostring(na(sellPx) ? close : sellPx, format.mintick), yloc = yloc.abovebar, style = label.style_label_down, color = color.red, textcolor = color.white, size = size.small)
 plotshape(buySig and not barstate.isconfirmed, "BUY? (bar not closed)", shape.labelup, location.belowbar, color.new(color.green, 60), text = "BUY?", textcolor = color.white)
 plot(tpMult > 0 and (state == 2 or state == 3) and not halfOff ? tp : na, "Half-profit target", color = color.teal, style = plot.style_linebr)
 plotshape(halfSig, "½ PROFIT", shape.diamond, location.abovebar, color.teal, size = size.tiny, text = "½")
-plotshape(sellSig and barstate.isconfirmed, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
+plotshape(sellSig and barstate.isconfirmed and not showPx, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
 plotshape(sellSig and not barstate.isconfirmed, "SELL? (bar not closed)", shape.labeldown, location.abovebar, color.new(color.red, 60), text = "SELL?", textcolor = color.white)
 // breakouts the v4 regime rule blocked (the model would have taken them)
 plotshape(state == 0 and isCand and qualityOk and not regimeOk and not sellSig and not exited,
@@ -352,50 +361,60 @@ f_statTxt(int k, int w, float sw, float sl, float sr) =>
     pfx = sl > 0 ? sw / sl : na
     k == 0 ? "no closed trades" : str.tostring(k) + " trades | win " + str.tostring(100.0 * w / k, "#") + "% | PF " + (na(pfx) ? "∞" : str.tostring(pfx, "#.##")) + " | avg " + str.tostring(100 * sr / k, "#.#") + "%"
 
-var table info = table.new(position.top_right, 2, 16, bgcolor = color.new(color.black, 75), border_width = 1)
+var table info = table.new(position.top_right, 2, 16, bgcolor = color.new(color.black, 80), frame_color = color.new(color.gray, 60), frame_width = 1, border_width = 0)
+tSize = tblSize == "tiny" ? size.tiny : tblSize == "small" ? size.small : size.normal
+f_row(int r, string k, string v, color vc, color bg) =>
+    table.cell(info, 0, r, k, text_color = color.white, text_size = tSize, text_halign = text.align_left)
+    table.cell(info, 1, r, v, text_color = vc, bgcolor = bg, text_size = tSize, text_halign = text.align_left)
 if showTable and barstate.islast
+    table.clear(info, 0, 0, 1, 15)
     inTrade = state == 2 or state == 3
     statusTxt = state == 1 ? "BUY (fill next open)" : state == 3 ? "SELL (exit next open)" : inTrade ? "LONG" : sellSig ? "SOLD" : "flat"
     statusCol = state == 1 or inTrade ? color.green : sellSig ? color.red : color.gray
-    table.cell(info, 0, 0, "Swing v4", text_color = color.white)
-    table.cell(info, 1, 0, statusTxt, text_color = color.white, bgcolor = color.new(statusCol, 40))
-    table.cell(info, 0, 1, "Breakout quality", text_color = color.white)
     // quality is na while any model feature is missing: usually too little history (the longest feature needs ~200
     // bars, the full 52-week window 252), otherwise a data gap (Debug input shows which feature is na)
     qualNa  = useModel and na(quality)
-    qualTxt = qualNa ? (bar_index + 1 < 252 ? "te weinig historie (" + str.tostring(bar_index + 1) + "/252 bars)" : "model feature missing (Debug: Data Window)") : isCand ? str.tostring(quality * 100, "#") + "% " + (qualityOk ? "(ok)" : "(too low)") : "no breakout today"
-    table.cell(info, 1, 1, qualTxt, text_color = qualNa ? color.yellow : not isCand ? color.gray : qualityOk ? color.lime : color.orange)
-    table.cell(info, 0, 2, "Stop", text_color = color.white)
-    table.cell(info, 1, 2, inTrade ? str.tostring(stop, format.mintick) : "-", text_color = color.white)
-    table.cell(info, 0, 3, "Risk to stop", text_color = color.white)
-    table.cell(info, 1, 3, inTrade ? str.tostring((close - stop) / close * 100, "#.#") + "%" : "-", text_color = color.white)
-    table.cell(info, 0, 4, "Bars in trade", text_color = color.white)
-    table.cell(info, 1, 4, inTrade ? str.tostring(bar_index - entryBar + 1) : "-", text_color = color.white)
-    table.cell(info, 0, 5, "Next earnings", text_color = color.white)
-    table.cell(info, 1, 5, na(daysToEarn) ? "n/a" : str.tostring(math.round(daysToEarn)) + " days", text_color = earnSoon ? color.yellow : color.white)
-    table.cell(info, 0, 6, "Trend (SMA" + str.tostring(trendLen) + ")", text_color = color.white)
-    table.cell(info, 1, 6, close > trendMa ? "up" : "down", text_color = close > trendMa ? color.lime : color.red)
-    table.cell(info, 0, 7, "Size if BUY now (geschat)", text_color = color.white)
-    table.cell(info, 1, 7, str.tostring(sizeSh) + " sh (" + str.tostring(sizeSh * close, "#") + ") stop ~" + str.tostring(estStop, format.mintick) + " geschat; echte stop = fill − " + str.tostring(trailMult, "#.##") + "×ATR(signal bar) = fill − " + str.tostring(stopDist, format.mintick), text_color = color.white)
-    table.cell(info, 0, 8, "Chart", text_color = color.white)
-    table.cell(info, 1, 8, timeframe.isdaily ? "daily ✓" : "use a DAILY chart!", text_color = timeframe.isdaily ? color.white : color.yellow)
-    // v3.1 portfolio rule (research E48): keep idle cash in SPY while SPY > its 200-day SMA, else in cash
-    table.cell(info, 0, 10, "Idle cash → SPY", text_color = color.white)
-    table.cell(info, 1, 10, spyUp == 1.0 ? "YES (SPY > SMA200)" : "NO, hold cash", text_color = spyUp == 1.0 ? color.lime : color.orange)
-    table.cell(info, 0, 11, "Volatility 1y (ATR%)", text_color = color.white)
-    table.cell(info, 1, 11, na(atr1y) ? "n/a" : str.tostring(atr1y, "#.#") + "% " + (atr1y >= 2.5 ? "good fit" : atr1y >= 1.5 ? "ok fit" : "weak fit"), text_color = na(atr1y) ? color.gray : atr1y >= 2.5 ? color.lime : atr1y >= 1.5 ? color.white : color.orange)
-    table.cell(info, 0, 9, "OOS since " + str.format_time(statsFrom, "yyyy"), text_color = color.white)
-    table.cell(info, 1, 9, f_statTxt(nTr, nWin, sumWin, sumLoss, sumRet), text_color = color.white)
-    table.cell(info, 0, 15, "Regime (SPY 63d)", text_color = color.white)
-    table.cell(info, 1, 15, na(spyRoc63) ? "n/a" : str.tostring(spyRoc63 * 100, "#.#") + "% " + (regimeOk ? "→ BUYs allowed" : "→ BUYs blocked (> " + str.tostring(REGIME_MAX * 100, "#.#") + "%)"), text_color = regimeOk ? color.lime : color.orange)
-    table.cell(info, 0, 14, "OOS per trade", text_color = color.white)
-    table.cell(info, 1, 14, nTr == 0 ? "-" : "max drawdown in trade: worst " + str.tostring(100 * worstDD, "#.#") + "% | avg " + str.tostring(100 * sumDD / nTr, "#.#") + "% | avg hold " + str.tostring(sumBars / nTr, "#") + " bars", text_color = color.white)
+    qualTxt = qualNa ? (bar_index + 1 < 252 ? "te weinig historie (" + str.tostring(bar_index + 1) + "/252)" : "feature missing") : isCand ? str.tostring(quality * 100, "#") + "% " + (qualityOk ? "ok" : "too low") : "no breakout"
+    pfAll   = sumLoss > 0 ? sumWin / sumLoss : na
+    r = 0
+    f_row(r, "Swing v4", statusTxt, color.white, color.new(statusCol, 40))
+    r += 1
+    f_row(r, "Quality", qualTxt, qualNa ? color.yellow : not isCand ? color.gray : qualityOk ? color.lime : color.orange, na)
+    r += 1
+    f_row(r, "Regime", na(spyRoc63) ? "n/a" : "SPY 63d " + str.tostring(spyRoc63 * 100, "#.#") + "% " + (regimeOk ? "ok" : "blocked"), regimeOk ? color.lime : color.orange, na)
+    r += 1
+    if inTrade
+        f_row(r, "Stop", str.tostring(stop, format.mintick) + " (" + str.tostring((close - stop) / close * 100, "#.#") + "%)", color.white, na)
+        r += 1
+    f_row(r, "OOS " + str.format_time(statsFrom, "yyyy") + "+", nTr == 0 ? "no trades" : str.tostring(nTr) + " tr | " + str.tostring(100.0 * nWin / nTr, "#") + "% | PF " + (na(pfAll) ? "∞" : str.tostring(pfAll, "#.#")), color.white, na)
+    r += 1
     if paramsOff
-        table.cell(info, 0, 13, "⚠ Settings", text_color = color.black, bgcolor = color.yellow)
-        table.cell(info, 1, 13, TRAIN_TXT + ": quality + stats not valid for these settings", text_color = color.black, bgcolor = color.yellow)
-    if showIS
-        table.cell(info, 0, 12, "In-sample (final fit)", text_color = color.gray)
-        table.cell(info, 1, 12, f_statTxt(nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs) + " — optimistic", text_color = color.gray)
+        f_row(r, "⚠ Settings", TRAIN_TXT, color.black, color.yellow)
+        r += 1
+    if not timeframe.isdaily
+        f_row(r, "Chart", "use a DAILY chart!", color.black, color.yellow)
+        r += 1
+    if fullTable
+        f_row(r, "OOS detail", f_statTxt(nTr, nWin, sumWin, sumLoss, sumRet), color.white, na)
+        r += 1
+        f_row(r, "Per trade", nTr == 0 ? "-" : "DD worst " + str.tostring(100 * worstDD, "#.#") + "% avg " + str.tostring(100 * sumDD / nTr, "#.#") + "% | hold " + str.tostring(sumBars / nTr, "#") + " bars", color.white, na)
+        r += 1
+        f_row(r, "Bars in trade", inTrade ? str.tostring(bar_index - entryBar + 1) : "-", color.white, na)
+        r += 1
+        f_row(r, "Size (geschat)", str.tostring(sizeSh) + " sh | stop ~" + str.tostring(estStop, format.mintick) + " = fill − " + str.tostring(stopDist, format.mintick), color.white, na)
+        r += 1
+        f_row(r, "Next earnings", na(daysToEarn) ? "n/a" : str.tostring(math.round(daysToEarn)) + " days", earnSoon ? color.yellow : color.white, na)
+        r += 1
+        f_row(r, "Trend SMA" + str.tostring(trendLen), close > trendMa ? "up" : "down", close > trendMa ? color.lime : color.red, na)
+        r += 1
+        // v3.1 portfolio rule (research E48): keep idle cash in SPY while SPY > its 200-day SMA, else in cash
+        f_row(r, "Idle cash → SPY", spyUp == 1.0 ? "yes (SPY > SMA200)" : "no, hold cash", spyUp == 1.0 ? color.lime : color.orange, na)
+        r += 1
+        f_row(r, "Volatility 1y", na(atr1y) ? "n/a" : str.tostring(atr1y, "#.#") + "% " + (atr1y >= 2.5 ? "good fit" : atr1y >= 1.5 ? "ok fit" : "weak fit"), na(atr1y) ? color.gray : atr1y >= 2.5 ? color.lime : atr1y >= 1.5 ? color.white : color.orange, na)
+        r += 1
+        if showIS
+            f_row(r, "In-sample", f_statTxt(nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs) + " (optimistic)", color.gray, na)
+            r += 1
 
 // earnings warning on a fresh BUY (research E38: entries in the week before earnings were weaker)
 plotshape(buySig and earnSoon, "BUY near earnings", shape.circle, location.belowbar, color.yellow, size = size.tiny)
