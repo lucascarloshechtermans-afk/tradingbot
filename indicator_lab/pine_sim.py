@@ -116,22 +116,24 @@ def run(df: pd.DataFrame, ticker: str, cfg: dict | None = None) -> dict:
         if state == 1:
             entry_px, ebar, counted = o[t], t, df.index[t] >= stats_from
             state, hh = 2, h[t]
-            peak, mae = o[t], min(0.0, lo[t] / o[t] - 1)  # Pine: a bar's high is assumed before its low
+            peak, mae = h[t], min(0.0, lo[t] / h[t] - 1)  # Pine: on every bar the high is assumed before the low
             istop = o[t] - cfg["trail"] * a[t - 1]
             stop = max(istop, hh - cfg["trail"] * a[t])
             tp = o[t] + tpm * a[t - 1] if tpm > 0 else np.nan
             half_off = False
             if lo[t] <= istop:
+                mae = min(0.0, istop / h[t] - 1)       # flat at the stop: the path below it does not count
                 close_trade(t, istop)
                 sell[t], state, stop = True, 0, np.nan
             else:
                 if tpm > 0 and h[t] >= tp:
                     half_off, half_ret = True, book(tp)
-                peak = max(o[t], c[t])
                 if c[t] < lo_m[t]:
                     sell[t], state = True, 3
         elif state == 2:
             if lo[t] <= stop:
+                if o[t] > stop:                        # stop inside the bar: the bar's high came first
+                    peak = max(peak, h[t])
                 close_trade(t, min(o[t], stop))
                 sell[t], state, stop = True, 0, np.nan
             else:

@@ -230,9 +230,10 @@ f_machine(bool entryOk) =>
         counted := time >= statsFrom
         state := 2
         hh := high
-        // drawdown inside a trade: intrabar order is unknown, so a bar's high is assumed to come before its low
-        peak := open
-        tradeDD := math.min(0.0, low / open - 1)
+        // drawdown inside a trade: intrabar order is unknown, so on EVERY bar the high is assumed to come before
+        // the low (conservative); the fill bar's high counts because the fill is at the open
+        peak := high
+        tradeDD := math.min(0.0, low / high - 1)
         // protective stop from the fill itself: open - trailMult x ATR(signal bar); never hit in the 2015-26 tests,
         // but it covers a crash on the entry day (research E51)
         initStop = open - trailMult * atr[1]
@@ -240,6 +241,7 @@ f_machine(bool entryOk) =>
         // the stop is checked before the target: if both are touched on one bar, the stop wins (conservative)
         if low <= initStop
             exitPx := initStop
+            tradeDD := math.min(0.0, initStop / high - 1)  // flat at the stop: the path below it does not count
             sellSig := true
             state := 0
             stop := na
@@ -249,7 +251,6 @@ f_machine(bool entryOk) =>
             halfSig := true
             halfOff := true
             halfRet := tp * (1 - costPct / 100) / (entryPx * (1 + costPct / 100)) - 1
-        peak := math.max(open, close)
         if state == 2 and close < loM
             sellSig := true
             state := 3
@@ -257,7 +258,8 @@ f_machine(bool entryOk) =>
         // the stop is checked before the target: if both are touched on one bar, the stop wins (conservative)
         if low <= stop
             exitPx := math.min(open, stop)  // a gap below the stop fills at the open
-            tradeDD := math.min(tradeDD, exitPx / peak - 1)
+            // stop inside the bar: the bar's high came first; gap below the stop: exit at the open, before the high
+            tradeDD := math.min(tradeDD, exitPx / (open > stop ? math.max(peak, high) : peak) - 1)
             sellSig := true
             state := 0
             stop := na

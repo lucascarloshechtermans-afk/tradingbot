@@ -78,6 +78,17 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
 
     def finish(t, reason):
         ep, rp = st["ep"], st["risk_px"]
+        # drawdown from the highest price since the fill, with the high of every bar assumed BEFORE its low (the
+        # Pine engine's convention): the fill bar's high counts for an open fill, the exit bar's high only when the
+        # exit happened inside the bar (not at the open)
+        peak, dd = ep, 0.0
+        for i in range(st["ei"], t):
+            if not (i == st["ei"] and st["intrabar"]):
+                peak = max(peak, h[i])
+            dd = min(dd, lo[i] / peak - 1)
+        if not st["at_open"] and not (t == st["ei"] and st["intrabar"]):
+            peak = max(peak, h[t])
+        dd = min(dd, st["last_px"] / peak - 1)
         seg_h, seg_l = h[st["ei"]:t], lo[st["ei"]:t]
         hi = seg_h.max() if len(seg_h) else ep
         lw = min(seg_l.min() if len(seg_l) else ep, st["last_px"])
@@ -89,7 +100,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
         trades.append({"entry_i": st["ei"], "sig_i": st["sig"], "exit_i": t, "entry_date": idx[st["ei"]],
                        "exit_date": idx[t], "entry": ep, "ret": r, "bars": t - st["ei"], "reason": reason,
                        "risk": rp / ep, "R": r / (rp / ep), "mfe_R": (hi - ep) / rp, "mae_R": (lw - ep) / rp,
-                       "touch": touch, "parts_hit": st["parts_hit"]})
+                       "touch": touch, "parts_hit": st["parts_hit"], "dd": dd})
         st["in"] = False
 
     def value(t):
@@ -100,9 +111,11 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
             ep, rp = st["ep"], st["risk_px"]
             v_prev = st["v_prev"]
             done = None
+            st["at_open"] = False
             # ---- at the open
             if st["pend_all"]:
                 st["last_px"] = o[t]
+                st["at_open"] = True
                 sell(t, o[t], 1.0)
                 done = st["pend_all"]
             else:
@@ -111,6 +124,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
                     st["pend_frac"] = 0.0
                 if o[t] <= st["stop"]:
                     st["last_px"] = o[t]
+                    st["at_open"] = True
                     sell(t, o[t], 1.0)
                     done = "stop"
                 else:
@@ -121,6 +135,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
                             sell(t, o[t], fr)
                     if pol.target is not None and o[t] >= ep + pol.target * rp:
                         st["last_px"] = o[t]
+                        st["at_open"] = True
                         sell(t, o[t], 1.0)
                         done = "target"
                 # ---- inside the bar: stop first, then targets
@@ -172,7 +187,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
             st.update({"in": True, "ep": fill, "ei": t, "sig": i, "risk_px": rp, "stop": fill - rp, "hh": h[t],
                        "q0": 1 / (fill * (1 + slip) * (1 + cost)), "cash": 0.0, "left": 1.0, "pend_all": None, "pend_frac": 0.0,
                        "phit": [False] * len(parts), "parts_hit": 0, "tight": False, "ox_done": False,
-                       "earn_done": False, "last_px": fill, "intrabar": False})
+                       "earn_done": False, "last_px": fill, "intrabar": False, "at_open": False})
             done = None
             if lo[t] <= st["stop"]:
                 st["last_px"] = st["stop"]

@@ -51,3 +51,26 @@ def test_v4_regime_rule_pine_strategy_and_engine_agree(ticker):
     assert key == [(x["entry_date"], x["exit_date"]) for x in st]
     assert key == [(x["entry_date"], x["exit_date"]) for x in eng]
     assert len(ind) >= 10
+
+
+@pytest.mark.parametrize("ticker", ["AAPL", "NVDA"])
+def test_trade_drawdown_same_convention_in_pine_emulation_and_research_simulator(ticker):
+    """Drawdown inside a trade (peak since the fill to a later low; every bar's high assumed before its low):
+    pine_sim (= the Pine table) and swing4.sim2 (research) must agree trade by trade."""
+    if not all(os.path.exists(os.path.join(data.CACHE_DIR, f"{t}.csv")) for t in (ticker, "SPY", "^VIX")):
+        pytest.skip("no cached market data (e.g. CI without network)")
+    from indicator_lab import evaluate as E
+    from indicator_lab import pine_sim as S
+    from indicator_lab.swing4 import core as C
+    from indicator_lab.swing4 import sim2 as S2
+    df = E.get(ticker)
+    ind = S.run(df, ticker, S.FINAL)["trades"]
+    s = C.signals(ticker)
+    _, tr = S2.simulate(S2.arrays(df, s["atr"], s["exit_sig"]), s["entry"])
+    res = {(x["entry_date"], x["exit_date"]): x["dd"] for x in tr}
+    common = [x for x in ind if (x["entry_date"], x["exit_date"]) in res]
+    # the trade sets can differ by a borderline model call after a data refresh (adjusted prices are revised);
+    # this test is about the drawdown convention, so it compares the trades both take
+    assert len(common) >= 10 and len(common) >= 0.9 * len(ind)
+    for x in common:
+        assert abs(res[(x["entry_date"], x["exit_date"])] - x["mae"]) < 1e-12
