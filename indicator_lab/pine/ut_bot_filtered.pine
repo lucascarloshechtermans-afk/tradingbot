@@ -1,0 +1,103 @@
+//@version=5
+// UT Bot Alerts — same core as the original (ATR trailing stop; BUY when price crosses above it, SELL when it crosses
+// below), plus optional filters that only SKIP new entries, so there are fewer trades:
+//   1. sensitivity: a larger key value puts the trailing stop further away (original default 1, here 2)
+//   2. trend filter: BUY only above the EMA, SELL (short) only below it
+//   3. trend strength: only enter when ADX >= the minimum (no entries in choppy, sideways markets)
+//   4. cooldown: no new entry within N bars after the previous one
+// An open position is always closed by the opposite UT Bot cross, also when the filters block a new trade the
+// other way (then the label is "Exit"). Untested in the indicator_lab research: fewer trades is not automatically
+// better. Compare both versions with the counts in the table. Not financial advice.
+indicator("UT Bot Alerts – minder trades", overlay = true, max_labels_count = 500)
+
+// ---- UT Bot core (original inputs) ----
+keyValue = input.float(2.0, "Key value (sensitivity; original 1, higher = fewer trades)", minval = 0.1, step = 0.1)
+atrLen   = input.int(10, "ATR period", minval = 1)
+useHA    = input.bool(false, "Signals from Heikin Ashi candles")
+
+// ---- filters for fewer trades ----
+direction = input.string("Long & Short", "Direction", options = ["Long & Short", "Long only"], group = "Fewer trades")
+useTrend  = input.bool(true, "Trend filter: BUY only above the EMA, SELL only below", group = "Fewer trades")
+trendLen  = input.int(200, "Trend EMA length", minval = 2, group = "Fewer trades")
+useAdx    = input.bool(true, "Only enter when ADX >= minimum (trend strength)", group = "Fewer trades")
+adxLen    = input.int(14, "ADX length", minval = 2, group = "Fewer trades")
+adxMin    = input.float(20, "ADX minimum", minval = 0, step = 1, group = "Fewer trades")
+cooldown  = input.int(0, "Cooldown: bars without a new entry after an entry (0 = off)", minval = 0, group = "Fewer trades")
+countFrom = input.time(timestamp("2020-01-01"), "Count signals from", group = "Table")
+showTable = input.bool(true, "Show the table", group = "Table")
+colorBars = input.bool(false, "Color the bars by position", group = "Table")
+
+src = useHA ? request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, close) : close
+nLoss = keyValue * ta.atr(atrLen)
+
+// the original trailing stop: follows price up (or down) and flips side when price crosses it
+var float trail = na
+prevTrail = nz(trail[1])
+trail := src > prevTrail and src[1] > prevTrail ? math.max(prevTrail, src - nLoss) :
+         src < prevTrail and src[1] < prevTrail ? math.min(prevTrail, src + nLoss) :
+         src > prevTrail ? src - nLoss : src + nLoss
+
+ema1   = ta.ema(src, 1)
+rawBuy  = src > trail and ta.crossover(ema1, trail)
+rawSell = src < trail and ta.crossover(trail, ema1)
+
+// ---- filters (entries only) ----
+trendMa = ta.ema(close, trendLen)
+[diPlus, diMinus, adx] = ta.dmi(adxLen, adxLen)
+strongOk = not useAdx or (not na(adx) and adx >= adxMin)
+var int lastEntry = na
+coolOk = cooldown == 0 or na(lastEntry) or bar_index - lastEntry > cooldown
+longOk  = (not useTrend or close > trendMa) and strongOk and coolOk
+shortOk = direction == "Long & Short" and (not useTrend or close < trendMa) and strongOk and coolOk
+
+// ---- position: 1 long, -1 short, 0 flat ----
+var int pos = 0
+buySig  = false
+sellSig = false
+exitSig = false
+if rawBuy
+    if pos == -1
+        exitSig := true
+        pos := 0
+    if longOk and pos == 0
+        buySig := true
+        exitSig := false
+        pos := 1
+if rawSell
+    if pos == 1
+        exitSig := true
+        pos := 0
+    if shortOk and pos == 0
+        sellSig := true
+        exitSig := false
+        pos := -1
+if buySig or sellSig
+    lastEntry := bar_index
+
+// ---- signal counts: the original UT Bot vs this filtered version ----
+var int nRaw = 0
+var int nNew = 0
+if time >= countFrom
+    nRaw += rawBuy ? 1 : 0
+    nRaw += direction == "Long & Short" and rawSell ? 1 : 0
+    nNew += buySig or sellSig ? 1 : 0
+
+plot(trail, "UT trailing stop", color = pos == 1 ? color.green : pos == -1 ? color.red : color.gray)
+plot(useTrend ? trendMa : na, "Trend EMA", color = color.new(color.orange, 30))
+plotshape(buySig, "Buy", shape.labelup, location.belowbar, color.green, text = "Buy", textcolor = color.white, size = size.small)
+plotshape(sellSig, "Sell", shape.labeldown, location.abovebar, color.red, text = "Sell", textcolor = color.white, size = size.small)
+plotshape(exitSig and not buySig and not sellSig, "Exit", shape.xcross, location.abovebar, color.gray, text = "Exit", textcolor = color.gray, size = size.tiny)
+barcolor(colorBars ? (pos == 1 ? color.green : pos == -1 ? color.red : na) : na)
+
+var table tb = table.new(position.top_right, 2, 3, bgcolor = color.new(color.black, 80), frame_color = color.new(color.gray, 60), frame_width = 1)
+if showTable and barstate.islast
+    table.cell(tb, 0, 0, "Signals since " + str.format_time(countFrom, "yyyy-MM-dd"), text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 0, "", text_size = size.small)
+    table.cell(tb, 0, 1, "UT Bot original (key " + str.tostring(keyValue) + ")", text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 1, str.tostring(nRaw), text_color = color.white, text_size = size.small)
+    table.cell(tb, 0, 2, "With filters", text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 2, str.tostring(nNew) + (nRaw > 0 ? " (" + str.tostring(100.0 * nNew / nRaw, "#") + "%)" : ""), text_color = color.lime, text_size = size.small)
+
+alertcondition(buySig, "UT Long", "UT Bot (filtered) BUY on {{ticker}} at {{close}}")
+alertcondition(sellSig, "UT Short", "UT Bot (filtered) SELL on {{ticker}} at {{close}}")
+alertcondition(exitSig and not buySig and not sellSig, "UT Exit", "UT Bot (filtered) EXIT on {{ticker}} at {{close}}")
