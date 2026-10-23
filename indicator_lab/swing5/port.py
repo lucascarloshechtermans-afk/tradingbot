@@ -20,7 +20,7 @@ def market(idx: pd.DatetimeIndex) -> pd.DataFrame:
     return out.fillna({"spy": 0.0, "on": 0.0}).ffill().fillna(0.0)
 
 
-def portfolio(res: dict, k: int = 10, seed: int = 0, key=None, park: bool = True) -> dict:
+def portfolio(res: dict, k: int = 10, seed: int = 0, key=None, park: bool = True, group=None, cap: int | None = None) -> dict:
     """`res`: {ticker: (daily returns of that ticker's positions, trades)} from swing4.lab.run."""
     rng = np.random.default_rng(seed)
     rets = pd.concat({t: r for t, (r, _) in res.items()}, axis=1).fillna(0.0)
@@ -36,10 +36,17 @@ def portfolio(res: dict, k: int = 10, seed: int = 0, key=None, park: bool = True
     w = np.zeros(R.shape)
     active: list = []
     taken = []
+    groups: list = []          # (exit_date, group) of the open positions, for the per-group cap
     for ed, _, _, t, x in allt:
         active = [z for z in active if z > ed]
+        groups = [z for z in groups if z[0] > ed]
         if len(active) >= k:
             continue
+        if cap is not None:
+            g = group(x)
+            if g is not None and sum(1 for _, gg in groups if gg == g) >= cap:
+                continue
+            groups.append((x["exit_date"], g))
         active.append(x["exit_date"])
         taken.append(x)
         i0, i1 = idx.searchsorted(ed), idx.searchsorted(x["exit_date"])
@@ -78,9 +85,9 @@ def benchmarks(idx: pd.DatetimeIndex) -> dict:
             "T-bills": m["rf"]}, m
 
 
-def system(res: dict, k: int = 10, seeds: int = 20, key=None, park: bool = True) -> dict:
+def system(res: dict, k: int = 10, seeds: int = 20, key=None, park: bool = True, group=None, cap=None) -> dict:
     """Mean over `seeds` random orders of same-day signals: stats, contributions (annualised) and exposures."""
-    runs = [portfolio(res, k, s, key, park) for s in range(seeds)]
+    runs = [portfolio(res, k, s, key, park, group, cap) for s in range(seeds)]
     m = runs[0]["mkt"]
     st = [stats(r["port"], m) for r in runs]
     out = {key_: float(np.mean([x[key_] for x in st])) for key_ in st[0]}

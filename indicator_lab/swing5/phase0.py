@@ -19,11 +19,9 @@ from indicator_lab.swing5 import protocol5 as P
 
 P.install_dev()
 
-from indicator_lab import data, ind, meta  # noqa: E402
-from indicator_lab.evaluate import get  # noqa: E402
-from indicator_lab.metrics import equity_stats  # noqa: E402
-from indicator_lab.swing4 import lab as L  # noqa: E402
-from indicator_lab.swing5 import port as PT  # noqa: E402
+from indicator_lab import data, meta
+from indicator_lab.swing4 import lab as L
+from indicator_lab.swing5 import port as PT
 
 OUT = os.path.join(P.HERE, "reports")
 CACHE = os.path.join(os.environ.get("SWING4_CACHE", "/tmp"), "swing5_ctx_dev.pkl")
@@ -117,11 +115,11 @@ def main():
     for t, cx in ctx.items():
         cx["_t"] = t
     Lr = ["# Swing v5 — phase 0: foundation and bugs (development data only)\n",
-          f"Development data: {len(ctx)} tickers (earlier development universe + the spent v4 holdout), entries "
+          (f"Development data: {len(ctx)} tickers (earlier development universe + the spent v4 holdout), entries "
           f"{PERIOD[0].date()} .. {PERIOD[1].date()}; every series is cut before 2024-10-22 and the 155 v5-holdout tickers "
           "are refused. Costs: 0.1% per side + 0.1% extra slippage on every breakout entry. Portfolio: max 10 positions "
           "of 10%; idle capital in SPY while SPY closed above its SMA200 the day before (switches cost 0.1%), otherwise in "
-          "T-bills (^IRX); mean of 20 random orders of same-day signals.\n"]
+          "T-bills (^IRX); mean of 20 random orders of same-day signals.\n")]
 
     # ------------------------------------------------------------ 1. complete system
     res4 = L.run(ctx, v4_entry, slip=SLIP)
@@ -267,7 +265,7 @@ def main():
     n_tick = rate * len(P.H_TICKERS) * 9.8
     n_tt = rate * len(P.H_TICKERS) * 2.0
     z = 1.96 + 0.84
-    port = sys4["port0"]
+    sys4["port0"]
     te = S["v4 complete (breakouts + SPY parking + regime)"]["te"]
     Lr.append("\n## 4. Statistical power of the new holdout (computed before any test)\n")
     Lr.append(f"- v4 takes {rate:.2f} trades per ticker-year (development), SD of a trade result {sdR:.2f}R.")

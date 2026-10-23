@@ -46,6 +46,8 @@ class Policy:
     ox_frac: float = 1.0
     earn_days: int | None = None     # next earnings reaction day <= earn_days sessions ahead and in profit:
     earn_frac: float = 1.0           #   sell earn_frac at the next open
+    fb_days: int | None = None       # failed breakout: within the first fb_days bars (fill bar = 1) a close below the
+    fb_buf: float = 0.0              #   breakout level (prior n-day high at the signal) - fb_buf x ATR -> exit next open
 
 
 DEFAULT = Policy()
@@ -246,6 +248,10 @@ def _at_close(t, st, a, pol: Policy, exit_sig, earn):
         st["stop"] = max(st["stop"], ep * (1 + 0.001) / (1 - 0.001))
     if exit_sig[t]:
         st["pend_all"] = "signal"
+    if pol.fb_days is not None and t - st["ei"] < pol.fb_days:
+        i = st["sig"]
+        if c[t] < a["hi_n"][i] - pol.fb_buf * atr[i]:
+            st["pend_all"] = st["pend_all"] or "failed"
     if pol.time_n is not None and t - st["ei"] == pol.time_n and gain < pol.time_r * rp:
         st["pend_all"] = st["pend_all"] or "time"
     if not st["ox_done"] and (

@@ -1,0 +1,13 @@
+{
+  "frozen": "2026-10-23",
+  "round": "swing v5",
+  "system": "v5 = v4 (Donchian 20/20 breakout, close > SMA200, IBS >= 0.7, walk-forward logistic quality model keep 0.75 / l2 100, SPY 63-day return <= 3%, 4 x ATR protective stop + chandelier trail, exit at the next open after a close below the prior 20-day low) + ONE new entry rule",
+  "new_rule": "relative-strength line (close / SPY close, same date) at a new 63-day high: rs >= max(rs over the previous 63 bars) on the signal bar",
+  "new_free_parameters": {"rs_high_lookback": 63},
+  "chosen_because": "V2 grid 63/126/252 all beat v4 on MAR, Sharpe and in both ticker halves (flat plateau MAR 0.64-0.72 vs 0.59); 63 and 252 pass every acceptance check, 126 had the highest MAR but only 60% of years better; 63 = the passing value with the most trades (1672)",
+  "story": "institutions buying a leader push it ahead of the market before and during the breakout",
+  "rejected_this_round": ["failed-breakout exit (6 variants, all worse: MAR 0.43-0.51)", "max 2 or 3 positions per sector (no robust gain)"],
+  "portfolio_as_traded": "max 10 positions of 10%, idle cash in SPY while SPY > SMA200 (switch cost 0.1%) else T-bills, 0.1% per side + 0.1% entry slippage",
+  "trials_this_round": "11 in phase 1 (swing5/experiments.csv), after 499 earlier trials in the v3/v4 line",
+  "holdout": "swing5/holdout_v5.json, used exactly once by swing5/holdout_run.py; nothing is fitted or changed after it"
+}
