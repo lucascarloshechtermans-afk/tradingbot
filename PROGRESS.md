@@ -932,23 +932,6 @@ trade for trade (`tests/test_pine_sim.py`). Compile-checked. Chart stats OOS v3 
 - Power: ≈1330 holdout trades (ticker cell) / ≈270 (ticker + time): detectable expectancy 0.10R / 0.23R; alpha vs
   SPY only detectable above ≈12%/yr (IR 0.9) over 9.8 years — the holdout can show point estimates, not prove alpha.
 
-## Session 9 (2026-10-23) — swing v5 round, phase 0 (foundation and bugs) — `swing5/reports/phase0.md`
-- New holdout fixed first (`swing5/holdout_v5.json`, commit 8462b8f): 155 S&P-500-of-2015 tickers never used (10 more
-  had no data: delisted/renamed), cells 2015–2024-10 and 2024-10-22 → now, plus a forward test from 2026-10-24 (the only
-  fully unseen period). Development: 337 tickers (old dev + spent v4 holdout), 2015-01 .. 2024-10-21. Costs now
-  0.1%/side + 0.1% slippage on breakout entries.
-- Complete system as traded (`swing5/port.py`, v4 + idle cash in SPY when SPY > SMA200, else T-bills): CAGR 15.7%,
-  max DD −26.6%, MAR 0.59, Sharpe 0.89, beta 0.61, alpha +6.7%/yr (t 1.8), IR 0.14; SPY 13.2% / −33.7% / 0.39 / 0.69;
-  60/40 8.9% / −21.3% / 0.42. Of 15.9%/yr: breakouts +13.2, SPY parking +2.6. Breakouts alone: MAR 0.66.
-  Caveat: the development universe is survivor-biased (v4 lost to SPY on its holdout).
-- Drawdown convention fixed in Pine v3/v4, pine_sim and swing4.sim2 (high before low on every bar incl. the fill
-  bar); parity test pine_sim = sim2. Effect ≤ 0.1 pt on the average drawdown, none on trades/returns.
-- Model without SPY input: rs63 re-learns the SPY effect, so rs63 must go too. Without any SPY input (14 features):
-  AUC 0.552 vs 0.583, same expectancy (0.320 vs 0.328R) and MAR (0.59). Only er20 (−) and rvol (+) keep their sign
-  every year (2-feature model: 0.334R, win 49.1%, MAR 0.56).
-- Power: ≈1330 holdout trades (ticker cell) / ≈270 (ticker + time): detectable expectancy 0.10R / 0.23R; alpha vs
-  SPY only detectable above ≈12%/yr over 9.8 years (IR 0.9).
-
 ## Session 9b (2026-10-23) — Swing 20/21 (new strategy next to v4), phase 0 — `twenty/reports/phase0.md`
 - Goal: stocks that make +20% within 21 trading days (buy next open, +20% limit, stop, time exit day 21; stop wins in a
   bar; costs 0.15%/side + slippage by dollar volume). Universe: 4,976 US common stocks from the nasdaqtrader symbol
@@ -959,3 +942,16 @@ trade for trade (`tests/test_pine_sim.py`). Compile-checked. Chart stats OOS v3 
   stop 4%), break-even 23–34%, expectancy ≈ 0 (CI includes 0). Strongly volatility-dependent (ATR < 2.5%: ~1%; > 7%:
   28–35% but negative expectancy). Strongest condition: weak market (SPY 63d < −5%: hit 17–20%, +2.2–2.6%; VIX > 30).
   No target/horizon cell is clearly more robust; tight stops lose everywhere.
+
+## Session 10 (2026-10-23) — overfit measurement step 1, Swing v4 audit phase 1 — `indicator_lab/audit/phase1.md`
+- Overfit measurement step 1 (`indicator_lab/stats/`): 499 counted trials in the v3/v4 line (E0–E60 388, swing4 102,
+  swing5 9), 467 rebuilt as daily series on one basis (DEV-U 253, 2015–2024-10, max 10 positions, 0.1%/side).
+  N_eff: 56 eigenvalues for 90% of the variance, 22–93 by hierarchical cuts at ρ ≥ 0.7/0.8; ONC finds only 2 broad
+  families (mean ρ 0.72). Waiting for approval before DSR/PBO.
+- Audit phase 1: 19 new tests (17 synthetic OHLC scenarios through 5 implementations + 2 on real data), 441 tests pass.
+  `swing_v4_1.pine` / `swing_v4_1_strategy.pine`: honest "Backtest" label (rules are in-sample), benchmark rows
+  (system 100%/trade vs buy & hold of the stock and SPY, exposure), consistent SELL label/alert, earnings block labelled
+  live-only, SPY-holiday fix for non-US charts (generator `FEATURES_V41`). Signals on US charts unchanged.
+  Indicator = strategy = engine on 19/20 tickers (the 20th: frozen Pine model vs a refit on revised data).
+  On all 20 tickers the system at 100%/trade stayed below buy & hold of the same stock (in a trade 12–28% of the time).
+- Also: `ut_bot_filtered.pine` (UT Bot Alerts + entry filters, ~85–90% fewer signals; not backtested).

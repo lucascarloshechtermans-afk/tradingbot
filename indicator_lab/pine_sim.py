@@ -188,6 +188,22 @@ def stats(trades: list[dict]) -> dict:
             "bars": float(np.mean([x["bars"] for x in trades]))}
 
 
+def bench(index, c, spy_c, out: dict, stats_from: str = "2015-01-01") -> dict:
+    """The v4.1 benchmark rows, as swing_v4_1.pine computes them over the window first bar >= stats_from .. last bar:
+    system return compounded at 100% per closed trade, buy & hold of the stock and of SPY (PRICE returns, closes),
+    and the exposure = (bars of the closed trades + bars of an open trade) / bars in the window."""
+    i0 = int(np.searchsorted(index, pd.Timestamp(stats_from)))
+    tr = out["trades"]
+    held = sum(x["bars"] for x in tr)
+    if out.get("open_position") and out["in_trade"][-1]:
+        rev = out["in_trade"][::-1]
+        run = len(rev) if rev.all() else int(np.argmin(rev))    # bars of the open trade, its fill bar included
+        held += run - 1                                          # Pine: bar_index - entryBar
+    return {"system": float(np.prod([1 + x["ret"] for x in tr]) - 1) if tr else 0.0,
+            "bh": float(c[-1] / c[i0] - 1), "spy": float(spy_c[-1] / spy_c[i0] - 1),
+            "exposure": held / (len(c) - i0)}
+
+
 def table(tickers, cfg: dict | None = None) -> pd.DataFrame:
     rows = []
     for t in tickers:

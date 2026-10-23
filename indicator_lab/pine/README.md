@@ -71,3 +71,17 @@ coëfficiënten in alle drie de v3-bestanden (`--check` controleert of ze in syn
   want TradingView kent enkel de eerstvolgende cijferdatum).
 
 Geen financieel advies. De scripts plaatsen geen orders.
+
+## Swing v4.1 (aanbevolen versie van v4)
+
+`swing_v4_1.pine` geeft dezelfde BUY/SELL als v4 op Amerikaanse aandelen. Verschillen:
+- de statistieken heten "Backtest", niet "OOS": de regels zijn op dezelfde historie gekozen;
+- nieuwe regels in de tabel: **vs B&H (prijs)** = systeem met 100% per trade · kopen en vasthouden van dit aandeel ·
+  SPY, over hetzelfde venster; **In trade** = % van de dagen dat je een positie hebt. Prijsrendement, zonder dividend;
+- SELL-label en alert zeggen hetzelfde: "SELL stop + prijs" (stop geraakt, al verkocht) of "SELL next open"
+  (slot onder de 20-daagse low: verkoop bij de volgende opening);
+- het earnings-blok werkt alleen live en zit niet in de historische statistieken;
+- Europese aandelen: op een Amerikaanse feestdag wordt de juiste SPY-dag gebruikt.
+
+`swing_v4_1_strategy.pine` is dezelfde logica als strategy (Strategy Tester, trade-export). Zet "Order size" in
+Properties op ~10% als je het met de portefeuille-opzet uit het onderzoek wilt vergelijken.

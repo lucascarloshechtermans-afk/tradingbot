@@ -126,7 +126,75 @@ def compare(version: str = "current", n_dates: int = 20, seed: int = 7, tickers=
     return pd.DataFrame(rows)
 
 
+TV_FEATS = {"f " + k: k for k in ("ibs", "rvol", "roc21", "roc63", "roc126", "atr_pct", "rsi14", "ext50", "rs63",
+                                   "dist52", "bbw_pct", "gap", "spy_up", "spy_roc63", "range_atr", "brk_atr", "er20")}
+
+
+def read_tv_export(path: str) -> pd.DataFrame:
+    """A TradingView "Export chart data" CSV of a chart with swing_v4_1.pine (Debug input on): OHLCV + every plot,
+    including the Data Window plots. The time column (unix seconds or ISO) becomes a date index."""
+    d = pd.read_csv(path)
+    t = d["time"]
+    idx = pd.to_datetime(t, unit="s") if np.issubdtype(t.dtype, np.number) else pd.to_datetime(t, utc=True).dt.tz_localize(None)
+    d.index = pd.DatetimeIndex(idx).normalize()
+    d.columns = [c.strip() for c in d.columns]
+    vol = next((c for c in d.columns if c.lower() == "volume"), None)
+    d = d.rename(columns={vol: "volume"} if vol else {})
+    return d
+
+
+def compare_tv(path: str, us: bool = True, version: str = "v41", warmup: int = 300) -> dict:
+    """Pine <-> Python parity on REAL TradingView output. The Python side recomputes every feature from the exported
+    OHLCV itself (so data-vendor differences in the stock's prices drop out); SPY comes from the local cache, so the two
+    SPY features can differ slightly (TradingView's SPY is not dividend-adjusted by default). Returns the max |diff| per
+    feature in z-units after `warmup` bars, the max quality difference, and the bars where BUY/SELL differ when the
+    Pine state machine (pine_sim.machine) is run on TradingView's own quality values."""
+    from indicator_lab import pine_sim as PS
+    d = read_tv_export(path)
+    with open(MODEL) as fh:
+        model = json.load(fh)
+    sd = dict(zip(model["feats"], model["sd"]))
+    df = d[["open", "high", "low", "close", "volume"]].astype(float)
+    py = pine_features(df, us=us, version=version)
+    keep = np.arange(len(d)) >= warmup
+    feat = {}
+    for col, k in TV_FEATS.items():
+        if col in d:
+            diff = (d[col].astype(float) - py[k]).abs()[keep] / sd[k]
+            feat[k] = float(diff.max())
+    out = {"bars": int(keep.sum()), "feature_max_z": feat}
+    qcol = next((c for c in d.columns if c.startswith("Breakout quality")), None)
+    scol = next((c for c in d.columns if c.startswith("Status")), None)
+    if qcol:
+        _, q_py = score(py, model)
+        out["quality_max"] = float((d[qcol].astype(float) - q_py).abs()[keep].max())
+    if qcol and scol:
+        o, h, lo, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
+        from indicator_lab import pine_ta as T2
+        st = d[scol].astype(float).to_numpy()
+        # TradingView's own quality and SPY value decide the model + regime check, so this compares the breakout
+        # conditions and the state machine (fills, stops, exits) on TradingView's bars
+        final, yearly = PS.load_models()
+        thr = np.full(len(d), final["thr"])
+        for fit in yearly["fits"]:
+            thr[(d.index.year == fit["year"]) & (d.index <= pd.Timestamp(yearly["train_end"]))] = fit["thr"]
+        q_tv = d[qcol].astype(float).to_numpy()
+        spy_tv = d["f spy_roc63"].astype(float).to_numpy() if "f spy_roc63" in d else py["spy_roc63"].to_numpy()
+        with np.errstate(invalid="ignore"):
+            ok = (q_tv >= thr) & (spy_tv <= PS.V41["regime_max"])
+        entry_ok, exit_sig = PS.signals(o, h, lo, c, {**PS.DEFAULT}, ok)
+        m = PS.machine(d.index, o, h, lo, c, T2.atr_py(h, lo, c, 14), entry_ok, exit_sig, PS.DEFAULT)
+        out["buy_mismatch"] = [x.date() for x in d.index[(m["buy"] != (st == 1)) & keep]]
+        out["sell_mismatch"] = [x.date() for x in d.index[(m["sell"] != (st == -1)) & keep]]
+    return out
+
+
 def main(argv):
+    if "--tv" in argv:   # python -m indicator_lab.pine_parity --tv export.csv [--non-us]
+        r = compare_tv(argv[argv.index("--tv") + 1], us="--non-us" not in argv)
+        for k, v in r.items():
+            print(k, v)
+        return r
     version = argv[argv.index("--version") + 1] if "--version" in argv else "current"
     d = compare(version)
     with open(MODEL) as fh:
