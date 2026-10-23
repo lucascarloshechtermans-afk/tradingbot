@@ -12,3 +12,4 @@ dashboard.html
 scan_results.json
 dist/
 indicator_lab/.cache20/
+indicator_lab/stats/out/
