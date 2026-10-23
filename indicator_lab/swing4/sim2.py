@@ -51,8 +51,9 @@ class Policy:
 DEFAULT = Policy()
 
 
-def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.001):
-    """`a`: per-bar arrays o h l c atr exit_sig (+ sma50 rsi14 hi_n earn_k as needed), index (DatetimeIndex)."""
+def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.001, slip: float = 0.0):
+    """`a`: per-bar arrays o h l c atr exit_sig (+ sma50 rsi14 hi_n earn_k as needed), index (DatetimeIndex).
+    `slip`: extra slippage on the entry fill (fraction of the price, on top of `cost`); R stays the stop distance."""
     o, h, lo, c, atr = a["o"], a["h"], a["l"], a["c"], a["atr"]
     exit_sig = a["exit_sig"] if pol.exit_low else np.zeros(len(c), bool)
     n = len(c)
@@ -169,7 +170,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
             order = None
             rp = pol.stop * atr[i]
             st.update({"in": True, "ep": fill, "ei": t, "sig": i, "risk_px": rp, "stop": fill - rp, "hh": h[t],
-                       "q0": 1 / (fill * (1 + cost)), "cash": 0.0, "left": 1.0, "pend_all": None, "pend_frac": 0.0,
+                       "q0": 1 / (fill * (1 + slip) * (1 + cost)), "cash": 0.0, "left": 1.0, "pend_all": None, "pend_frac": 0.0,
                        "phit": [False] * len(parts), "parts_hit": 0, "tight": False, "ox_done": False,
                        "earn_done": False, "last_px": fill, "intrabar": False})
             done = None

@@ -33,18 +33,21 @@ _orig_load = data.load
 _MODE = {"mode": None}
 
 
-def install_dev_cutoff() -> None:
-    """Development mode: every series ends the day before the holdout start; holdout tickers raise."""
+def install_dev_cutoff(blocked=None, start=None) -> None:
+    """Development mode: every series ends the day before the holdout start; holdout tickers raise.
+    `blocked` / `start` let a later round (swing5) use its own holdout."""
+    blocked = set(H_TICKERS if blocked is None else blocked)
+    start = H_START if start is None else pd.Timestamp(start)
     if _MODE["mode"] == "dev":
         return
     if _MODE["mode"] is not None:
         raise RuntimeError("data mode already set to " + str(_MODE["mode"]))
 
     def load(ticker: str, *a, **k) -> pd.DataFrame:
-        if ticker in H_TICKERS:
+        if ticker in blocked:
             raise PermissionError(f"{ticker} is a holdout ticker: not available during development")
         df = _orig_load(ticker, *a, **k)
-        return df[df.index < H_START]
+        return df[df.index < start]
 
     data.load = load
     _MODE["mode"] = "dev"
@@ -72,17 +75,18 @@ FIELDS = ["id", "time", "phase", "idea", "params", "new_free_params", "universe"
           "exp_ci_lo", "exp_ci_hi", "years_better", "half_a", "half_b", "accepted", "notes"]
 
 
-def log(row: dict) -> int:
-    """Append one trial to experiments.csv; returns its id. Every trial is logged, also the failures."""
-    exists = os.path.exists(EXP_LOG)
+def log(row: dict, path: str | None = None) -> int:
+    """Append one trial to experiments.csv (or `path`); returns its id. Every trial is logged, also the failures."""
+    path = path or EXP_LOG
+    exists = os.path.exists(path)
     n = 0
     if exists:
-        with open(EXP_LOG) as fh:
+        with open(path) as fh:
             n = sum(1 for _ in fh) - 1
     row = {"id": n + 1, "time": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), **row}
     if isinstance(row.get("params"), dict):
         row["params"] = json.dumps(row["params"], sort_keys=True)
-    with open(EXP_LOG, "a", newline="") as fh:
+    with open(path, "a", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=FIELDS, extrasaction="ignore")
         if not exists:
             w.writeheader()
@@ -90,8 +94,9 @@ def log(row: dict) -> int:
     return n + 1
 
 
-def n_trials() -> int:
-    if not os.path.exists(EXP_LOG):
+def n_trials(path: str | None = None) -> int:
+    path = path or EXP_LOG
+    if not os.path.exists(path):
         return 0
-    with open(EXP_LOG) as fh:
+    with open(path) as fh:
         return sum(1 for _ in fh) - 1

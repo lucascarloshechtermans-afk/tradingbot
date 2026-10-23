@@ -145,14 +145,14 @@ def v3_entry(cx) -> np.ndarray:
         return cx["cand"] & (cx["p_v3"] >= cx["thr_v3"])
 
 
-def run(ctx: dict, entry_fn=v3_entry, pol: S2.Policy = S2.DEFAULT, univ=None, period=None) -> dict:
+def run(ctx: dict, entry_fn=v3_entry, pol: S2.Policy = S2.DEFAULT, univ=None, period=None, slip: float = 0.0) -> dict:
     """{ticker: (daily returns in the period, trades with signal-bar info)}."""
     a0, b0 = period or PERIOD
     out = {}
     for t in univ or UNIV:
         cx = ctx[t]
         e = entry_fn(cx)
-        r, tr = S2.simulate(cx["arr"], np.asarray(e, bool), pol)
+        r, tr = S2.simulate(cx["arr"], np.asarray(e, bool), pol, slip=slip)
         idx = cx["arr"]["index"]
         keep = []
         for x in tr:
