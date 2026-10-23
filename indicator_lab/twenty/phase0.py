@@ -246,7 +246,10 @@ def main():
     L.append("\n### Year\n")
     yr = rows.groupby("year").agg(n=("r_pct10", "size"), hit_pct10=("hit_pct10", "mean"), exp_pct10=("r_pct10", "mean"),
                                   hit_atr2=("hit_atr2", "mean"), exp_atr2=("r_atr2", "mean"))
-    L.append(fmt_tab(yr.reset_index().rename(columns={"year": "bucket"})))
+    yr = yr.reset_index().rename(columns={"year": "bucket"})
+    yr["bucket"] = yr["bucket"].astype(int).astype(str)
+    yr["n"] = yr["n"].astype(int)
+    L.append(fmt_tab(yr))
 
     L.append("\n## 2. Target x horizon x stop\n")
     L.append("![heatmaps](p0_heatmaps.png)\n")

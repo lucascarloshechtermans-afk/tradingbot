@@ -948,3 +948,14 @@ trade for trade (`tests/test_pine_sim.py`). Compile-checked. Chart stats OOS v3 
   every year (2-feature model: 0.334R, win 49.1%, MAR 0.56).
 - Power: ≈1330 holdout trades (ticker cell) / ≈270 (ticker + time): detectable expectancy 0.10R / 0.23R; alpha vs
   SPY only detectable above ≈12%/yr over 9.8 years (IR 0.9).
+
+## Session 9b (2026-10-23) — Swing 20/21 (new strategy next to v4), phase 0 — `twenty/reports/phase0.md`
+- Goal: stocks that make +20% within 21 trading days (buy next open, +20% limit, stop, time exit day 21; stop wins in a
+  bar; costs 0.15%/side + slippage by dollar volume). Universe: 4,976 US common stocks from the nasdaqtrader symbol
+  lists (incl. small/mid caps); holdout fixed first (`twenty/holdout_20in21.json`, b8414e6): a hash-random 30% of
+  never-used tickers (1,348) + the last 2 years; the v5 holdout tickers are excluded entirely. Delisted stocks are not
+  available from free sources (survivorship reported).
+- Base rates (3.15M stock-days, 2,188 stocks, 2013–2024): +20%/21d before the stop on 7–9% of random days (signal-low
+  stop 4%), break-even 23–34%, expectancy ≈ 0 (CI includes 0). Strongly volatility-dependent (ATR < 2.5%: ~1%; > 7%:
+  28–35% but negative expectancy). Strongest condition: weak market (SPY 63d < −5%: hit 17–20%, +2.2–2.6%; VIX > 30).
+  No target/horizon cell is clearly more robust; tight stops lose everywhere.
