@@ -955,3 +955,8 @@ trade for trade (`tests/test_pine_sim.py`). Compile-checked. Chart stats OOS v3 
   Indicator = strategy = engine on 19/20 tickers (the 20th: frozen Pine model vs a refit on revised data).
   On all 20 tickers the system at 100%/trade stayed below buy & hold of the same stock (in a trade 12–28% of the time).
 - Also: `ut_bot_filtered.pine` (UT Bot Alerts + entry filters, ~85–90% fewer signals; not backtested).
+- Swing v5 phase 1 (`swing5/improve.py`, 11 trials): failed-breakout exit (all 6 variants worse), sector cap (no robust
+  gain) rejected; relative-strength line at a new 63-day high accepted on development data (MAR 0.68 vs 0.59).
+  Frozen in `final_spec_v5.json`, then the single v5 holdout run (`swing5/reports/holdout_v5.md`): on 155 never-used
+  S&P 500 names v5 is NOT better than v4 (CAGR 4.2% vs 5.1%, exp 0.060R vs 0.087R), and both lag SPY (13.2%). v5 is not
+  released; v4.1 stays. The v4 edge largely depends on the volatile, hindsight-chosen development universe.
