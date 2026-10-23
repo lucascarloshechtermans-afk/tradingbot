@@ -329,7 +329,7 @@ def e_trials() -> list[Trial]:
     # E45
     ga(45, "rank_quality", "v3, hoogste modelkwaliteit eerst", "meta", V3, rank=("quality", True))
     for q in (0.5, 0.7, 0.8):
-        ga(45, f"xsmom{q}", f"v3, alleen top {int(round((1 - q) * 100))}% 126d-momentum", "meta",
+        ga(45, f"xsmom{q}", f"v3, alleen top {round((1 - q) * 100)}% 126d-momentum", "meta",
            {**V3, "xs_mom": q, "xs_n": 126})
     # E46 lookback x trail x slots
     for n in (20, 30, 40, 55):

@@ -27,9 +27,9 @@ from indicator_lab.swing4 import protocol as P4
 
 P4.install_dev_cutoff()
 
-from indicator_lab import evaluate as E  # noqa: E402
-from indicator_lab import meta, strategies  # noqa: E402
-from indicator_lab.stats import trials as TR  # noqa: E402
+from indicator_lab import evaluate as E
+from indicator_lab import meta, strategies
+from indicator_lab.stats import trials as TR
 
 HERE = os.path.dirname(__file__)
 OUT = os.path.join(HERE, "reports")
@@ -196,6 +196,79 @@ def rebuild(trials, procs: int = 4) -> tuple[pd.DataFrame, dict]:
 
 
 # ------------------------------------------------------------------ N and N_eff
+def _onc_base(C: np.ndarray, max_k: int, n_init: int, seed: int):
+    """ONC base step (López de Prado & Lewis 2019): k-means on the rows of the distance matrix sqrt(½(1-ρ)), k chosen
+    by the quality mean(silhouette) / std(silhouette)."""
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_samples
+    X = np.sqrt(np.clip(0.5 * (1 - C), 0, None))
+    best = (-np.inf, None, None)
+    for init in range(n_init):
+        for k in range(2, min(max_k, len(C) - 1) + 1):
+            lab = KMeans(n_clusters=k, n_init=1, random_state=seed + init).fit(X).labels_
+            s = silhouette_samples(X, lab)
+            q = s.mean() / s.std() if s.std() > 0 else -np.inf
+            if q > best[0]:
+                best = (q, lab, s)
+    return best
+
+
+def onc(C: np.ndarray, max_k: int = 120, n_init: int = 3, seed: int = 0) -> np.ndarray:
+    """ONC with its recursive step: clusters whose silhouette t-stat is below the mean are re-clustered on their own and
+    replaced when that raises the mean quality. Returns cluster labels 0..k-1."""
+    _q, lab, s = _onc_base(C, max_k, n_init, seed)
+    if lab is None:
+        return np.zeros(len(C), int)
+    groups = [np.flatnonzero(lab == c) for c in np.unique(lab)]
+    tstat = [s[g].mean() / s[g].std() if len(g) > 1 and s[g].std() > 0 else 0.0 for g in groups]
+    redo = [i for i, t in enumerate(tstat) if t < np.mean(tstat)]
+    if len(redo) <= 1:
+        return lab
+    keep = [g for i, g in enumerate(groups) if i not in redo]
+    sub_idx = np.concatenate([groups[i] for i in redo])
+    sub = onc(C[np.ix_(sub_idx, sub_idx)], max_k=min(max_k, len(sub_idx) - 1), n_init=n_init, seed=seed + 1) \
+        if len(sub_idx) > 3 else np.zeros(len(sub_idx), int)
+    new = np.empty(len(C), int)
+    for i, g in enumerate(keep):
+        new[g] = i
+    new[sub_idx] = sub + len(keep)
+    from sklearn.metrics import silhouette_samples
+    X = np.sqrt(np.clip(0.5 * (1 - C), 0, None))
+
+    def mean_t(lb):
+        sv = silhouette_samples(X, lb)
+        return np.mean([sv[lb == c].mean() / sv[lb == c].std() if (lb == c).sum() > 1 and sv[lb == c].std() > 0 else 0.0
+                        for c in np.unique(lb)])
+    return new if len(np.unique(new)) > 1 and mean_t(new) > mean_t(lab) else lab
+
+
+def _corr(X: pd.DataFrame) -> np.ndarray:
+    C = X.corr().to_numpy()
+    C = np.clip((C + C.T) / 2, -1, 1)
+    np.fill_diagonal(C, 1.0)
+    return C
+
+
+def residual_check(M: pd.DataFrame) -> dict:
+    """The same counts on returns with SPY's beta taken out: every long variant shares market exposure, which by itself
+    makes the series look alike; the selection noise lives in what is left."""
+    live = M.loc[:, M.std() > 0]
+    spy = E.get("SPY")["close"].pct_change().reindex(live.index).fillna(0.0).to_numpy()
+    X = np.column_stack([np.ones(len(spy)), spy])
+    B = np.linalg.lstsq(X, live.to_numpy(), rcond=None)[0]
+    C = _corr(pd.DataFrame(live.to_numpy() - X @ B))
+    ev = np.sort(np.linalg.eigvalsh(C))[::-1]
+    share = np.cumsum(ev) / ev.sum()
+    from scipy.cluster.hierarchy import fcluster, linkage
+    from scipy.spatial.distance import squareform
+    D = np.sqrt(0.5 * (1 - C))
+    np.fill_diagonal(D, 0.0)
+    Z = linkage(squareform(D, checks=False), method="average")
+    return {"beta_p5_p50_p95": np.percentile(B[1], [5, 50, 95]).tolist(), "rho_bar": float(C[np.triu_indices_from(C, 1)].mean()),
+            "eig90": int(np.searchsorted(share, 0.90) + 1), "k_onc": len(np.unique(onc(C))),
+            "cut08": len(set(fcluster(Z, np.sqrt(0.5 * (1 - 0.8)), criterion="distance")))}
+
+
 def n_eff(M: pd.DataFrame) -> dict:
     from scipy.cluster.hierarchy import fcluster, linkage
     from scipy.spatial.distance import squareform
@@ -213,18 +286,20 @@ def n_eff(M: pd.DataFrame) -> dict:
         if len(set(lab)) > 1:
             sil[k] = float(silhouette_score(D, lab, metric="precomputed"))
     k_best = max(sil, key=sil.get)
+    lab_onc = onc(C)
     thr = {}
     for rho in (0.95, 0.9, 0.8, 0.7, 0.5):
-        thr[rho] = int(len(set(fcluster(Z, np.sqrt(0.5 * (1 - rho)), criterion="distance"))))
+        thr[rho] = len(set(fcluster(Z, np.sqrt(0.5 * (1 - rho)), criterion="distance")))
     ev = np.sort(np.linalg.eigvalsh(C))[::-1]
     share = np.cumsum(ev) / ev.sum()
     n90 = int(np.searchsorted(share, 0.90) + 1)
     iu = np.triu_indices_from(C, 1)
     rho_bar = float(C[iu].mean())
     return {"n_live": len(C), "dropped_flat": [c for c in M.columns if c not in live.columns], "k_silhouette": k_best,
-            "silhouette": sil, "labels": dict(zip(live.columns, fcluster(Z, k_best, criterion="maxclust"))),
+            "silhouette": sil, "k_onc": len(np.unique(lab_onc)), "labels": dict(zip(live.columns, lab_onc + 1)),
             "by_threshold": thr, "eig90": n90, "eig_share": share, "rho_bar": rho_bar,
-            "n_rho": rho_bar + (1 - rho_bar) * len(C), "Z": Z, "C": C, "cols": list(live.columns)}
+            "n_rho": rho_bar + (1 - rho_bar) * len(C), "Z": Z, "C": C, "cols": list(live.columns),
+            "resid": residual_check(M), "n_counted": len(M.columns)}
 
 
 def inventory_frame(trials, errs: dict, M: pd.DataFrame) -> pd.DataFrame:
@@ -257,13 +332,13 @@ def report(inv: pd.DataFrame, M: pd.DataFrame, ne: dict) -> str:
     e33 = line_[(line_.groep == "E") & line_.id.str.extract(r"E(\d+)\.")[0].astype(float).le(33)]
     e19 = line_[(line_.groep == "E") & line_.id.str.extract(r"E(\d+)\.")[0].astype(float).le(19)]
     L = ["# Overfitting-meting — stap 1: trials-inventaris, N en N_eff\n",
-         "Alleen meten: geen strategieregel is veranderd, niets is opnieuw gekozen of getuned. Varianten met een "
-         "walk-forward-model bouwen dat model precies zoals de variant het definieerde (jaarlijkse refits).\n",
+         ("Alleen meten: geen strategieregel is veranderd, niets is opnieuw gekozen of getuned. Varianten met een "
+         "walk-forward-model bouwen dat model precies zoals de variant het definieerde (jaarlijkse refits).\n"),
          "## Gemeenschappelijke basis\n",
          f"- universum: DEV-U, {len(UNIV)} ontwikkeltickers (bevat alle universums van E0–E60; geen v4- of v5-holdoutticker)",
          f"- periode: {PERIOD[0].date()} .. {PERIOD[1].date()} ({len(M)} handelsdagen), data afgekapt vóór de v4-tijdholdout",
-         "- portefeuille: max 10 posities van 10%, signalen op dezelfde dag in één vaste willekeurige volgorde (seed 0), "
-         "lege slots 0% tenzij de variant zelf parkeert; kosten 0,1% per kant op elke fill",
+         ("- portefeuille: max 10 posities van 10%, signalen op dezelfde dag in één vaste willekeurige volgorde (seed 0), "
+         "lege slots 0% tenzij de variant zelf parkeert; kosten 0,1% per kant op elke fill"),
          "- dagrendementen op portefeuilleniveau, één kolom per variant\n",
          "## Aantallen\n",
          "| | aantal |\n|---|---|",
@@ -276,8 +351,8 @@ def report(inv: pd.DataFrame, M: pd.DataFrame, ne: dict) -> str:
          f"| gereconstrueerd met een dagreeks | {len(rec)} ({len(rec) / len(line_) * 100:.0f}%) |",
          f"| niet gereconstrueerd | {len(line_) - len(rec)} |",
          f"| niet geteld: herbeoordelingen, Pine, R1–R7, dubbele | {int((~inv.geteld & inv.groep.isin(['E', 'swing4', 'swing5', 'R'])).sum())} |",
-         f"| buiten de lijn (scanner-voorloper uit git, 20/21-strategie), apart gelijst | "
-         f"{int(inv.groep.isin(['scanner', 'twenty']).sum())} |\n",
+         (f"| buiten de lijn (scanner-voorloper uit git, 20/21-strategie), apart gelijst | "
+         f"{int(inv.groep.isin(['scanner', 'twenty']).sum())} |\n"),
          "Controle tegen de totalen die het log zelf noemt: "
          f"E0–E19 hier {len(e19)} trials (log: \"~150 variants\"), E0–E33 hier {len(e33)} (log: \"~35 families and ~250 "
          "variants\"). " + ("Het log noemt méér dan hier is vastgelegd; het verschil zit in grids waarvan de punten niet "
@@ -289,27 +364,43 @@ def report(inv: pd.DataFrame, M: pd.DataFrame, ne: dict) -> str:
     L.append(f"Correlatiematrix van {ne['n_live']} dagreeksen ({len(ne['dropped_flat'])} zonder enige trade weggelaten). "
              f"Gemiddelde paarsgewijze correlatie ρ̄ = {ne['rho_bar']:.2f}.\n")
     L.append("| methode | N_eff |\n|---|---|")
-    L.append(f"| hiërarchische clustering (afstand √(½(1−ρ)), average linkage), aantal clusters met de hoogste "
-             f"silhouette-score | **{ne['k_silhouette']}** |")
+    L.append(f"| **ONC** (López de Prado & Lewis 2019): k-means op de afstanden √(½(1−ρ)), k gekozen op "
+             f"gemiddelde/spreiding van de silhouette, zwakke clusters recursief opnieuw geclusterd | **{ne['k_onc']}** |")
+    L.append(f"| hiërarchisch (average linkage), k met de hoogste gemiddelde silhouette — gedegenereerd: splitst alleen "
+             f"de 5 short-varianten af (ρ < 0 met de rest) | {ne['k_silhouette']} |")
     for rho, k in ne["by_threshold"].items():
         L.append(f"| zelfde boom, afgesneden waar clusters onderling ρ ≥ {rho} hebben | {k} |")
     L.append(f"| eigenwaarden van de correlatiematrix die samen 90% van de variantie verklaren | **{ne['eig90']}** |")
     L.append(f"| ρ̄ + (1 − ρ̄)·N (Bailey e.a., gemiddelde-correlatie-benadering) | {ne['n_rho']:.0f} |\n")
+    rc = ne["resid"]
+    L.append(f"Controle zonder marktbèta (elke reeks min β·SPY; β mediaan {rc['beta_p5_p50_p95'][1]:.2f}, 5–95%: "
+             f"{rc['beta_p5_p50_p95'][0]:.2f}–{rc['beta_p5_p50_p95'][2]:.2f}): ρ̄ = {rc['rho_bar']:.2f}, ONC {rc['k_onc']}, "
+             f"boom-snede ρ ≥ 0.8: {rc['cut08']}, eigenwaarden 90%: {rc['eig90']}.\n")
+    L.append("**Lezing.** De clustermethoden die zelf het aantal clusters kiezen (ONC en de silhouette-snede) vinden "
+             "steeds maar twee brede families, ook zonder de marktbèta. Dat zegt dat er geen scherp gescheiden groepen "
+             "zijn. Het zegt niet dat er maar twee onafhankelijke pogingen waren: binnen de grote familie correleren de "
+             "varianten gemiddeld ρ ≈ 0,7 en niet ~1, dus elke variant voegt nog eigen ruis toe waarop gekozen kon worden. "
+             "Met N_eff = 2 zou de DSR veel te mild zijn. De maten die die spreiding wél meetellen liggen tussen "
+             f"{ne['by_threshold'][0.7]} (snede ρ ≥ 0.7) en {ne['by_threshold'][0.8]} (snede ρ ≥ 0.8), met "
+             f"{ne['eig90']} eigenwaarden voor 90% van de variantie ({rc['eig90']} zonder marktbèta).\n")
+    L.append(f"**Voorstel voor stap 2.** N_eff = {ne['by_threshold'][0.8]} (hiërarchische boom, varianten met ρ ≥ 0.8 "
+             f"tellen als één trial), met als controle de eigenwaardentelling ({ne['eig90']}); de DSR rapporteer ik "
+             f"daarnaast met de ruwe N = {ne['n_counted']} (streng) en, ter vergelijking, met de clustertelling 2 (mild).\n")
     L.append("Niet-gereconstrueerde varianten zitten niet in de matrix. Bijna allemaal zijn het buren van wel "
              "gereconstrueerde varianten (andere slots, kosten, of grids rond een vastgelegd punt), dus ze vallen vrijwel "
              "zeker in bestaande clusters; als bovengrens schaal ik N_eff mee met N: "
-             f"{ne['k_silhouette']} × {n_strict}/{ne['n_live']} = {ne['k_silhouette'] * n_strict / ne['n_live']:.0f}.\n")
+             f"{ne['k_onc']} × {n_strict}/{ne['n_live']} = {ne['k_onc'] * n_strict / ne['n_live']:.0f}.\n")
     # cluster table
     lab = pd.Series(ne["labels"])
-    names = inv.set_index("id")["beschrijving"]
-    L.append("## De clusters (silhouette-snede)\n")
+    inv.set_index("id")["beschrijving"]
+    L.append("## De clusters (ONC)\n")
     L.append("| cluster | varianten | voorbeelden |\n|---|---|---|")
     for c, g in sorted(lab.groupby(lab), key=lambda z: -len(z[1])):
         ex = ", ".join(f"{i}" for i in list(g.index)[:6])
         L.append(f"| {c} | {len(g)} | {ex}{' …' if len(g) > 6 else ''} |")
     tagged = inv[inv.tags != ""][["id", "tags"]]
     L.append("\nWaar de eindsystemen zitten: " + "; ".join(
-        f"{r.tags} = {r.id} (cluster {lab.get(r.id, '–')})" for r in tagged.itertuples()) + "\n")
+        f"{r.tags} = {r.id} (cluster {lab.get(r.id, '– niet geteld, duplicaat')})" for r in tagged.itertuples()) + "\n")
     # figures
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
     ks = sorted(ne["silhouette"])
@@ -359,11 +450,12 @@ def main():
     inv.to_csv(os.path.join(HERE, "trials_inventory.csv"), index=False)
     line_ids = set(inv[inv.geteld & inv.groep.isin(["E", "swing4", "swing5"])].id)
     ne = n_eff(M[[c for c in M.columns if c in line_ids]])
+    ne["n_counted"] = len(line_ids)
     txt = report(inv, M, ne)
     with open(os.path.join(OUT, "step1_trials.md"), "w") as fh:
         fh.write(txt)
     with open(os.path.join(WORK, "neff.json"), "w") as fh:
-        json.dump({k: ne[k] for k in ("n_live", "k_silhouette", "by_threshold", "eig90", "rho_bar", "n_rho")} |
+        json.dump({k: ne[k] for k in ("n_live", "n_counted", "k_onc", "k_silhouette", "by_threshold", "eig90", "rho_bar", "n_rho", "resid")} |
                   {"labels": {k: int(v) for k, v in ne["labels"].items()}}, fh, indent=1, default=str)
     print(txt)
 
