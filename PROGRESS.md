@@ -931,3 +931,20 @@ trade for trade (`tests/test_pine_sim.py`). Compile-checked. Chart stats OOS v3 
   (er20 −, ext50 −, roc126 +, atr_pct +, rvol +, gap −, ibs +), 0.422R, win 52.4%, fewer trades, MAR 0.56.
 - Power: ≈1330 holdout trades (ticker cell) / ≈270 (ticker + time): detectable expectancy 0.10R / 0.23R; alpha vs
   SPY only detectable above ≈12%/yr (IR 0.9) over 9.8 years — the holdout can show point estimates, not prove alpha.
+
+## Session 9 (2026-10-23) — swing v5 round, phase 0 (foundation and bugs) — `swing5/reports/phase0.md`
+- New holdout fixed first (`swing5/holdout_v5.json`, commit 8462b8f): 155 S&P-500-of-2015 tickers never used (10 more
+  had no data: delisted/renamed), cells 2015–2024-10 and 2024-10-22 → now, plus a forward test from 2026-10-24 (the only
+  fully unseen period). Development: 337 tickers (old dev + spent v4 holdout), 2015-01 .. 2024-10-21. Costs now
+  0.1%/side + 0.1% slippage on breakout entries.
+- Complete system as traded (`swing5/port.py`, v4 + idle cash in SPY when SPY > SMA200, else T-bills): CAGR 15.7%,
+  max DD −26.6%, MAR 0.59, Sharpe 0.89, beta 0.61, alpha +6.7%/yr (t 1.8), IR 0.14; SPY 13.2% / −33.7% / 0.39 / 0.69;
+  60/40 8.9% / −21.3% / 0.42. Of 15.9%/yr: breakouts +13.2, SPY parking +2.6. Breakouts alone: MAR 0.66.
+  Caveat: the development universe is survivor-biased (v4 lost to SPY on its holdout).
+- Drawdown convention fixed in Pine v3/v4, pine_sim and swing4.sim2 (high before low on every bar incl. the fill
+  bar); parity test pine_sim = sim2. Effect ≤ 0.1 pt on the average drawdown, none on trades/returns.
+- Model without SPY input: rs63 re-learns the SPY effect, so rs63 must go too. Without any SPY input (14 features):
+  AUC 0.552 vs 0.583, same expectancy (0.320 vs 0.328R) and MAR (0.59). Only er20 (−) and rvol (+) keep their sign
+  every year (2-feature model: 0.334R, win 49.1%, MAR 0.56).
+- Power: ≈1330 holdout trades (ticker cell) / ≈270 (ticker + time): detectable expectancy 0.10R / 0.23R; alpha vs
+  SPY only detectable above ≈12%/yr over 9.8 years (IR 0.9).
