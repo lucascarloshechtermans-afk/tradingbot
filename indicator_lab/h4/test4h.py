@@ -66,7 +66,10 @@ def bars4h(t) -> pd.DataFrame | None:
     p = os.path.join(CACHE, f"{t}.csv.gz")
     if not os.path.exists(p):
         return None
-    h = pd.read_csv(p, index_col=0)
+    try:
+        h = pd.read_csv(p, index_col=0)
+    except (pd.errors.EmptyDataError, OSError, EOFError):   # a half-written file from an interrupted download
+        return None
     h.index = pd.to_datetime(h.index, utc=True).tz_convert("America/New_York").tz_localize(None)
     h = h[(h.index.time >= pd.Timestamp("09:30").time()) & (h.index.time < pd.Timestamp("16:00").time())]
     second = h.index.time >= pd.Timestamp("13:30").time()
