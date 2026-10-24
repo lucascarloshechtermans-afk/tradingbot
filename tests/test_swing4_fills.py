@@ -71,3 +71,15 @@ def test_buy_stop_entry_only_fills_above_the_signal_high_and_expires():
     assert tr == []
     _, tr = simulate(a, entry_at(4), Policy(entry="stop", e_days=3))
     assert len(tr) == 0 or tr[0]["entry"] == 100.0
+
+
+def test_one_buy_per_two_weeks_per_stock():
+    # BUY on bar 0 -> stopped on bar 2; new BUY signals on bar 3 (5 calendar days later: skipped) and bar 10 (14 days)
+    rows = [(99, 100, 98, 100), (100, 101, 99, 100), (100, 100, 90, 92)] + [(92, 93, 91, 92)] * 10 + [(92, 92, 80, 81)]
+    a = bars(rows)
+    e = np.zeros(len(rows), bool)
+    e[[0, 3, 10]] = True
+    _, tr = simulate(a, e, Policy(min_gap_days=14))
+    assert [x["sig_i"] for x in tr] == [0, 10]
+    _, tr = simulate(a, e, Policy())
+    assert [x["sig_i"] for x in tr][:2] == [0, 3]

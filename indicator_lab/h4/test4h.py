@@ -1,4 +1,4 @@
-"""The v4 breakout on the 4-HOUR timeframe, as the user asked: at most 2 BUY signals per week per stock and a profit
+"""The v4 breakout on the 4-HOUR timeframe, as the user asked: at most one BUY signal per stock per two weeks and a profit
 target of +10 / +15 / +20% (vs none), against v4 on daily bars and SPY over the same period.
 
     python -m indicator_lab.h4.test4h
@@ -41,7 +41,7 @@ else:
 SUFFIX = "_nasdaq" if NASDAQ else ""
 SLIP = 0.001
 SEEDS = 20
-BASE = S2.Policy(max_week=2)
+BASE = S2.Policy(min_gap_days=14)   # at most one BUY per stock per two weeks (user rule)
 
 
 def download(tickers, batch=80):
@@ -162,10 +162,10 @@ def main():
         cx["entry"] = cx["entry"] & (cx["arr"]["index"] >= start)
     weeks = (end - start).days / 7
     rows, curves = [], {}
-    for name, pol in (("4H, max 2/week, geen target", BASE), ("4H, max 2/week, target +10%", replace(BASE, tgt_pct=0.10)),
-                      ("4H, max 2/week, target +15%", replace(BASE, tgt_pct=0.15)),
-                      ("4H, max 2/week, target +20%", replace(BASE, tgt_pct=0.20)),
-                      ("4H, zonder week-limiet, geen target", S2.Policy())):
+    for name, pol in (("4H, 1 BUY/2 weken, geen target", BASE), ("4H, 1 BUY/2 weken, target +10%", replace(BASE, tgt_pct=0.10)),
+                      ("4H, 1 BUY/2 weken, target +15%", replace(BASE, tgt_pct=0.15)),
+                      ("4H, 1 BUY/2 weken, target +20%", replace(BASE, tgt_pct=0.20)),
+                      ("4H, zonder 2-weken-regel, geen target", S2.Policy())):
         res = run(ctx, pol)
         for k in ((10, 20) if NASDAQ else (10,)):
             row, curve = summary(name, res, weeks, k)

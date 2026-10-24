@@ -37,6 +37,8 @@ class Policy:
     target: float | None = None      # whole (remaining) position out at +target R
     tgt_pct: float | None = None     # or at +tgt_pct of the fill price (limit order; a gap above fills at the open)
     max_week: int | None = None      # at most this many BUY signals acted on per calendar week (ISO week)
+    min_gap_days: int | None = None  # a BUY signal is only acted on if the previous one on this stock was >= this many
+                                     #   calendar days earlier (e.g. 14 = at most one BUY per two weeks)
     be_at: float | None = None       # stop to entry + costs once the high reached +be_at R
     tight_at: float | None = None    # once the high reached +tight_at R, trail tighter:
     tight_mult: float | None = None  #   highest high - tight_mult x ATR, or
@@ -69,6 +71,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
 
     st = {"in": False}
     week_buys: dict = {}
+    last_buy = None
     order = None  # pending entry: dict(kind, level, until, sig)
 
     def sell(t, px, frac):
@@ -225,6 +228,10 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
             continue
 
         if entry[t] and t + 1 < n and np.isfinite(atr[t]):
+            if pol.min_gap_days is not None:
+                if last_buy is not None and (idx[t] - last_buy).days < pol.min_gap_days:
+                    continue
+                last_buy = idx[t]
             if pol.max_week is not None:
                 wk = tuple(idx[t].isocalendar()[:2])
                 if week_buys.get(wk, 0) >= pol.max_week:

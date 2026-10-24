@@ -1,5 +1,5 @@
-"""The user's rules on DAILY bars over the NASDAQ universe: v4 (breakout + quality model + regime) with at most 2 BUY
-signals per week per stock and a profit target of +10 / +15 / +20% (or none), 2015-01-01 .. 2024-10-21.
+"""The user's rules on DAILY bars over the NASDAQ universe: v4 (breakout + quality model + regime) with at most one BUY
+signal per stock per two weeks and a profit target of +10 / +15 / +20% (or none), 2015-01-01 .. 2024-10-21.
 
     python -m indicator_lab.h4.nasdaq_daily
 
@@ -33,7 +33,7 @@ from indicator_lab.twenty import data20
 OUT = os.path.join(os.path.dirname(__file__), "reports")
 PERIOD = (pd.Timestamp("2015-01-01"), pd.Timestamp("2024-10-21"))
 SLIP = 0.001
-BASE = S2.Policy(max_week=2)
+BASE = S2.Policy(min_gap_days=14)   # at most one BUY per stock per two weeks (user rule)
 
 
 def load(tickers) -> list[str]:
@@ -80,7 +80,7 @@ def main():
     for name, pol in (("geen target", BASE), ("target +10%", replace(BASE, tgt_pct=0.10)),
                       ("target +15%", replace(BASE, tgt_pct=0.15)), ("target +20%", replace(BASE, tgt_pct=0.20))):
         res = L.run(ctx, I6.v4, pol, univ=univ, period=PERIOD, slip=SLIP)
-        rows.append({"v4 dag, max 2/week": name, **all_trades(res)})
+        rows.append({"v4 dag, 1 BUY/2 weken": name, **all_trades(res)})
         for k in (10, 20):
             a = account(res, k)
             curves[f"{name}, {k} posities"] = a.pop("port")
