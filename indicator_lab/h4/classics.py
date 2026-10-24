@@ -22,8 +22,9 @@ if TF == "day":
     from indicator_lab.swing5 import protocol5 as P5
     P5.install_dev()
 else:
-    from indicator_lab.swing4 import protocol as P4
-    P4.install_final()
+    from indicator_lab.h4 import (
+        test4h,  # noqa: F401  (sets the full-data mode itself; provides the 4H bars)
+    )
 
 from indicator_lab import ind
 from indicator_lab.evaluate import get
