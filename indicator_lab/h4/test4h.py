@@ -32,13 +32,19 @@ from indicator_lab.swing5 import protocol5 as P5
 
 CACHE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".cache4h")
 OUT = os.path.join(os.path.dirname(__file__), "reports")
-UNIV = P5.DEV_UNIVERSE
+NASDAQ = os.environ.get("H4_UNIV") == "nasdaq"
+if NASDAQ:
+    from indicator_lab.h4.nasdaq_list import nasdaq
+    UNIV = nasdaq()
+else:
+    UNIV = P5.DEV_UNIVERSE
+SUFFIX = "_nasdaq" if NASDAQ else ""
 SLIP = 0.001
 SEEDS = 20
 BASE = S2.Policy(max_week=2)
 
 
-def download(tickers, batch=40):
+def download(tickers, batch=80):
     import yfinance as yf
     os.makedirs(CACHE, exist_ok=True)
     todo = [t for t in tickers if not os.path.exists(os.path.join(CACHE, f"{t}.csv.gz"))]
@@ -109,14 +115,18 @@ def daily(port4h: pd.Series) -> pd.Series:
     return (1 + port4h).groupby(port4h.index.normalize()).prod() - 1
 
 
-def summary(name, res, weeks):
+def summary(name, res, weeks, k=10):
     tt = pd.DataFrame([x for _, tr in res.values() for x in tr])
-    ports = [daily(L.portfolio(res, 10, s)["port"]) for s in range(SEEDS)]
+    ports = [daily(L.portfolio(res, k, s)["port"]) for s in range(SEEDS)]
     st = [equity_stats(p) for p in ports]
     m = {k: float(np.mean([s[k] for s in st])) for k in ("cagr", "maxdd", "mar", "sharpe")}
     r = tt["ret"].to_numpy()
     win, loss = r[r > 0], r[r <= 0]
-    return {"systeem": name, "trades": len(r), "trades/week (alle aandelen)": round(len(r) / weeks, 1),
+    top = np.sort(r)[::-1]
+    return {"systeem": name if k == 10 else f"{name} ({k} posities)", "trades": len(r),
+            "trades/week (alle aandelen)": round(len(r) / weeks, 1),
+            "mediaan trade": f"{np.median(r) * 100:.2f}%", "PF": f"{win.sum() / -loss.sum():.2f}",
+            "beste 1% = % van winst": f"{top[:max(1, len(r) // 100)].sum() / r.sum() * 100:.0f}%",
             "winrate": f"{(r > 0).mean() * 100:.0f}%", "gem. winst": f"{win.mean() * 100:.1f}%",
             "gem. verlies": f"{loss.mean() * 100:.1f}%", "gem. trade": f"{r.mean() * 100:.2f}%",
             "hold (4H-bars)": round(float(tt["bars"].mean()), 1),
@@ -156,11 +166,14 @@ def main():
                       ("4H, max 2/week, target +15%", replace(BASE, tgt_pct=0.15)),
                       ("4H, max 2/week, target +20%", replace(BASE, tgt_pct=0.20)),
                       ("4H, zonder week-limiet, geen target", S2.Policy())):
-        row, curve = summary(name, run(ctx, pol), weeks)
-        rows.append(row)
-        curves[name] = curve
-        print(row, flush=True)
-    rows.append(v4_daily(start, end))
+        res = run(ctx, pol)
+        for k in ((10, 20) if NASDAQ else (10,)):
+            row, curve = summary(name, res, weeks, k)
+            rows.append(row)
+            curves[row["systeem"]] = curve
+            print(row, flush=True)
+    if not NASDAQ:   # the NASDAQ daily comparison is nasdaq_daily.py
+        rows.append(v4_daily(start, end))
     spy = get("SPY")["close"].pct_change()
     spy = spy[(spy.index >= start) & (spy.index <= end)].fillna(0)
     s = equity_stats(spy)
@@ -175,12 +188,12 @@ def main():
     ax.legend(fontsize=8)
     ax.set_title(f"4H-varianten vs SPY, {start.date()} .. {end.date()} (één willekeurige volgorde)")
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "test4h.png"), dpi=100)
+    fig.savefig(os.path.join(OUT, f"test4h{SUFFIX}.png"), dpi=100)
     txt = (f"# v4-breakout op 4H — jouw regels getest\n\nPeriode {start.date()} .. {end.date()} ({weeks:.0f} weken), "
-           f"{len(ctx)} ontwikkelaandelen (geen holdout), Yahoo-uurdata gegroepeerd tot 4H. Kosten 0,1%/kant + 0,1% "
+           f"{len(ctx)} {'NASDAQ-aandelen' if NASDAQ else 'ontwikkelaandelen (geen holdout)'}, Yahoo-uurdata gegroepeerd tot 4H. Kosten 0,1%/kant + 0,1% "
            f"slippage op instappen, max 10 posities van 10%, lege kas 0%.\n\n{d.to_markdown(index=False)}\n\n"
-           "![equity](test4h.png)\n")
-    with open(os.path.join(OUT, "test4h.md"), "w") as fh:
+           f"![equity](test4h{SUFFIX}.png)\n")
+    with open(os.path.join(OUT, f"test4h{SUFFIX}.md"), "w") as fh:
         fh.write(txt)
     print(txt)
 

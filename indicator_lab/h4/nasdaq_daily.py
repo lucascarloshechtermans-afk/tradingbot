@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from indicator_lab.evaluate import _DATA, get
+from indicator_lab.h4.nasdaq_list import nasdaq
 from indicator_lab.metrics import equity_stats
 from indicator_lab.swing4 import lab as L
 from indicator_lab.swing4 import sim2 as S2
@@ -30,19 +31,9 @@ from indicator_lab.swing6 import improve6 as I6
 from indicator_lab.twenty import data20
 
 OUT = os.path.join(os.path.dirname(__file__), "reports")
-LIST = os.path.join(os.path.dirname(__file__), "nasdaqlisted.txt")   # nasdaqtrader.com, downloaded 2026-10-24
 PERIOD = (pd.Timestamp("2015-01-01"), pd.Timestamp("2024-10-21"))
 SLIP = 0.001
 BASE = S2.Policy(max_week=2)
-
-
-def nasdaq() -> list[str]:
-    d = pd.read_csv(LIST, sep="|")
-    d = d[d["Symbol"].notna() & ~d["Symbol"].astype(str).str.contains("File Creation")]
-    bad = r"Warrant|Right|Unit|Preferred|Notes|Debenture|Subordinated"
-    cs = d[(d.ETF == "N") & (d["Test Issue"] == "N") & ~d["Security Name"].str.contains(bad, case=False, regex=True)
-           & ~d.Symbol.astype(str).str.contains(r"[\.\$]")]
-    return sorted(set(cs.Symbol) & set(data20.DEV))
 
 
 def load(tickers) -> list[str]:
