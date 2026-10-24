@@ -35,6 +35,8 @@ class Policy:
     # profit taking
     partial: tuple = ()              # ((R level, fraction of the original position), ...)
     target: float | None = None      # whole (remaining) position out at +target R
+    tgt_pct: float | None = None     # or at +tgt_pct of the fill price (limit order; a gap above fills at the open)
+    max_week: int | None = None      # at most this many BUY signals acted on per calendar week (ISO week)
     be_at: float | None = None       # stop to entry + costs once the high reached +be_at R
     tight_at: float | None = None    # once the high reached +tight_at R, trail tighter:
     tight_mult: float | None = None  #   highest high - tight_mult x ATR, or
@@ -66,6 +68,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
     earn = a.get(f"earn_{pol.earn_days}") if pol.earn_days else None
 
     st = {"in": False}
+    week_buys: dict = {}
     order = None  # pending entry: dict(kind, level, until, sig)
 
     def sell(t, px, frac):
@@ -135,7 +138,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
                             st["phit"][j] = True
                             st["parts_hit"] += 1
                             sell(t, o[t], fr)
-                    if pol.target is not None and o[t] >= ep + pol.target * rp:
+                    if st["tgt"] is not None and o[t] >= st["tgt"]:
                         st["last_px"] = o[t]
                         st["at_open"] = True
                         sell(t, o[t], 1.0)
@@ -152,9 +155,9 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
                                 st["phit"][j] = True
                                 st["parts_hit"] += 1
                                 sell(t, ep + lv * rp, fr)
-                        if pol.target is not None and h[t] >= ep + pol.target * rp:
-                            st["last_px"] = ep + pol.target * rp
-                            sell(t, ep + pol.target * rp, 1.0)
+                        if st["tgt"] is not None and h[t] >= st["tgt"]:
+                            st["last_px"] = st["tgt"]
+                            sell(t, st["tgt"], 1.0)
                             done = "target"
                 if done is None and st["left"] <= 0:
                     done = "partials"
@@ -189,7 +192,9 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
             st.update({"in": True, "ep": fill, "ei": t, "sig": i, "risk_px": rp, "stop": fill - rp, "hh": h[t],
                        "q0": 1 / (fill * (1 + slip) * (1 + cost)), "cash": 0.0, "left": 1.0, "pend_all": None, "pend_frac": 0.0,
                        "phit": [False] * len(parts), "parts_hit": 0, "tight": False, "ox_done": False,
-                       "earn_done": False, "last_px": fill, "intrabar": False, "at_open": False})
+                       "earn_done": False, "last_px": fill, "intrabar": False, "at_open": False,
+                       "tgt": fill * (1 + pol.tgt_pct) if pol.tgt_pct is not None else
+                       (fill + pol.target * rp if pol.target is not None else None)})
             done = None
             if lo[t] <= st["stop"]:
                 st["last_px"] = st["stop"]
@@ -201,9 +206,9 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
                         st["phit"][j] = True
                         st["parts_hit"] += 1
                         sell(t, fill + lv * rp, fr)
-                if pol.target is not None and h[t] >= fill + pol.target * rp:
-                    st["last_px"] = fill + pol.target * rp
-                    sell(t, fill + pol.target * rp, 1.0)
+                if st["tgt"] is not None and h[t] >= st["tgt"]:
+                    st["last_px"] = st["tgt"]
+                    sell(t, st["tgt"], 1.0)
                     done = "target"
                 elif st["left"] <= 0:
                     done = "partials"
@@ -220,6 +225,11 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
             continue
 
         if entry[t] and t + 1 < n and np.isfinite(atr[t]):
+            if pol.max_week is not None:
+                wk = tuple(idx[t].isocalendar()[:2])
+                if week_buys.get(wk, 0) >= pol.max_week:
+                    continue
+                week_buys[wk] = week_buys.get(wk, 0) + 1
             if pol.entry == "open":
                 order = {"kind": "open", "sig": t, "until": t + 1}
             elif pol.entry == "stop":

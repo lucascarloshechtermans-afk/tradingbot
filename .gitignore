@@ -13,3 +13,4 @@ scan_results.json
 dist/
 indicator_lab/.cache20/
 indicator_lab/stats/out/
+indicator_lab/.cache4h/
