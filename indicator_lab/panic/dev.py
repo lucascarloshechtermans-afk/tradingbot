@@ -28,7 +28,7 @@ from indicator_lab.swing4 import sim2 as S2
 
 HERE = os.path.dirname(__file__)
 OUT = os.path.join(HERE, "reports")
-EXP_LOG = os.path.join(HERE, "experiments.csv")
+EXP_LOG = os.environ.get("PANIC_LOG", os.path.join(HERE, "experiments.csv"))
 SLIP = 0.001
 POL = S2.Policy(trail=1e6, stop=1e6, min_gap_days=14)
 GRID_X = (0.10, 0.15, 0.20, 0.30)
@@ -67,9 +67,9 @@ def run(pre: dict, breadth: pd.Series, x: float, need_up: bool, start, end) -> d
     return res
 
 
-def account(res: dict, park: bool, seeds: int = 10) -> dict:
+def account(res: dict, park: bool, seeds: int = 10, k: int = 10) -> dict:
     from indicator_lab.swing5 import port as PT
-    runs = [PT.portfolio(res, 10, s, park=park) for s in range(seeds)]
+    runs = [PT.portfolio(res, k, s, park=park) for s in range(seeds)]
     m = runs[0]["mkt"]
     st = [PT.stats(r["port"], m) for r in runs]
     out = {k: float(np.mean([s[k] for s in st])) for k in ("cagr", "maxdd", "mar", "sharpe_rf", "alpha", "beta")}
