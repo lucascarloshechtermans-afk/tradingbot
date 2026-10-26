@@ -12,10 +12,11 @@ from indicator_lab.twenty import data20
 LIST = os.path.join(os.path.dirname(__file__), "nasdaqlisted.txt")
 
 
-def nasdaq() -> list[str]:
+def nasdaq(pool=None) -> list[str]:
+    """pool: the ticker set to intersect with (default the 20/21 development universe)."""
     d = pd.read_csv(LIST, sep="|")
     d = d[d["Symbol"].notna() & ~d["Symbol"].astype(str).str.contains("File Creation")]
     bad = r"Warrant|Right|Unit|Preferred|Notes|Debenture|Subordinated"
     cs = d[(d.ETF == "N") & (d["Test Issue"] == "N") & ~d["Security Name"].str.contains(bad, case=False, regex=True)
            & ~d.Symbol.astype(str).str.contains(r"[\.\$]")]
-    return sorted(set(cs.Symbol) & set(data20.DEV))
+    return sorted(set(cs.Symbol) & set(data20.DEV if pool is None else pool))
