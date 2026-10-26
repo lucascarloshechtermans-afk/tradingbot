@@ -1,0 +1,102 @@
+//@version=6
+// Market regime (SMA200 trend filter) — the rule that survived this project's out-of-sample tests:
+//   long the index while it closes above its 200-day SMA, otherwise cash.
+//   Tested: indicator_lab/timing/ (SPY 1993-2011, S&P 500 1960-1992, Nasdaq-100 1987-2011 and 12 foreign indices
+//   never used before: max drawdown about one third smaller, return usually 1-2%/yr lower). It is a RISK tool.
+// Use on a DAILY chart of an index or index ETF (SPY, QQQ, VT, ...). Signals are decided on the close;
+// the backtest table assumes you trade on the NEXT day's close (one full day of delay) and pays 0.1% per switch.
+// Band 0% = the tested rule T1; band 2% = variant T2 (fewer switches, also tested, reported but not judged).
+indicator("Market regime SMA200", overlay = true, max_labels_count = 500)
+
+len      = input.int(200, "SMA length", minval = 20)
+bandPct  = input.float(0.0, "Band % (0 = T1, 2 = T2)", minval = 0.0, maxval = 10.0, step = 0.5)
+costPct  = input.float(0.1, "Cost per switch %", minval = 0.0, step = 0.05)
+showBg   = input.bool(true, "Colour background")
+showTbl  = input.bool(true, "Show table")
+
+sma   = ta.sma(close, len)
+upper = sma * (1 + bandPct / 100)
+lower = sma * (1 - bandPct / 100)
+
+// regime decided on each close (hysteresis when band > 0)
+var float state = 0.0
+if not na(sma)
+    if state == 0.0 and close > upper
+        state := 1.0
+    else if state == 1.0 and close < lower
+        state := 0.0
+
+turnedOn  = state == 1.0 and state[1] == 0.0
+turnedOff = state == 0.0 and state[1] == 1.0
+
+plot(sma, "SMA", color = color.new(color.gray, 0), linewidth = 2)
+plot(bandPct > 0 ? upper : na, "Upper band", color = color.new(color.green, 50))
+plot(bandPct > 0 ? lower : na, "Lower band", color = color.new(color.red, 50))
+bgcolor(showBg and not na(sma) ? (state == 1.0 ? color.new(color.green, 92) : color.new(color.red, 92)) : na)
+
+if turnedOn and barstate.isconfirmed
+    label.new(bar_index, low, "IN", style = label.style_label_up, color = color.green, textcolor = color.white, size = size.small)
+if turnedOff and barstate.isconfirmed
+    label.new(bar_index, high, "UIT", style = label.style_label_down, color = color.red, textcolor = color.white, size = size.small)
+
+alertcondition(turnedOn and barstate.isconfirmed, "Regime IN", "Close above the SMA200 rule: market regime ON (buy at tomorrow's close)")
+alertcondition(turnedOff and barstate.isconfirmed, "Regime UIT", "Close below the SMA200 rule: market regime OFF (sell at tomorrow's close)")
+if barstate.isconfirmed and (turnedOn or turnedOff)
+    alert(syminfo.ticker + (turnedOn ? ": regime IN (koop morgen op de slot)" : ": regime UIT (verkoop morgen op de slot)"), alert.freq_once_per_bar_close)
+
+// ---- backtest of the rule on this chart, same mechanics as indicator_lab/timing/regime.py (cash earns 0% here) ----
+var float eqRule = 1.0
+var float eqBH   = 1.0
+var float pkRule = 1.0
+var float pkBH   = 1.0
+var float ddRule = 0.0
+var float ddBH   = 0.0
+var int   nBars  = 0
+var int   nIn    = 0
+var int   nSw    = 0
+var int   t0     = na
+wEff = nz(state[2])                       // decided at close t-2, traded at close t-1, earns today's return
+started = not na(sma[2])
+if started and barstate.isconfirmed
+    if na(t0)
+        t0 := time
+    r  = close / close[1] - 1
+    dw = math.abs(wEff - nz(state[3]))
+    eqRule := eqRule * (1 + wEff * r - dw * costPct / 100)
+    eqBH   := eqBH * (1 + r)
+    pkRule := math.max(pkRule, eqRule)
+    pkBH   := math.max(pkBH, eqBH)
+    ddRule := math.min(ddRule, eqRule / pkRule - 1)
+    ddBH   := math.min(ddBH, eqBH / pkBH - 1)
+    nBars  += 1
+    nIn    += wEff > 0 ? 1 : 0
+    nSw    += dw > 0 ? 1 : 0
+
+years = na(t0) ? na : (time - t0) / (365.25 * 24 * 3600 * 1000)
+cagr(eq) => years > 0 ? math.pow(eq, 1 / years) - 1 : na
+
+var table tb = table.new(position.top_right, 3, 8, bgcolor = color.new(color.black, 15), border_width = 1)
+if showTbl and barstate.islast
+    dist = (close / sma - 1) * 100
+    table.cell(tb, 0, 0, "Regime", text_color = color.white)
+    table.cell(tb, 1, 0, state == 1.0 ? "IN (belegd)" : "UIT (cash)", text_color = color.white, bgcolor = state == 1.0 ? color.green : color.red)
+    table.cell(tb, 2, 0, barstate.isconfirmed ? "" : "voorlopig", text_color = color.yellow)
+    table.cell(tb, 0, 1, "Koers t.o.v. SMA", text_color = color.white)
+    table.cell(tb, 1, 1, str.tostring(dist, "#.0") + "%", text_color = color.white)
+    table.cell(tb, 0, 2, timeframe.isdaily ? "Backtest (1 dag vertraging)" : "LET OP: gebruik een daggrafiek", text_color = timeframe.isdaily ? color.white : color.orange)
+    table.cell(tb, 1, 2, "Regel", text_color = color.white)
+    table.cell(tb, 2, 2, "Kopen & vasthouden", text_color = color.white)
+    table.cell(tb, 0, 3, "Rendement per jaar", text_color = color.white)
+    table.cell(tb, 1, 3, str.tostring(cagr(eqRule) * 100, "#.0") + "%", text_color = color.white)
+    table.cell(tb, 2, 3, str.tostring(cagr(eqBH) * 100, "#.0") + "%", text_color = color.white)
+    table.cell(tb, 0, 4, "Max daling", text_color = color.white)
+    table.cell(tb, 1, 4, str.tostring(ddRule * 100, "#.0") + "%", text_color = color.white)
+    table.cell(tb, 2, 4, str.tostring(ddBH * 100, "#.0") + "%", text_color = color.white)
+    table.cell(tb, 0, 5, "Tijd belegd", text_color = color.white)
+    table.cell(tb, 1, 5, str.tostring(nBars > 0 ? 100.0 * nIn / nBars : na, "#") + "%", text_color = color.white)
+    table.cell(tb, 2, 5, "100%", text_color = color.white)
+    table.cell(tb, 0, 6, "Wissels per jaar", text_color = color.white)
+    table.cell(tb, 1, 6, str.tostring(years > 0 ? nSw / years : na, "#.0"), text_color = color.white)
+    table.cell(tb, 0, 7, "Periode", text_color = color.white)
+    table.cell(tb, 1, 7, str.tostring(years, "#.0") + " jaar", text_color = color.white)
+    table.cell(tb, 2, 7, "kas 0%, geen dividend", text_color = color.gray)

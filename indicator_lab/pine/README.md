@@ -85,3 +85,16 @@ Geen financieel advies. De scripts plaatsen geen orders.
 
 `swing_v4_1_strategy.pine` is dezelfde logica als strategy (Strategy Tester, trade-export). Zet "Order size" in
 Properties op ~10% als je het met de portefeuille-opzet uit het onderzoek wilt vergelijken.
+
+## Marktregime-indicator (`market_regime_sma200.pine`) — de regel die de onafhankelijke tests doorstond
+Op een **daggrafiek van een index of index-ETF** (SPY, QQQ, VT, ...): groen = boven de 200-daagse lijn (belegd),
+rood = eronder (cash). **IN** / **UIT** verschijnt op de slotkoers; de ingebouwde backtest-tabel rekent met handelen op
+de slot van de volgende dag en 0,1% kosten per wissel. Instelling *Band %*: 0 = regel T1, 2 = variant T2 (minder wissels).
+
+Waarom deze: van alles wat in `indicator_lab/` is getest (v1-v6, klassiekers, TA-concepten, pro-methodes, rotatie) is dit
+het enige dat op nooit gebruikte data standhield: S&P 500 1960-1992, SPY 1993-2011, Nasdaq-100 1987-2011 en 12
+buitenlandse indexen (`indicator_lab/timing/reports/confirm.md`: betere MAR op 9 van 12, mediane max daling een derde
+kleiner). Het is een **risicoregel**, geen rendementsmachine: het rendement is meestal 1-2% per jaar lager.
+Verwachte tabel (Yahoo-data mét dividend, kas 0%): SPY sinds 1993 regel 8,2%/jaar, max -25%, tegen kopen en vasthouden
+10,8%, max -55%; QQQ sinds 1999 8,5% / -47% tegen 8,8% / -83%. TradingView rekent standaard zonder dividend, dus de
+getallen daar wijken iets af. Met band 0% wissel je ~6-7 keer per jaar (veel kleine schijnsignalen rond de lijn).
