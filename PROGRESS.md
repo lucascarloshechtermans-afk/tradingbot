@@ -960,3 +960,8 @@ trade for trade (`tests/test_pine_sim.py`). Compile-checked. Chart stats OOS v3 
   Frozen in `final_spec_v5.json`, then the single v5 holdout run (`swing5/reports/holdout_v5.md`): on 155 never-used
   S&P 500 names v5 is NOT better than v4 (CAGR 4.2% vs 5.1%, exp 0.060R vs 0.087R), and both lag SPY (13.2%). v5 is not
   released; v4.1 stays. The v4 edge largely depends on the volatile, hindsight-chosen development universe.
+
+## Session 11 — TA concepts, pro swing methods, Minervini 4H holdout
+- TA concepts (EMA pullbacks, S/R breakout/retest, market structure, GEX filter) on NASDAQ daily + 4H: all negative CAGR vs SPY (`h4/reports/ta_concepts_*.md`).
+- Nine published pro methods (Minervini, Qullamaggie x2, Raschke x2, Weinstein, pocket pivot, AVWAP, NR7), with/without SPY>SMA200: none beats SPY; best was Minervini on 4H (15.3% CAGR, Sharpe 0.76 vs SPY 16.5%, 1.02) (`h4/reports/pro_concepts_*.md`).
+- Pre-registered one-shot test of Minervini 4H on the NASDAQ part of the sealed 20/21 ticker holdout: FAILED (-0.4% CAGR, Sharpe 0.04). That holdout's NASDAQ tickers are now spent (`h4/holdout_minervini4h_used.json`).
