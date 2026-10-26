@@ -37,6 +37,7 @@ class Policy:
     target: float | None = None      # whole (remaining) position out at +target R
     tgt_pct: float | None = None     # or at +tgt_pct of the fill price (limit order; a gap above fills at the open)
     max_week: int | None = None      # at most this many BUY signals acted on per calendar week (ISO week)
+    stop_pct: float | None = None    # protective stop at fill x (1 - stop_pct) instead of fill - stop x ATR (defines R)
     min_gap_days: int | None = None  # a BUY signal is only acted on if the previous one on this stock was >= this many
                                      #   calendar days earlier (e.g. 14 = at most one BUY per two weeks)
     be_at: float | None = None       # stop to entry + costs once the high reached +be_at R
@@ -191,7 +192,7 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
                 continue
             kind = order["kind"]
             order = None
-            rp = pol.stop * atr[i]
+            rp = fill * pol.stop_pct if pol.stop_pct is not None else pol.stop * atr[i]
             st.update({"in": True, "ep": fill, "ei": t, "sig": i, "risk_px": rp, "stop": fill - rp, "hh": h[t],
                        "q0": 1 / (fill * (1 + slip) * (1 + cost)), "cash": 0.0, "left": 1.0, "pend_all": None, "pend_frac": 0.0,
                        "phit": [False] * len(parts), "parts_hit": 0, "tight": False, "ox_done": False,
