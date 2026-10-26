@@ -1,0 +1,98 @@
+//@version=6
+// Minervini trend template + VCP breakout (rule P1 of indicator_lab/h4/pro_concepts.py), for a 4-HOUR chart.
+// Research status (be aware): best stock rule on 4H in development (15.3%/yr 2024-26), but it FAILED its one-shot
+// holdout on never-used stocks (-0.4%/yr). Use it as a watchlist tool, not as a proven edge.
+// Difference with the research: the research required an RS rank >= 80th percentile across ~3000 NASDAQ stocks;
+// Pine cannot rank a universe, so here RS = the stock's IBD-style RS score minus SPY's, >= "Min RS vs SPY".
+// The Python scanner (python -m indicator_lab.h4.scan4h) uses the real ranking.
+// Rules (in 4H bars, as tested):
+//   trend template: close > SMA50 > SMA150 > SMA200, SMA200 above its value 21 bars ago, close >= 1.3 x 252-bar
+//   low and >= 0.75 x 252-bar high; VCP: prior 10-bar range <= 10% and < half the 40-bar range, 10-bar volume below
+//   the 50-bar average; BUY when the close breaks the prior 10-bar high on >= 1.4 x average volume.
+//   Fill: next bar's open. Stop: -8% from the fill. SELL: close < SMA50 (next open) or the stop is hit.
+//   At most one BUY per stock per 14 days; liquidity: close >= $5 and 50-bar average dollar volume >= $2.5M.
+indicator("Minervini VCP 4H", overlay = true, max_labels_count = 500)
+
+minRS    = input.float(0.0, "Min RS vs SPY (IBD score difference)", step = 0.05)
+stopPct  = input.float(8.0, "Stop % below fill", minval = 1.0)
+gapDays  = input.int(14, "Min days between BUY signals", minval = 0)
+spySym   = input.symbol("AMEX:SPY", "Benchmark")
+
+sma50  = ta.sma(close, 50)
+sma150 = ta.sma(close, 150)
+sma200 = ta.sma(close, 200)
+roc(n) => close / close[n] - 1
+rsScore = 0.4 * roc(63) + 0.2 * (roc(126) + roc(189) + roc(252))
+spyScore = request.security(spySym, timeframe.period, 0.4 * (close / close[63] - 1) + 0.2 * ((close / close[126] - 1) + (close / close[189] - 1) + (close / close[252] - 1)), lookahead = barmerge.lookahead_off)
+rsOK = rsScore - spyScore >= minRS
+
+tt = close > sma50 and sma50 > sma150 and sma150 > sma200 and sma200 > sma200[21] and close >= 1.3 * ta.lowest(low, 252) and close >= 0.75 * ta.highest(high, 252) and rsOK
+r10 = (ta.highest(high, 10) - ta.lowest(low, 10)) / close
+r40 = (ta.highest(high, 40) - ta.lowest(low, 40)) / close
+vAvg50 = ta.sma(volume, 50)
+vcp = r10 <= 0.10 and r10 < 0.5 * r40 and ta.sma(volume, 10) < vAvg50
+liquid = close >= 5 and ta.sma(close * volume, 50) >= 2.5e6
+signal = tt[1] and vcp[1] and close > ta.highest(high, 10)[1] and volume >= 1.4 * vAvg50 and liquid
+
+var bool  inPos   = false
+var bool  pendBuy = false
+var bool  pendSell = false
+var float entry   = na
+var float stopLvl = na
+var int   lastSig = na
+buyNow = false
+sellNow = false
+sellTxt = ""
+
+// fills at this bar's open for orders decided on the previous close
+if pendBuy
+    inPos := true
+    entry := open
+    stopLvl := open * (1 - stopPct / 100)
+    pendBuy := false
+if pendSell and inPos
+    inPos := false
+    pendSell := false
+    sellNow := true
+    sellTxt := "SELL (slot < SMA50)"
+if inPos and low <= stopLvl
+    inPos := false
+    sellNow := true
+    sellTxt := "SELL (stop)"
+
+if barstate.isconfirmed
+    gapOK = na(lastSig) or (time - lastSig) >= gapDays * 86400000
+    if signal and not inPos and not pendBuy and gapOK
+        pendBuy := true
+        lastSig := time
+        buyNow := true
+    if inPos and close < sma50
+        pendSell := true
+
+plot(sma50, "SMA50", color = color.new(color.blue, 0))
+plot(sma150, "SMA150", color = color.new(color.orange, 30))
+plot(sma200, "SMA200", color = color.new(color.red, 30), linewidth = 2)
+plot(inPos ? stopLvl : na, "Stop", color = color.red, style = plot.style_linebr)
+if buyNow
+    label.new(bar_index, low, "BUY", style = label.style_label_up, color = color.green, textcolor = color.white, size = size.small)
+if sellNow
+    label.new(bar_index, high, sellTxt, style = label.style_label_down, color = color.red, textcolor = color.white, size = size.small)
+
+alertcondition(buyNow, "BUY", "Minervini VCP 4H: BUY on the close, fill at the next open, stop -8%")
+alertcondition(sellNow, "SELL", "Minervini VCP 4H: SELL")
+if buyNow
+    alert(syminfo.ticker + ": BUY (VCP 4H) op " + str.tostring(close, format.mintick) + ", stop ~" + str.tostring(close * (1 - stopPct / 100), format.mintick), alert.freq_once_per_bar_close)
+
+var table tb = table.new(position.top_right, 2, 6, bgcolor = color.new(color.black, 15), border_width = 1)
+if barstate.islast
+    table.cell(tb, 0, 0, "Trend template", text_color = color.white)
+    table.cell(tb, 1, 0, tt ? "ja" : "nee", text_color = color.white, bgcolor = tt ? color.green : color.gray)
+    table.cell(tb, 0, 1, "VCP (strak + droog volume)", text_color = color.white)
+    table.cell(tb, 1, 1, vcp ? "ja" : "nee", text_color = color.white, bgcolor = vcp ? color.green : color.gray)
+    table.cell(tb, 0, 2, "RS vs SPY", text_color = color.white)
+    table.cell(tb, 1, 2, str.tostring((rsScore - spyScore) * 100, "#.0") + " pp", text_color = color.white)
+    table.cell(tb, 0, 3, "Status", text_color = color.white)
+    table.cell(tb, 1, 3, inPos ? "LONG" : pendBuy ? "BUY: koop bij open volgende bar" : "-", text_color = color.white)
+    table.cell(tb, 0, 4, "Stop", text_color = color.white)
+    table.cell(tb, 1, 4, inPos ? str.tostring(stopLvl, format.mintick) : "-", text_color = color.white)
+    table.cell(tb, 0, 5, timeframe.period == "240" ? "4H-grafiek" : "LET OP: zet de grafiek op 4H", text_color = timeframe.period == "240" ? color.gray : color.orange)
