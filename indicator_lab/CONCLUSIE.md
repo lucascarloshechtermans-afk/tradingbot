@@ -44,3 +44,11 @@ Er zijn inmiddels ruim 15 afzonderlijke hypotheses vooraf vastgelegd en getest. 
 door toeval eens één slagen. Daarom telt alleen wat op meerdere onafhankelijke datasets standhoudt; dat is tot nu toe
 alleen de SMA200-regime-regel (VS 1960-2011 én 12 buitenlandse beurzen).
 
+
+## Wat de wetenschap zegt over echte traders (ter vergelijking)
+- Brazilië (Chague, De-Losso & Giovannetti): van wie meer dan 300 dagen daytradede, verloor ~97% geld.
+- Taiwan (Barber, Lee, Liu & Odean, 1992-2006): minder dan 1% van de daytraders was aantoonbaar en blijvend winstgevend.
+- SPIVA (S&P): ~90% van de actieve Amerikaanse large-cap-fondsen deed het over 15 jaar slechter dan de S&P 500.
+- Replicatie van 447 gepubliceerde beurseffecten (Hou, Xue & Zhang): 64-85% houdt geen stand; kortetermijnomkeer
+  (de basis van RSI(2)-strategieën) hoort bij de mislukte; post-earnings drift overleeft, maar kleiner. Precies wat
+  ook hier gemeten is.
