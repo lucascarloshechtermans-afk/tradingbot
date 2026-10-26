@@ -279,7 +279,7 @@ def main():
             continue
         df = df[(df[["open", "high", "low", "close"]] > 0).all(axis=1) & (df.index <= END)]
         m = universe_mask(df)
-        win = (df.index >= START).to_numpy()
+        win = np.asarray(df.index >= START)
         if (m & win).sum() < 20:
             continue
         frames[t] = df
@@ -288,7 +288,7 @@ def main():
     E = pd.concat(elig, axis=1).fillna(False)
     S = pd.concat(score, axis=1).where(E)
     thr80 = S.quantile(0.8, axis=1)
-    spy_c = spy["close"]
+    spy_c = spy
     up = (spy_c > spy_c.rolling(50).mean()) & (spy_c.ewm(span=20, adjust=False).mean() > spy_c.ewm(span=50, adjust=False).mean())
     print(f"{len(frames)} tickers ever in the universe; median eligible per day "
           f"{int(E.loc[E.index >= START].sum(axis=1).median())}", flush=True)
