@@ -1,0 +1,164 @@
+//@version=6
+// Support / resistance zones — Pine port of indicator_lab/sr.py (same rules, point in time):
+//  1. pivot highs/lows (5 bars each side, known 5 bars later) of the last 250 bars, clustered when neighbours lie
+//     within 0.5 x ATR; strength = touches x (1 + 0.25 x mean relative volume, capped at 2) x recency
+//     (1.0 if the last touch < 60 bars ago, 0.75 if < 120, else 0.5)
+//  2. extra levels: previous week high/low (1), 52-week high (2), round numbers (0.5), high-volume nodes of the last
+//     120 bars (30-bin volume profile, bins >= 1.5 x mean; 1)
+//  3. flip: the nearest support is a zone containing a pivot HIGH and a close of the last 20 bars was below its middle
+// Output: nearest support / resistance, distance in % and ATR, room to the next STRONG (>= 2) resistance.
+// Known difference: ta.pivothigh needs a strictly higher high than its neighbours, sr.py also counts ties (rare).
+indicator("S/R zones", overlay = true, max_boxes_count = 60, max_lines_count = 100)
+
+w      = input.int(5, "Pivot bars each side", minval = 2)
+tolAtr = input.float(0.5, "Cluster tolerance (x ATR)", step = 0.1)
+age    = input.int(250, "Pivot window (bars)", minval = 50, maxval = 500)
+vpN    = input.int(120, "Volume profile bars", minval = 20, maxval = 300)
+vpBins = input.int(30, "Volume profile bins", minval = 10, maxval = 60)
+drawN  = input.int(8, "Zones to draw (strongest near price)", minval = 0, maxval = 30)
+
+atr = ta.rma(ta.tr(true), 14)
+relv = volume / ta.sma(volume, 50)
+ph = ta.pivothigh(high, w, w)
+pl = ta.pivotlow(low, w, w)
+
+var pPx = array.new_float()
+var pBar = array.new_int()
+var pHi = array.new_bool()
+var pRv = array.new_float()
+if not na(ph)
+    array.push(pPx, ph), array.push(pBar, bar_index - w), array.push(pHi, true), array.push(pRv, nz(relv[w], 1.0))
+if not na(pl)
+    array.push(pPx, pl), array.push(pBar, bar_index - w), array.push(pHi, false), array.push(pRv, nz(relv[w], 1.0))
+while array.size(pBar) > 0 and array.get(pBar, 0) < bar_index - age
+    array.shift(pPx), array.shift(pBar), array.shift(pHi), array.shift(pRv)
+
+wkHi = request.security(syminfo.tickerid, "W", high[1], lookahead = barmerge.lookahead_on)
+wkLo = request.security(syminfo.tickerid, "W", low[1], lookahead = barmerge.lookahead_on)
+hi52 = ta.highest(high, 252)[1]
+vpMin = ta.lowest(low, vpN)
+vpMax = ta.highest(high, vpN)
+
+// levels of this bar: price, zone low, strength, flip, zone high
+lvPx = array.new_float()
+lvLo = array.new_float()
+lvHi = array.new_float()
+lvSt = array.new_float()
+lvFl = array.new_bool()
+n = array.size(pPx)
+if n > 0 and atr > 0
+    idx = array.sort_indices(pPx)
+    tl = tolAtr * atr
+    j = 0
+    while j < n
+        s = j
+        while j + 1 < n and array.get(pPx, array.get(idx, j + 1)) - array.get(pPx, array.get(idx, j)) <= tl
+            j += 1
+        zlo = array.get(pPx, array.get(idx, s))
+        zhi = array.get(pPx, array.get(idx, j))
+        cnt = j - s + 1
+        rv = 0.0
+        last = -1
+        hasHi = false
+        for q = s to j
+            o_ = array.get(idx, q)
+            rv += array.get(pRv, o_)
+            last := math.max(last, array.get(pBar, o_))
+            hasHi := hasHi or array.get(pHi, o_)
+        ag = bar_index - last
+        rec = ag < 60 ? 1.0 : ag < 120 ? 0.75 : 0.5
+        st = cnt * (1.0 + 0.25 * math.min(rv / cnt, 2.0)) * rec
+        mid = 0.5 * (zlo + zhi)
+        fl = false
+        if hasHi
+            for q = 1 to 20
+                if close[q] < mid
+                    fl := true
+                    break
+        array.push(lvPx, mid), array.push(lvLo, zlo), array.push(lvHi, zhi), array.push(lvSt, st), array.push(lvFl, fl)
+        j += 1
+if not na(wkHi)
+    array.push(lvPx, wkHi), array.push(lvLo, wkHi), array.push(lvHi, wkHi), array.push(lvSt, 1.0), array.push(lvFl, false)
+    array.push(lvPx, wkLo), array.push(lvLo, wkLo), array.push(lvHi, wkLo), array.push(lvSt, 1.0), array.push(lvFl, false)
+if not na(hi52)
+    array.push(lvPx, hi52), array.push(lvLo, hi52), array.push(lvHi, hi52), array.push(lvSt, 2.0), array.push(lvFl, false)
+stp = close < 10 ? 1.0 : close < 50 ? 5.0 : close < 200 ? 10.0 : close < 1000 ? 50.0 : 100.0
+base = math.floor(close / stp) * stp
+for r = -2 to 3
+    px = base + r * stp
+    array.push(lvPx, px), array.push(lvLo, px), array.push(lvHi, px), array.push(lvSt, 0.5), array.push(lvFl, false)
+if bar_index >= vpN
+    pmin = vpMin
+    pmax = vpMax
+    if pmax > pmin
+        hist = array.new_float(vpBins, 0.0)
+        bw = (pmax - pmin) / vpBins
+        for i = 0 to vpN - 1
+            tp = (high[i] + low[i] + close[i]) / 3.0
+            b = math.min(int((tp - pmin) / bw), vpBins - 1)
+            array.set(hist, b, array.get(hist, b) + volume[i])
+        mean = array.avg(hist)
+        for b = 0 to vpBins - 1
+            if array.get(hist, b) >= 1.5 * mean
+                px = pmin + (b + 0.5) * bw
+                array.push(lvPx, px), array.push(lvLo, px), array.push(lvHi, px), array.push(lvSt, 1.0), array.push(lvFl, false)
+
+// nearest support (<= close) and resistance (> close); the strongest wins within 0.25 ATR
+bs = -1
+br = -1
+bstrong = -1
+for q = 0 to math.max(array.size(lvPx) - 1, 0)
+    if array.size(lvPx) == 0
+        break
+    px = array.get(lvPx, q)
+    st = array.get(lvSt, q)
+    if px <= close
+        if bs < 0 or px > array.get(lvPx, bs) + 0.25 * atr or (math.abs(px - array.get(lvPx, bs)) <= 0.25 * atr and st > array.get(lvSt, bs))
+            bs := q
+    else
+        if br < 0 or px < array.get(lvPx, br) - 0.25 * atr or (math.abs(px - array.get(lvPx, br)) <= 0.25 * atr and st > array.get(lvSt, br))
+            br := q
+        if st >= 2.0 and (bstrong < 0 or px < array.get(lvPx, bstrong))
+            bstrong := q
+sup = bs >= 0 ? array.get(lvPx, bs) : na
+supLo = bs >= 0 ? array.get(lvLo, bs) : na
+supSt = bs >= 0 ? array.get(lvSt, bs) : na
+supFlip = bs >= 0 ? array.get(lvFl, bs) : false
+res = br >= 0 ? array.get(lvPx, br) : na
+resSt = br >= 0 ? array.get(lvSt, br) : na
+resStrong = bstrong >= 0 ? array.get(lvPx, bstrong) : na
+roomPct = (resStrong / close - 1) * 100
+
+plot(sup, "Support", color = color.new(color.green, 0), style = plot.style_stepline)
+plot(res, "Resistance", color = color.new(color.red, 0), style = plot.style_stepline)
+plot(resStrong, "Strong resistance", color = color.new(color.red, 60), style = plot.style_stepline, linewidth = 2)
+plotshape(supFlip and not supFlip[1], "Flip", shape.diamond, location.belowbar, color.new(color.teal, 0), size = size.tiny)
+
+var box[] boxes = array.new_box()
+if barstate.islast
+    for bx in boxes
+        box.delete(bx)
+    array.clear(boxes)
+    // draw the strongest pivot zones within 25% of the close
+    cnt = 0
+    ranked = array.sort_indices(lvSt, order.descending)
+    for q in ranked
+        if cnt >= drawN
+            break
+        zlo = array.get(lvLo, q)
+        zhi = array.get(lvHi, q)
+        if zhi > zlo and math.abs(array.get(lvPx, q) / close - 1) <= 0.25
+            col = array.get(lvPx, q) <= close ? color.new(color.green, 80) : color.new(color.red, 80)
+            array.push(boxes, box.new(bar_index - 100, zhi, bar_index + 5, zlo, border_color = col, bgcolor = col))
+            cnt += 1
+
+var table tb = table.new(position.bottom_right, 2, 4, bgcolor = color.new(color.black, 15), border_width = 1)
+if barstate.islast
+    table.cell(tb, 0, 0, "Support", text_color = color.white)
+    table.cell(tb, 1, 0, str.tostring(sup, format.mintick) + " (" + str.tostring((close / sup - 1) * 100, "#.0") + "%, " + str.tostring((close - sup) / atr, "#.0") + " ATR)" + (supFlip ? " FLIP" : ""), text_color = color.white)
+    table.cell(tb, 0, 1, "Weerstand", text_color = color.white)
+    table.cell(tb, 1, 1, str.tostring(res, format.mintick) + " (" + str.tostring((res / close - 1) * 100, "#.0") + "%, " + str.tostring((res - close) / atr, "#.0") + " ATR)", text_color = color.white)
+    table.cell(tb, 0, 2, "Sterke weerstand", text_color = color.white)
+    table.cell(tb, 1, 2, na(resStrong) ? "geen" : str.tostring(resStrong, format.mintick), text_color = color.white)
+    table.cell(tb, 0, 3, "Ruimte (potentieel)", text_color = color.white)
+    table.cell(tb, 1, 3, na(roomPct) ? "geen sterke weerstand" : str.tostring(roomPct, "#.0") + "%", text_color = color.white, bgcolor = na(roomPct) or roomPct >= 10 ? color.new(color.green, 40) : color.new(color.red, 40))
