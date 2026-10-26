@@ -98,7 +98,7 @@ def main():
             rows.append({"ticker": t, "signaal (4H-bar)": df.index[i].strftime("%Y-%m-%d %H:%M"),
                          "slot signaalbar": round(c, 2), "laatste koers": round(float(df["close"].iloc[-1]), 2),
                          "sinds signaal": f"{(df['close'].iloc[-1] / c - 1) * 100:+.1f}%",
-                         "stop (-8% van instap)": round(c * (1 - stop_pct), 2),
+                         "stop (≈ -8% van signaalslot)": round(c * (1 - stop_pct), 2),
                          "RS-percentiel": round(float(rs[t].reindex(df.index).iloc[i]), 0),
                          "ATR%": f"{float(ind.atr(df, 14).iloc[i]) / c * 100:.1f}%"})
     d = pd.DataFrame(rows).sort_values("signaal (4H-bar)", ascending=False) if rows else pd.DataFrame()
