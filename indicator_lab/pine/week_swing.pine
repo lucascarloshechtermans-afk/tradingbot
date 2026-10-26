@@ -1,0 +1,406 @@
+//@version=6
+// One-week swing system — Pine port of indicator_lab/week (build.py setups + standard exits + sr.py zones).
+// Use on a DAILY chart. Signals are decided on the close; entry the next day (setup 3: buy-stop at the gap day's high).
+// Standard exits (identical for every setup, as tested):
+//   stop  = max(fill x 0.92, min(support/anchor - 0.25 ATR, fill - 1 ATR))  (under the support, max 8% risk)
+//   T1    = +10%: sell 50%, stop to break-even      T2 = next strong resistance clipped to +10..+20% (else +20%)
+//   time  = sell the rest at the close of day 10
+// Universe filter as tested: ADR(20) > 4%, close > $5, 50-day average dollar volume > $20M.
+// Research results: see results/strategy_log.md (only the out-of-sample column counts).
+indicator("Week swing (S/R + 10 setups)", overlay = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 60)
+
+grpS = "Setups"
+s1 = input.bool(true, "1 VCP (Minervini)", group = grpS)
+s2 = input.bool(true, "2 Qullamaggie breakout", group = grpS)
+s3 = input.bool(true, "3 Episodic pivot", group = grpS)
+s4 = input.bool(true, "4 S/R flip retest", group = grpS)
+s5 = input.bool(true, "5 Failed breakdown / spring", group = grpS)
+s6 = input.bool(true, "6 Pullback in trend (RSI2)", group = grpS)
+s7 = input.bool(true, "7 Squeeze breakout (TTM)", group = grpS)
+s8 = input.bool(true, "8 Inside bar / NR7 at support", group = grpS)
+s9 = input.bool(true, "9 Anchored VWAP reclaim", group = grpS)
+s10 = input.bool(true, "10 RS leader breakout", group = grpS)
+grpF = "Filters"
+fReg  = input.bool(false, "Market regime: SPY > SMA50 and EMA20 > EMA50", group = grpF)
+fRoom = input.bool(false, "Room >= 10% to the next strong resistance", group = grpF)
+fVol  = input.bool(false, "Volume >= 1.5x on the signal day", group = grpF)
+fUniv = input.bool(true, "Universe: ADR > 4%, > $5, > $20M/day", group = grpF)
+spySym = input.symbol("AMEX:SPY", "Benchmark / regime", group = grpF)
+drawN  = input.int(6, "S/R zones to draw", minval = 0, maxval = 30)
+
+// ------------------------------------------------------------------ S/R (same rules as sr.py / sr_zones.pine)
+atr = ta.rma(ta.tr(true), 14)
+relv = volume / ta.sma(volume, 50)
+pw = 5
+ph = ta.pivothigh(high, pw, pw)
+pl = ta.pivotlow(low, pw, pw)
+var pPx = array.new_float()
+var pBar = array.new_int()
+var pHi = array.new_bool()
+var pRv = array.new_float()
+if not na(ph)
+    array.push(pPx, ph), array.push(pBar, bar_index - pw), array.push(pHi, true), array.push(pRv, nz(relv[pw], 1.0))
+if not na(pl)
+    array.push(pPx, pl), array.push(pBar, bar_index - pw), array.push(pHi, false), array.push(pRv, nz(relv[pw], 1.0))
+while array.size(pBar) > 0 and array.get(pBar, 0) < bar_index - 250
+    array.shift(pPx), array.shift(pBar), array.shift(pHi), array.shift(pRv)
+wkHi = request.security(syminfo.tickerid, "W", high[1], lookahead = barmerge.lookahead_on)
+wkLo = request.security(syminfo.tickerid, "W", low[1], lookahead = barmerge.lookahead_on)
+hi52 = ta.highest(high, 252)[1]
+vpMin = ta.lowest(low, 120)
+vpMax = ta.highest(high, 120)
+lvPx = array.new_float()
+lvLo = array.new_float()
+lvHi = array.new_float()
+lvSt = array.new_float()
+lvFl = array.new_bool()
+np_ = array.size(pPx)
+if np_ > 0 and atr > 0
+    idx = array.sort_indices(pPx)
+    j = 0
+    while j < np_
+        s = j
+        while j + 1 < np_ and array.get(pPx, array.get(idx, j + 1)) - array.get(pPx, array.get(idx, j)) <= 0.5 * atr
+            j += 1
+        zlo = array.get(pPx, array.get(idx, s))
+        zhi = array.get(pPx, array.get(idx, j))
+        cnt = j - s + 1
+        rv = 0.0
+        last = -1
+        hasHi = false
+        for q = s to j
+            o_ = array.get(idx, q)
+            rv += array.get(pRv, o_)
+            last := math.max(last, array.get(pBar, o_))
+            hasHi := hasHi or array.get(pHi, o_)
+        ag = bar_index - last
+        st = cnt * (1.0 + 0.25 * math.min(rv / cnt, 2.0)) * (ag < 60 ? 1.0 : ag < 120 ? 0.75 : 0.5)
+        mid = 0.5 * (zlo + zhi)
+        fl = false
+        if hasHi
+            for q = 1 to 20
+                if close[q] < mid
+                    fl := true
+                    break
+        array.push(lvPx, mid), array.push(lvLo, zlo), array.push(lvHi, zhi), array.push(lvSt, st), array.push(lvFl, fl)
+        j += 1
+if not na(wkHi)
+    array.push(lvPx, wkHi), array.push(lvLo, wkHi), array.push(lvHi, wkHi), array.push(lvSt, 1.0), array.push(lvFl, false)
+    array.push(lvPx, wkLo), array.push(lvLo, wkLo), array.push(lvHi, wkLo), array.push(lvSt, 1.0), array.push(lvFl, false)
+if not na(hi52)
+    array.push(lvPx, hi52), array.push(lvLo, hi52), array.push(lvHi, hi52), array.push(lvSt, 2.0), array.push(lvFl, false)
+stp = close < 10 ? 1.0 : close < 50 ? 5.0 : close < 200 ? 10.0 : close < 1000 ? 50.0 : 100.0
+base = math.floor(close / stp) * stp
+for r = -2 to 3
+    px = base + r * stp
+    array.push(lvPx, px), array.push(lvLo, px), array.push(lvHi, px), array.push(lvSt, 0.5), array.push(lvFl, false)
+if bar_index >= 120 and vpMax > vpMin
+    hist = array.new_float(30, 0.0)
+    bw = (vpMax - vpMin) / 30
+    for i = 0 to 119
+        tp = (high[i] + low[i] + close[i]) / 3.0
+        b = math.min(int((tp - vpMin) / bw), 29)
+        array.set(hist, b, array.get(hist, b) + volume[i])
+    mean = array.avg(hist)
+    for b = 0 to 29
+        if array.get(hist, b) >= 1.5 * mean
+            px = vpMin + (b + 0.5) * bw
+            array.push(lvPx, px), array.push(lvLo, px), array.push(lvHi, px), array.push(lvSt, 1.0), array.push(lvFl, false)
+bs = -1
+br = -1
+bstrong = -1
+for q = 0 to math.max(array.size(lvPx) - 1, 0)
+    if array.size(lvPx) == 0
+        break
+    px = array.get(lvPx, q)
+    st = array.get(lvSt, q)
+    if px <= close
+        if bs < 0 or px > array.get(lvPx, bs) + 0.25 * atr or (math.abs(px - array.get(lvPx, bs)) <= 0.25 * atr and st > array.get(lvSt, bs))
+            bs := q
+    else
+        if br < 0 or px < array.get(lvPx, br) - 0.25 * atr or (math.abs(px - array.get(lvPx, br)) <= 0.25 * atr and st > array.get(lvSt, br))
+            br := q
+        if st >= 2.0 and (bstrong < 0 or px < array.get(lvPx, bstrong))
+            bstrong := q
+sup = bs >= 0 ? array.get(lvPx, bs) : na
+supLo = bs >= 0 ? array.get(lvLo, bs) : na
+supSt = bs >= 0 ? array.get(lvSt, bs) : na
+supFlip = bs >= 0 ? array.get(lvFl, bs) : false
+res = br >= 0 ? array.get(lvPx, br) : na
+resStrong = bstrong >= 0 ? array.get(lvPx, bstrong) : na
+roomPct = (resStrong / close - 1) * 100
+dsa = (close - sup) / atr
+
+// ------------------------------------------------------------------ setups (build.py)
+va50 = ta.sma(volume, 50)[1]
+vol15 = volume >= 1.5 * va50
+e10 = ta.ema(close, 10)
+e20 = ta.ema(close, 20)
+e50 = ta.ema(close, 50)
+e200 = ta.ema(close, 200)
+sm50 = ta.sma(close, 50)
+sm200 = ta.sma(close, 200)
+spyC = request.security(spySym, "D", close, lookahead = barmerge.lookahead_off)
+regimeUp() =>
+    s50 = ta.sma(close, 50)
+    e20_ = ta.ema(close, 20)
+    e50_ = ta.ema(close, 50)
+    close > s50 and e20_ > e50_
+spyUp = request.security(spySym, "D", regimeUp(), lookahead = barmerge.lookahead_off)
+
+// 1 VCP: pivots of 3 bars in the last 60 bars, >= 2 successively smaller contractions, last <= 12%, dry volume
+ph3 = ta.pivothigh(high, 3, 3)
+pl3 = ta.pivotlow(low, 3, 3)
+var hBar = array.new_int()
+var hPx = array.new_float()
+var lBar = array.new_int()
+var lPx = array.new_float()
+if not na(ph3)
+    array.push(hBar, bar_index - 3), array.push(hPx, ph3)
+if not na(pl3)
+    array.push(lBar, bar_index - 3), array.push(lPx, pl3)
+while array.size(hBar) > 0 and array.get(hBar, 0) < bar_index - 60
+    array.shift(hBar), array.shift(hPx)
+while array.size(lBar) > 0 and array.get(lBar, 0) < bar_index - 60
+    array.shift(lBar), array.shift(lPx)
+dry = ta.sma(volume, 10) < ta.sma(volume, 50)
+hi5p = ta.highest(high, 5)[1]
+vcpSig = false
+float vcpAnchor = na
+if vol15 and close > sm50 and sm50 > sm200 and close > hi5p and array.size(hBar) >= 2
+    depths = array.new_float()
+    float lastHi = na
+    float lastLo = na
+    nh = array.size(hBar)
+    for jh = 0 to nh - 1
+        hb = array.get(hBar, jh)
+        if hb > bar_index - 3
+            break
+        nxt = jh + 1 < nh ? array.get(hBar, jh + 1) : bar_index - 2
+        float lmin = na
+        for jl = 0 to math.max(array.size(lBar) - 1, 0)
+            if array.size(lBar) == 0
+                break
+            lb = array.get(lBar, jl)
+            if lb > hb and lb < math.min(nxt, bar_index - 2)
+                lmin := na(lmin) ? array.get(lPx, jl) : math.min(lmin, array.get(lPx, jl))
+        if not na(lmin)
+            array.push(depths, 1 - lmin / array.get(hPx, jh))
+            lastHi := array.get(hPx, jh)
+            lastLo := lmin
+    nd = array.size(depths)
+    if nd >= 2
+        k2 = 1
+        lim = math.min(nd, 4)
+        while k2 < lim and array.get(depths, nd - k2 - 1) > array.get(depths, nd - k2)
+            k2 += 1
+        if k2 >= 2 and array.get(depths, nd - 1) <= 0.12 and dry[1] and close > lastHi and close[1] <= lastHi
+            vcpSig := true
+            vcpAnchor := lastLo
+// 2 Qullamaggie
+runup = ta.highest(close, 63) / ta.lowest(close, 106)[20]
+flagHi = ta.highest(high, 10)[1]
+flagLo = ta.lowest(low, 10)[1]
+ride = math.sum(close > e20 ? 1 : 0, 10)[1] >= 8
+qSig = runup >= 1.30 and (flagHi - flagLo) / close <= 0.15 and ride and close > flagHi and vol15
+// 3 Episodic pivot (entry: buy-stop at this bar's high, next day)
+epSig = open >= 1.10 * close[1] and volume >= 3 * va50 and close >= open
+// 4 S/R flip retest
+rng = high - low
+bull = close > open and rng > 0 and (close - low) / rng >= 0.6
+flipSig = supFlip and low <= sup + 0.25 * atr and close > sup and bull
+// 5 Failed breakdown / spring (close below a strong support zone, back above its middle within 1-3 bars)
+sprSig = false
+float sprAnchor = na
+for k = 3 to 1                      // oldest break first, as build.py
+    if nz(supSt[k + 1]) >= 2 and close[k] < supLo[k + 1]
+        zmid = sup[k + 1]
+        ok = close > zmid
+        for q = 1 to k
+            ok := ok and close[q] <= zmid
+        if ok
+            sprSig := true
+            mn = low
+            for q = 1 to k
+                mn := math.min(mn, low[q])
+            sprAnchor := mn
+            break
+// 6 Pullback in a strong trend
+r2 = ta.rsi(close, 2)
+pbSig = close > e50 and e50 > e200 and r2 < 10 and (low <= e10 or dsa <= 0.5)
+pbAnchor = dsa <= 1.0 ? supLo : low
+// 7 TTM squeeze release
+m20 = ta.sma(close, 20)
+sd = ta.stdev(close, 20)
+sq = m20 + 2 * sd < e20 + 1.5 * atr and m20 - 2 * sd > e20 - 1.5 * atr
+sq5 = math.sum(sq ? 1 : 0, 5) == 5
+sqSig = sq5[1] and not sq and close > close[1] and close > m20 and close > e50
+// 8 Inside bar + NR7 at support
+ins = high <= high[1] and low >= low[1]
+nr7 = (high - low) <= ta.lowest(high - low, 7)
+nrSig = ins[1] and nr7[1] and dsa[1] <= 0.75 and close > high[1]
+// 9 Anchored VWAP reclaim (anchor: lowest low of bars 5..60 back)
+avSig = false
+if bar_index > 65
+    lowest = low[5]
+    off = 5
+    for q = 5 to 60
+        if low[q] < lowest
+            lowest := low[q]
+            off := q
+    pv = 0.0
+    vv = 0.0
+    for q = 1 to off
+        pv += (high[q] + low[q] + close[q]) / 3 * volume[q]
+        vv += volume[q]
+    aw1 = vv > 0 ? pv / vv : na
+    pv += (high + low + close) / 3 * volume
+    vv += volume
+    aw = vv > 0 ? pv / vv : na
+    avSig := close > aw and close[1] <= aw1 and close > open
+// 10 RS leader
+rsl = close / spyC
+rslHi = ta.highest(rsl, 126)[1]
+hi126 = ta.highest(high, 126)[1]
+hi20p = ta.highest(high, 20)[1]
+rsNh = rsl >= rslHi and close < 0.97 * hi126
+rsRecent = ta.highest(rsNh[1] ? 1 : 0, 10) == 1
+rsSig = rsRecent and close > hi20p and vol15
+
+low6 = ta.lowest(low, 6)
+low3 = ta.lowest(low, 3)
+low20p = ta.lowest(low, 20)[1]
+adr = ta.sma(high / low - 1, 20) * 100
+dv50 = ta.sma(close * volume, 50)
+univ = not fUniv or (adr > 4 and close > 5 and dv50 > 20e6)
+filt = univ and (not fReg or spyUp) and (not fRoom or na(roomPct) or roomPct >= 10) and (not fVol or vol15)
+
+// first enabled setup that fires (priority 1 .. 10), with its stop anchor
+setup = 0
+float anchor = na
+if filt
+    if s1 and vcpSig
+        setup := 1, anchor := vcpAnchor
+    else if s2 and qSig
+        setup := 2, anchor := flagLo
+    else if s3 and epSig
+        setup := 3, anchor := low
+    else if s4 and flipSig
+        setup := 4, anchor := supLo
+    else if s5 and sprSig
+        setup := 5, anchor := sprAnchor
+    else if s6 and pbSig
+        setup := 6, anchor := pbAnchor
+    else if s7 and sqSig
+        setup := 7, anchor := low6
+    else if s8 and nrSig
+        setup := 8, anchor := low[1]
+    else if s9 and avSig
+        setup := 9, anchor := low3
+    else if s10 and rsSig
+        setup := 10, anchor := low20p
+names = array.from("", "VCP", "Qullamaggie", "EP", "S/R flip", "Spring", "Pullback", "Squeeze", "NR7", "AVWAP", "RS leader")
+
+// ------------------------------------------------------------------ position state machine (standard exits)
+var int   state = 0          // 0 flat, 1 pending entry, 2 long
+var int   pendSetup = 0
+var float pendAnchor = na
+var float pendAtr = na
+var float pendRes = na
+var float pendLevel = na
+var float fill = na
+var float stop = na
+var float t1 = na
+var float t2 = na
+var bool  half = false
+var int   day = 0
+buyLbl = false
+sellTxt = ""
+if state == 1
+    ok = pendSetup != 3 or high >= pendLevel
+    if ok
+        fill := pendSetup == 3 ? math.max(open, pendLevel) : open
+        baseS = not na(pendAnchor) and pendAnchor < fill ? pendAnchor - 0.25 * pendAtr : fill - 1.5 * pendAtr
+        stop := math.max(fill * 0.92, math.min(baseS, fill - pendAtr))
+        t1 := fill * 1.10
+        t2 := not na(pendRes) and pendRes > fill ? math.min(math.max(pendRes, fill * 1.10), fill * 1.20) : fill * 1.20
+        half := false
+        day := 0
+        state := 2
+    else
+        state := 0
+if state == 2
+    day += 1
+    if low <= stop
+        sellTxt := half ? "SELL rest (break-even)" : "SELL (stop)"
+        state := 0
+    else
+        newStop = false
+        if not half and high >= t1
+            half := true
+            newStop := true
+            sellTxt := "50% +10%"
+        if half and high >= t2
+            sellTxt := "SELL rest (doel)"
+            state := 0
+        else if day >= 10
+            sellTxt := "SELL rest (dag 10)"
+            state := 0
+        if newStop and state == 2
+            stop := math.max(stop, fill)
+if state == 0 and setup > 0 and barstate.isconfirmed
+    state := 1
+    pendSetup := setup
+    pendAnchor := anchor
+    pendAtr := atr
+    pendRes := resStrong
+    pendLevel := high
+    buyLbl := true
+
+if buyLbl
+    label.new(bar_index, low, "BUY " + array.get(names, setup) + "\nsupport " + str.tostring(sup, format.mintick) + "\nruimte " + (na(roomPct) ? "vrij" : str.tostring(roomPct, "#") + "%"), style = label.style_label_up, color = color.green, textcolor = color.white, size = size.small)
+if sellTxt != ""
+    label.new(bar_index, high, sellTxt, style = label.style_label_down, color = sellTxt == "50% +10%" ? color.teal : color.red, textcolor = color.white, size = size.small)
+plot(state == 2 ? stop : na, "Stop", color = color.red, style = plot.style_linebr)
+plot(state == 2 and not half ? t1 : na, "T1 +10%", color = color.teal, style = plot.style_linebr)
+plot(state == 2 ? t2 : na, "T2", color = color.green, style = plot.style_linebr)
+plot(sup, "Support", color = color.new(color.green, 50), style = plot.style_stepline)
+plot(res, "Weerstand", color = color.new(color.red, 50), style = plot.style_stepline)
+
+alertcondition(buyLbl, "BUY", "Week swing: nieuw BUY-signaal (koop morgen)")
+if buyLbl
+    alert(syminfo.ticker + ": BUY " + array.get(names, setup) + " op " + str.tostring(close, format.mintick) + ", support " + str.tostring(sup, format.mintick), alert.freq_once_per_bar_close)
+
+var box[] boxes = array.new_box()
+if barstate.islast
+    for bx in boxes
+        box.delete(bx)
+    array.clear(boxes)
+    cntb = 0
+    ranked = array.sort_indices(lvSt, order.descending)
+    for q in ranked
+        if cntb >= drawN
+            break
+        zlo = array.get(lvLo, q)
+        zhi = array.get(lvHi, q)
+        if zhi > zlo and math.abs(array.get(lvPx, q) / close - 1) <= 0.25
+            col = array.get(lvPx, q) <= close ? color.new(color.green, 80) : color.new(color.red, 80)
+            array.push(boxes, box.new(bar_index - 100, zhi, bar_index + 5, zlo, border_color = col, bgcolor = col))
+            cntb += 1
+
+var table tb = table.new(position.top_right, 2, 7, bgcolor = color.new(color.black, 15), border_width = 1)
+if barstate.islast
+    table.cell(tb, 0, 0, "Setup vandaag", text_color = color.white)
+    table.cell(tb, 1, 0, setup > 0 ? array.get(names, setup) : "-", text_color = color.white, bgcolor = setup > 0 ? color.green : color.gray)
+    table.cell(tb, 0, 1, "Support", text_color = color.white)
+    table.cell(tb, 1, 1, str.tostring(sup, format.mintick) + " (" + str.tostring((close / sup - 1) * 100, "#.0") + "%)" + (supFlip ? " flip" : ""), text_color = color.white)
+    table.cell(tb, 0, 2, "Weerstand", text_color = color.white)
+    table.cell(tb, 1, 2, str.tostring(res, format.mintick) + " (" + str.tostring((res / close - 1) * 100, "#.0") + "%)", text_color = color.white)
+    table.cell(tb, 0, 3, "Ruimte tot sterke weerstand", text_color = color.white)
+    table.cell(tb, 1, 3, na(roomPct) ? "vrij" : str.tostring(roomPct, "#.0") + "%", text_color = color.white, bgcolor = na(roomPct) or roomPct >= 10 ? color.new(color.green, 40) : color.new(color.red, 40))
+    table.cell(tb, 0, 4, "Universum (ADR > 4%, > $20M)", text_color = color.white)
+    table.cell(tb, 1, 4, univ ? "ja" : "nee (ADR " + str.tostring(adr, "#.0") + "%)", text_color = color.white)
+    table.cell(tb, 0, 5, "Marktregime", text_color = color.white)
+    table.cell(tb, 1, 5, spyUp ? "positief" : "negatief", text_color = color.white, bgcolor = spyUp ? color.new(color.green, 40) : color.new(color.red, 40))
+    table.cell(tb, 0, 6, "Positie", text_color = color.white)
+    table.cell(tb, 1, 6, state == 2 ? "LONG dag " + str.tostring(day) + ", stop " + str.tostring(stop, format.mintick) : state == 1 ? "BUY morgen" : "-", text_color = color.white)
