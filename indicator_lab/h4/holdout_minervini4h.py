@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import os
 
-os.environ["PRO_TF"] = "4h"
+os.environ["PRO_TF"] = os.environ["CLASSIC_TF"] = "4h"
 import pandas as pd
 
 from indicator_lab import ind
