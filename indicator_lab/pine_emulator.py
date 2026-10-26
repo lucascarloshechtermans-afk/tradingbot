@@ -56,8 +56,13 @@ def pine_features(df: pd.DataFrame, spy: pd.Series) -> pd.DataFrame:
     return f
 
 
+def load_model() -> dict:
+    with open(MODEL) as fh:
+        return json.load(fh)
+
+
 def pine_score(f: pd.DataFrame, model: dict | None = None) -> pd.Series:
-    model = model or json.load(open(MODEL))
+    model = model or load_model()
     s = pd.Series(model["b"], index=f.index)
     for name, mu, sd, w in zip(model["feats"], model["mu"], model["sd"], model["w"]):
         s = s + w * ((f[name] - mu) / sd).fillna(0.0)
@@ -68,7 +73,7 @@ def run(df: pd.DataFrame, spy: pd.Series, n=20, m=20, trail=4.0, trend_len=200, 
         use_model=True, model: dict | None = None, cost_pct=0.1, with_trades=False, init_stop=True):
     """Returns (buy, sell) boolean arrays exactly as the Pine script marks them; with
     with_trades=True also the per-trade returns the Pine "chart statistics" row books."""
-    model = model or json.load(open(MODEL))
+    model = model or load_model()
     c, h, lo = df["close"].to_numpy(), df["high"].to_numpy(), df["low"].to_numpy()
     a = ind.atr(df, 14).to_numpy()
     tma = ind.sma(df["close"], trend_len).to_numpy()
@@ -121,7 +126,7 @@ def final_model_strategy(df, p):
     file embeds, so engine and emulator can be compared signal for signal."""
     from indicator_lab.engine import ExitRules
     from indicator_lab.meta import base_candidates, feature_frame
-    model = json.load(open(MODEL))
+    model = load_model()
     f = feature_frame(df)
     score = pine_score(f, model).to_numpy()
     cand = base_candidates(df, p.get("n", 20), p.get("ibs_min", 0.7)).to_numpy()

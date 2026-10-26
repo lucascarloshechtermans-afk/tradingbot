@@ -351,7 +351,7 @@ def pyramid_add(df, p):
     a NEW qualifying v3 breakout signal adds one more unit (once per trade). The add-on has v3's exits
     and is also closed when the base trade ends. Evaluated as a second part next to the base."""
     from indicator_lab.engine import simulate
-    entry, exit_sig, rules, a, size = meta_breakout(df, p)
+    entry, exit_sig, rules, a, _size = meta_breakout(df, p)
     _, trades = simulate(df, entry, exit_sig, a, rules)
     idx = df.index
     c = df["close"].to_numpy()

@@ -21,14 +21,16 @@ ETFS = {"SPY", "QQQ", "IWM", "DIA", "XLE", "XLU", "TLT", "GLD", "XLF", "XLK", "X
 def raw(ticker: str) -> list[dict]:
     path = os.path.join(CACHE_DIR, f"earn_{ticker}.json")
     if os.path.exists(path):
-        return json.load(open(path))
+        with open(path) as fh:
+            return json.load(fh)
     url = f"https://www.alphavantage.co/query?function=EARNINGS&symbol={ticker}&apikey=ALPHA_VANTAGE_API_KEY"
     for attempt in range(4):
         with urllib.request.urlopen(url, timeout=30) as r:
             d = json.load(r)
         if "quarterlyEarnings" in d:
             q = d["quarterlyEarnings"]
-            json.dump(q, open(path, "w"))
+            with open(path, "w") as fh:
+                json.dump(q, fh)
             return q
         time.sleep(2 ** (attempt + 1))
     raise RuntimeError(f"no earnings for {ticker}: {str(d)[:200]}")

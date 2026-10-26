@@ -63,7 +63,7 @@ def load(ticker: str, start: str = "2012-01-01", refresh: bool = False) -> pd.Da
             df.index = pd.to_datetime(df.index).tz_localize(None)
             df.to_csv(path)
             return df
-        except Exception as e:  # transient Yahoo errors (429/crumb) are common
+        except Exception as e:  # noqa: BLE001  transient Yahoo errors (429/crumb) are common
             last_err = e
             time.sleep(2 ** (attempt + 1))
     raise RuntimeError(f"failed to load {ticker}: {last_err}")

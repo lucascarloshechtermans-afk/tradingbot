@@ -226,7 +226,7 @@ def family(df, p):
         mid = ind.ema(c, 20)
         sig = c > mid + p.get("kc_mult", 2.0) * b["atr"]
     elif k == "macd":
-        m_, s_, h_ = ind.macd(c)
+        m_, s_, _ = ind.macd(c)
         sig = (m_ > s_) & (m_.shift() <= s_.shift()) & (m_ > 0)
     elif k == "ichimoku":
         tenkan = (df["high"].rolling(9).max() + df["low"].rolling(9).min()) / 2
@@ -239,7 +239,7 @@ def family(df, p):
         au = C(df, "aroonup25", lambda: ind.aroon_up(df, 25))
         sig = (au >= 100) & (au.shift() < 100)
     elif k == "bb":
-        lo_b, mid_b, up_b = ind.bbands(c, 20, 2.0)
+        _, _, up_b = ind.bbands(c, 20, 2.0)
         sig = c > up_b
     elif k == "roc":
         r = ind.roc(c, p.get("roc_n", 20))
@@ -301,7 +301,9 @@ def breakdown_short(df, p):
 # (strategy, params, numeric params to perturb in the robustness check)
 V2 = (breakout, {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7}, ["n", "m", "trail", "ibs_min"])
 
-from indicator_lab.meta import meta_breakout  # noqa: E402  (meta does not import this module)
+from indicator_lab.meta import (
+    meta_breakout,
+)
 
 # stop 4.0 = protective stop from the entry bar (E51: never triggered 2015-26, identical results, pure safety)
 BEST = (meta_breakout, {"n": 20, "m": 20, "trail": 4.0, "ibs_min": 0.7, "keep": 0.75, "l2": 100.0, "stop": 4.0},
