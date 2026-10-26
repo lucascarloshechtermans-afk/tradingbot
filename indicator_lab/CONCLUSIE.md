@@ -31,12 +31,14 @@ Indicator: `pine/market_regime_sma200.pine` (+ strategy-versie en dashboard). Ge
 | Faber GTAA5 en Antonacci Dual Momentum, alleen jaren ná publicatie | beide onder SPY (4,5% en 8,0%/jaar vs 11,2% en 13,6%) | `timing/reports/allocation.md` |
 | Faber-sectorrotatie (top 3 van 9 sector-ETF's), alleen ná publicatie 2010-2026 | 12,3%/jaar vs SPY 14,1% | `timing/reports/sectors.md` |
 | SMA200-trendregel per los aandeel (395 NYSE/AMEX-aandelen) | mediane daling -74% naar -59%, maar rendement 5,3% naar 2,0%/jaar; betere MAR op maar 41% | `timing/reports/stock_trend.md` |
+| lage-volatiliteitsanomalie (30 rustigste aandelen, 2014-2026) | 7,7%/jaar vs SPY 13,6%; maar de 30 onrustigste: -11,1%/jaar, max -94% | `rotation/reports/lowvol.md` |
 | post-earnings drift (winstverrassing / koersreactie, 60 dagen vasthouden) | op 131 bekende namen 24-28%/jaar, maar op 468 willekeurige nooit gebruikte aandelen 10-12% vs SPY 14,9%: het effect is echt (+0,4 tot +1,4% per trade) maar te klein | `earnings_drift/reports/` |
 
 ## Wat dit betekent voor jou
 1. Een mechanische koop/verkoop-indicator voor losse aandelen die de index verslaat, is in dit onderzoek niet gevonden.
    Hoge winrates bestaan wel, maar ze leveren niet meer geld op dan SPY vasthouden.
 2. Wat wel aantoonbaar helpt, is **minder diep vallen**: de regime-regel op SPY/QQQ.
+   En: **vermijd de meest beweeglijke aandelen** — als groep verloren ze 11% per jaar (2014-2026).
 3. Wil je toch swingtraden met losse aandelen, doe het dan met een klein deel van je geld, en vergelijk je resultaat
    eerlijk met SPY. Nieuwe ideeën kunnen het best eerst op papier lopen (geen echte orders).
 
