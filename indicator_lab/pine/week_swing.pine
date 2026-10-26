@@ -6,20 +6,25 @@
 //   T1    = +10%: sell 50%, stop to break-even      T2 = next strong resistance clipped to +10..+20% (else +20%)
 //   time  = sell the rest at the close of day 10
 // Universe filter as tested: ADR(20) > 4%, close > $5, 50-day average dollar volume > $20M.
-// Research results: see results/strategy_log.md (only the out-of-sample column counts).
+// Research verdict (results/strategy_log.md, out of sample 2023-04 .. 2026-10, 2407 stocks): ALL 10 setups REJECTED
+// (no test profit factor > 1.3). Closest: 6 pullback + volume surge (PF 1.05) and 2 Qullamaggie (PF 1.01), so only
+// those two are on by default. Random entries with the same exits hit +10% in 31% and +20% in 6% of trades; the
+// setups 33-36% and 8-10%. Treat signals as a watchlist, not as a proven edge.
+// Pine Screener: add this indicator to a screener and filter on "Signaal" = 1 (BUY today), sort on "Ruimte %".
 indicator("Week swing (S/R + 10 setups)", overlay = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 60)
 
 grpS = "Setups"
-s1 = input.bool(true, "1 VCP (Minervini)", group = grpS)
+s1 = input.bool(false, "1 VCP (Minervini)", group = grpS)
 s2 = input.bool(true, "2 Qullamaggie breakout", group = grpS)
-s3 = input.bool(true, "3 Episodic pivot", group = grpS)
-s4 = input.bool(true, "4 S/R flip retest", group = grpS)
-s5 = input.bool(true, "5 Failed breakdown / spring", group = grpS)
+s3 = input.bool(false, "3 Episodic pivot", group = grpS)
+s4 = input.bool(false, "4 S/R flip retest", group = grpS)
+s5 = input.bool(false, "5 Failed breakdown / spring", group = grpS)
 s6 = input.bool(true, "6 Pullback in trend (RSI2)", group = grpS)
-s7 = input.bool(true, "7 Squeeze breakout (TTM)", group = grpS)
-s8 = input.bool(true, "8 Inside bar / NR7 at support", group = grpS)
-s9 = input.bool(true, "9 Anchored VWAP reclaim", group = grpS)
-s10 = input.bool(true, "10 RS leader breakout", group = grpS)
+s6vol = input.bool(true, "    6 only with volume >= 1.5x (best tested variant)", group = grpS)
+s7 = input.bool(false, "7 Squeeze breakout (TTM)", group = grpS)
+s8 = input.bool(false, "8 Inside bar / NR7 at support", group = grpS)
+s9 = input.bool(false, "9 Anchored VWAP reclaim", group = grpS)
+s10 = input.bool(false, "10 RS leader breakout", group = grpS)
 grpF = "Filters"
 fReg  = input.bool(false, "Market regime: SPY > SMA50 and EMA20 > EMA50", group = grpF)
 fRoom = input.bool(false, "Room >= 10% to the next strong resistance", group = grpF)
@@ -289,7 +294,7 @@ if filt
         setup := 4, anchor := supLo
     else if s5 and sprSig
         setup := 5, anchor := sprAnchor
-    else if s6 and pbSig
+    else if s6 and pbSig and (not s6vol or vol15)
         setup := 6, anchor := pbAnchor
     else if s7 and sqSig
         setup := 7, anchor := low6
@@ -366,6 +371,13 @@ plot(state == 2 and not half ? t1 : na, "T1 +10%", color = color.teal, style = p
 plot(state == 2 ? t2 : na, "T2", color = color.green, style = plot.style_linebr)
 plot(sup, "Support", color = color.new(color.green, 50), style = plot.style_stepline)
 plot(res, "Weerstand", color = color.new(color.red, 50), style = plot.style_stepline)
+// columns for the Pine Screener (scanner version): setup number, signal, distance to support, room to resistance
+plot(setup, "Setup nr", display = display.data_window)
+plot(buyLbl ? 1 : 0, "Signaal", display = display.data_window)
+plot((close / sup - 1) * 100, "Afstand support %", display = display.data_window)
+plot((close - sup) / atr, "Afstand support ATR", display = display.data_window)
+plot(roomPct, "Ruimte %", display = display.data_window)
+plot(state == 2 ? 1 : 0, "In positie", display = display.data_window)
 
 alertcondition(buyLbl, "BUY", "Week swing: nieuw BUY-signaal (koop morgen)")
 if buyLbl

@@ -32,6 +32,7 @@ Indicator: `pine/market_regime_sma200.pine` (+ strategy-versie en dashboard). Ge
 | Faber-sectorrotatie (top 3 van 9 sector-ETF's), alleen ná publicatie 2010-2026 | 12,3%/jaar vs SPY 14,1% | `timing/reports/sectors.md` |
 | SMA200-trendregel per los aandeel (395 NYSE/AMEX-aandelen) | mediane daling -74% naar -59%, maar rendement 5,3% naar 2,0%/jaar; betere MAR op maar 41% | `timing/reports/stock_trend.md` |
 | lage-volatiliteitsanomalie (30 rustigste aandelen, 2014-2026) | 7,7%/jaar vs SPY 13,6%; maar de 30 onrustigste: -11,1%/jaar, max -94% | `rotation/reports/lowvol.md` |
+| 10 swing-setups met S/R, 1 week houden, 50% winst op +10%, doel +20% (2407 beweeglijke aandelen, walk-forward 70/30) | alle 10 verworpen (beste test-PF 1,05); +10% wordt in ~1/3 van de trades geraakt, maar willekeurige instappen halen dat ook (31%) | `results/strategy_log.md` |
 | post-earnings drift (winstverrassing / koersreactie, 60 dagen vasthouden) | op 131 bekende namen 24-28%/jaar, maar op 468 willekeurige nooit gebruikte aandelen 10-12% vs SPY 14,9%: het effect is echt (+0,4 tot +1,4% per trade) maar te klein | `earnings_drift/reports/` |
 
 ## Wat dit betekent voor jou

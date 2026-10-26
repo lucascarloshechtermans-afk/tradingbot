@@ -106,3 +106,11 @@ getallen daar wijken iets af. Met band 0% wissel je ~6-7 keer per jaar (veel kle
   SMH, EFA, EEM, GLD; zelf aan te passen) met afstand tot de SMA200 en het aantal dagen sinds de laatste wissel. Tijdens
   de handelsdag is de rij van vandaag voorlopig; alleen de slotkoers telt.
 
+## Week swing (`week_swing.pine`) en S/R-zones (`sr_zones.pine`)
+`week_swing.pine`: de 10 setups van `indicator_lab/week` (dagbars), standaard-exits (stop onder support, max 8%;
+50% verkopen op +10% en stop naar break-even; rest op +20% of de volgende sterke weerstand; verkopen na 10 dagen),
+S/R-zones op de grafiek, labels met setup, support en ruimte, en alerts. **Onderzoek: alle 10 setups verworpen**
+(`results/strategy_log.md`); standaard staan alleen de twee die het dichtst in de buurt kwamen aan (6 pullback met
+volume, 2 Qullamaggie). Scanner: zet de indicator in de **Pine Screener** en filter op kolom *Signaal* = 1; de
+kolommen *Setup nr*, *Afstand support %/ATR* en *Ruimte %* tonen de rest. `sr_zones.pine` tekent alleen de S/R-zones.
+

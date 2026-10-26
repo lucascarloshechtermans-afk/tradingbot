@@ -147,3 +147,27 @@ Zie `indicator_lab/week/run.py` voor het protocol. Train = 2015-01-01 .. 2023-04
 | 7 Squeeze breakout (TTM)    | regime, rs_top20             |           195 | 43%       | 0.76 | -1.08%       | 34%      | 7%       | -22.5%   | -5.9%  | 5.2 d      | verworpen |
 | 10 RS leader breakout       | rs_top20                     |           462 | 39%       | 0.76 | -1.19%       | 33%      | 16%      | -47.1%   | -15.1% | 4.0 d      | verworpen |
 | 3 Episodic pivot            | regime                       |           360 | 36%       | 0.59 | -2.13%       | 31%      | 9%       | -56.6%   | -18.9% | 3.8 d      | verworpen |
+
+## Controle en combinatie (indicator_lab/week/extra.py)
+
+| run | strategie | instellingen | set | trades | winrate | gem. winst | gem. verlies | PF | expectancy | max DD (rekening) | CAGR (rekening) | % +10% geraakt | % +20% geraakt | gem. houdtijd |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| – | 0 Willekeurige instap (controle) | elke 21e handelsdag, zelfde exits | train | 21574 | 39% | +8.3% | -6.7% | 0.80 | -0.81% | -85.3% | -19.0% | 30% | 5% | 5.3 d |
+| – | 0 Willekeurige instap (controle) | elke 21e handelsdag, zelfde exits | test | 17209 | 42% | +8.4% | -6.6% | 0.93 | -0.28% | -53.6% | -10.4% | 31% | 6% | 5.4 d |
+| – | Combinatie top 3 op train: 9, 6, 5 | 9: room10; 6: vol_surge; 5: vol_surge | train | 11446 | 47% | +8.6% | -7.5% | 1.02 | +0.09% | -67.3% | -9.0% | 38% | 10% | 5.7 d |
+| – | Combinatie top 3 op train: 9, 6, 5 | 9: room10; 6: vol_surge; 5: vol_surge | test | 8232 | 46% | +8.7% | -7.5% | 0.98 | -0.07% | -76.3% | -31.1% | 35% | 8% | 5.7 d |
+
+Combinatie test-PF 0.98 vs beste losse strategie 1.05: **combinatie NIET beter, niet gebruiken**.
+
+## Conclusie (eerlijk)
+- **Geen van de 10 strategieën haalt het doel.** Geen enkele heeft out-of-sample een profit factor > 1,3; alle 10 zijn
+  verworpen. Het dichtst bij: 6 pullback in trend + volume surge (test-PF 1,05, +0,18% per trade) en 2 Qullamaggie
+  (PF 1,01). De combinatie van de top 3 (gekozen op train) is niet beter (PF 0,98).
+- **Wat realistisch is binnen 1 week** (universum ADR > 4%, > $20M/dag, deze exits): ongeveer 1 op 3 trades raakt
+  +10% en ongeveer 1 op 12 raakt +20% vóór de stop. Willekeurige instappen halen al 31% en 6%: het grootste deel van
+  die kans komt van de beweeglijkheid van het aandeel, niet van de setup. Gemiddelde winnaar ~+8,5%, gemiddelde
+  verliezer ~-7%, winrate 40-48%: dat telt op tot ongeveer nul per trade na kosten.
+- **Gemiddelde trade overschat de rekening:** bij setup 6 vielen op volle dagen (6% van de dagen 10 posities) juist de
+  grootste winnaars weg; de genomen trades gemiddeld -0,08% in plaats van +0,18%.
+- Filters (regime, RS, ruimte >= 10%, geen earnings) verbeterden niets structureel; "geen earnings in de houdtijd"
+  maakte het overal iets slechter (de grote uitschieters zitten vaak rond earnings).
