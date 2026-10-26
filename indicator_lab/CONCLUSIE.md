@@ -28,6 +28,7 @@ Indicator: `pine/market_regime_sma200.pine` (+ strategy-versie en dashboard). Ge
 | volatiliteitsdoel, hefboom 2x in uptrend | gezakt / te groot risico (-81%) | `timing/reports/holdout.md`, `leverage.md` |
 | Connors-mean-reversion (RSI2, Double 7s, IBS) op 17 indexen, 1963-2026 | beter dan kopen-en-vasthouden in 1-2 van 17 perioden | `meanrev/reports/index_mr.md` |
 | 10 klassiekers op de 300 grootste Amerikaanse aandelen | geen enkele beter dan SPY (beste 9,7%/jaar vs 13,2%) | `largecap/reports/dev.md` |
+| Faber GTAA5 en Antonacci Dual Momentum, alleen jaren ná publicatie | beide onder SPY (4,5% en 8,0%/jaar vs 11,2% en 13,6%) | `timing/reports/allocation.md` |
 | post-earnings drift (winstverrassing / koersreactie, 60 dagen vasthouden) | op 131 bekende namen 24-28%/jaar, maar op 468 willekeurige nooit gebruikte aandelen 10-12% vs SPY 14,9%: het effect is echt (+0,4 tot +1,4% per trade) maar te klein | `earnings_drift/reports/` |
 
 ## Wat dit betekent voor jou
@@ -36,3 +37,9 @@ Indicator: `pine/market_regime_sma200.pine` (+ strategy-versie en dashboard). Ge
 2. Wat wel aantoonbaar helpt, is **minder diep vallen**: de regime-regel op SPY/QQQ.
 3. Wil je toch swingtraden met losse aandelen, doe het dan met een klein deel van je geld, en vergelijk je resultaat
    eerlijk met SPY. Nieuwe ideeën kunnen het best eerst op papier lopen (geen echte orders).
+
+## Een eerlijke waarschuwing over al dit testen
+Er zijn inmiddels ruim 15 afzonderlijke hypotheses vooraf vastgelegd en getest. Bij zoveel pogingen kan er ook puur
+door toeval eens één slagen. Daarom telt alleen wat op meerdere onafhankelijke datasets standhoudt; dat is tot nu toe
+alleen de SMA200-regime-regel (VS 1960-2011 én 12 buitenlandse beurzen).
+
