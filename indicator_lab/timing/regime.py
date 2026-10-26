@@ -47,7 +47,7 @@ def load(name: str) -> pd.Series:
 def month_end(idx: pd.DatetimeIndex) -> np.ndarray:
     """True on the last trading day of each month (the final bar of the data is not known to be one)."""
     p = pd.Series(idx, index=idx).dt.to_period("M")
-    out = (p != p.shift(-1)).to_numpy()
+    out = np.array(p != p.shift(-1))
     out[-1] = False
     return out
 
