@@ -5,6 +5,7 @@ one-shot holdout test, see h4/reports/holdout_minervini4h.md, so this is a watch
     python -m indicator_lab.h4.scan4h              # refresh the last 60 days of Yahoo 60m data, then scan
     python -m indicator_lab.h4.scan4h --no-refresh # scan the cached data only
     SCAN_BARS=20 python -m indicator_lab.h4.scan4h # look back 20 4H bars (default 10 = 5 trading days)
+    python -m indicator_lab.h4.scan4h --day        # the same rule on DAILY bars (Swing 20/21 daily cache, last 5 days)
 
 Only completed 4H bars are used (09:30-13:30 and 13:30-16:00 New York). Liquidity floor as in the research
 (close >= $5, 50-bar average dollar volume >= $2.5M). RS rank is taken across all scanned stocks.
@@ -27,7 +28,8 @@ from indicator_lab.twenty import data20
 
 OUT = os.path.join(os.path.dirname(__file__), "reports")
 RULE = "P1 Minervini trend template + VCP-breakout"
-LOOKBACK = int(os.environ.get("SCAN_BARS", "10"))
+DAY = "--day" in sys.argv
+LOOKBACK = int(os.environ.get("SCAN_BARS", "5" if DAY else "10"))
 
 
 def universe() -> list[str]:
@@ -67,19 +69,29 @@ def refresh(tickers, batch: int = 80):
 
 
 def completed(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop a 4H bar that is still forming (its session part has not closed yet in New York)."""
+    """Drop a bar that is still forming (its session part has not closed yet in New York)."""
     now = pd.Timestamp.now(tz="America/New_York").tz_localize(None)
+    if DAY:
+        return df[df.index.normalize() + pd.Timedelta(hours=16) <= now]
     end = df.index + pd.to_timedelta(np.where(df.index.hour == 9, 4.0, 2.5), unit="h")
     return df[end <= now]
 
 
+def daily(t: str) -> pd.DataFrame | None:
+    data20.final_mode()
+    try:
+        return data20.load(t)
+    except PermissionError:
+        return None
+
+
 def main():
     univ = universe()
-    if "--no-refresh" not in sys.argv:
+    if "--no-refresh" not in sys.argv and not DAY:
         refresh(univ)
     fr = {}
     for t in univ:
-        df = bars4h(t)
+        df = daily(t) if DAY else bars4h(t)
         if df is not None and len(df) >= 400:
             df = completed(df[(df[["open", "high", "low", "close"]] > 0).all(axis=1)])
             fr[t] = df
@@ -89,35 +101,39 @@ def main():
     for t, df in fr.items():
         if df.index[-1] < last - pd.Timedelta(days=4):     # stale ticker (delisted / no recent data)
             continue
-        liquid = ((df["close"] >= 5) & ((df["close"] * df["volume"]).rolling(50).mean() >= 2.5e6)).to_numpy()
+        liquid = ((df["close"] >= 5) & ((df["close"] * df["volume"]).rolling(50).mean() >= (5e6 if DAY else 2.5e6))).to_numpy()
         e, _, _, stop_pct = PC.signals(df, rs[t].reindex(df.index).to_numpy())[RULE]
         hit = np.where(e & liquid)[0]
         hit = hit[hit >= len(df) - LOOKBACK]
         for i in hit:
             c = float(df["close"].iloc[i])
-            rows.append({"ticker": t, "signaal (4H-bar)": df.index[i].strftime("%Y-%m-%d %H:%M"),
+            rows.append({"ticker": t, "signaal (bar)": df.index[i].strftime("%Y-%m-%d" if DAY else "%Y-%m-%d %H:%M"),
                          "slot signaalbar": round(c, 2), "laatste koers": round(float(df["close"].iloc[-1]), 2),
                          "sinds signaal": f"{(df['close'].iloc[-1] / c - 1) * 100:+.1f}%",
                          "stop (≈ -8% van signaalslot)": round(c * (1 - stop_pct), 2),
                          "RS-percentiel": round(float(rs[t].reindex(df.index).iloc[i]), 0),
                          "ATR%": f"{float(ind.atr(df, 14).iloc[i]) / c * 100:.1f}%"})
-    d = pd.DataFrame(rows).sort_values("signaal (4H-bar)", ascending=False) if rows else pd.DataFrame()
+    d = pd.DataFrame(rows).sort_values("signaal (bar)", ascending=False) if rows else pd.DataFrame()
     from indicator_lab.timing import regime as R
     try:
         s = R.load("SPY")
         regime = "IN (SPY boven SMA200)" if s.iloc[-1] > s.rolling(200).mean().iloc[-1] else "UIT (SPY onder SMA200)"
     except FileNotFoundError:
         regime = "onbekend"
-    txt = (f"# 4H BUY-signalen — {RULE}\n\nGescand: {len(fr)} NASDAQ-aandelen, laatste afgesloten 4H-bar {last}. "
-           f"Signalen in de laatste {LOOKBACK} 4H-bars. Marktregime (dagbasis): {regime}.\n\n"
-           "Let op: deze regel zakte voor zijn eenmalige holdout-test (-0,4%/jaar op nooit gebruikte aandelen). Gebruik "
-           "dit als watchlist, niet als bewezen voordeel. Geen orders.\n\n"
+    tf = "dag" if DAY else "4H"
+    note = ("Op dagbars gaf deze regel in de ontwikkeltest -3,0%/jaar (2015-2024, NASDAQ); op 4H zakte hij voor zijn "
+            "holdout-test (-0,4%/jaar)." if DAY else
+            "Deze regel zakte voor zijn eenmalige holdout-test (-0,4%/jaar op nooit gebruikte aandelen).")
+    txt = (f"# {tf}-BUY-signalen — {RULE}\n\nGescand: {len(fr)} NASDAQ-aandelen, laatste afgesloten {tf}-bar {last}. "
+           f"Signalen in de laatste {LOOKBACK} {tf}-bars. Marktregime (dagbasis): {regime}.\n\n"
+           f"Let op: {note} Gebruik dit als watchlist, niet als bewezen voordeel. Geen orders.\n\n"
            + (d.to_markdown(index=False) if len(d) else "_Geen signalen._") + "\n")
     os.makedirs(OUT, exist_ok=True)
-    with open(os.path.join(OUT, "scan4h_latest.md"), "w") as fh:
+    name = "scan_day_latest" if DAY else "scan4h_latest"
+    with open(os.path.join(OUT, f"{name}.md"), "w") as fh:
         fh.write(txt)
     if len(d):
-        d.to_csv(os.path.join(OUT, "scan4h_latest.csv"), index=False)
+        d.to_csv(os.path.join(OUT, f"{name}.csv"), index=False)
     print(txt)
 
 
