@@ -98,3 +98,11 @@ kleiner). Het is een **risicoregel**, geen rendementsmachine: het rendement is m
 Verwachte tabel (Yahoo-data mét dividend, kas 0%): SPY sinds 1993 regel 8,2%/jaar, max -25%, tegen kopen en vasthouden
 10,8%, max -55%; QQQ sinds 1999 8,5% / -47% tegen 8,8% / -83%. TradingView rekent standaard zonder dividend, dus de
 getallen daar wijken iets af. Met band 0% wissel je ~6-7 keer per jaar (veel kleine schijnsignalen rond de lijn).
+
+**Erbij:**
+- `market_regime_sma200_strategy.pine`: dezelfde regel als *strategy* voor de Strategy Tester (tradelijst, equitycurve).
+  Vult op de open van de volgende dag (TradingView-standaard), 0,1% commissie per kant.
+- `market_regime_dashboard.pine`: het regime van 12 markten tegelijk (standaard SPY, QQQ, IWM, DIA, XLK, XLF, XLE, XLV,
+  SMH, EFA, EEM, GLD; zelf aan te passen) met afstand tot de SMA200 en het aantal dagen sinds de laatste wissel. Tijdens
+  de handelsdag is de rij van vandaag voorlopig; alleen de slotkoers telt.
+

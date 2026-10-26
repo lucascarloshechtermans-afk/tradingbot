@@ -1,0 +1,34 @@
+//@version=6
+// Strategy version of market_regime_sma200.pine for TradingView's Strategy Tester (trades list, equity curve).
+// Same rule: long while the daily close is above the 200-day SMA (optional band), otherwise flat.
+// The signal is decided on the close and filled at the NEXT bar's OPEN (TradingView default), a little earlier than in
+// the research (next close). Commission 0.1% per side. Use a DAILY chart of an index ETF.
+strategy("Market regime SMA200 (strategy)", overlay = true, initial_capital = 10000,
+     default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
+     commission_type = strategy.commission.percent, commission_value = 0.1, process_orders_on_close = false)
+
+len     = input.int(200, "SMA length", minval = 20)
+bandPct = input.float(0.0, "Band % (0 = T1, 2 = T2)", minval = 0.0, maxval = 10.0, step = 0.5)
+fromY   = input.int(1990, "Backtest from year", minval = 1900)
+
+sma   = ta.sma(close, len)
+upper = sma * (1 + bandPct / 100)
+lower = sma * (1 - bandPct / 100)
+
+var float state = 0.0
+if not na(sma)
+    if state == 0.0 and close > upper
+        state := 1.0
+    else if state == 1.0 and close < lower
+        state := 0.0
+
+inWindow = year(time) >= fromY
+if inWindow and state == 1.0 and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+if state == 0.0 and strategy.position_size > 0
+    strategy.close("Long", comment = "UIT")
+
+plot(sma, "SMA", color = color.gray, linewidth = 2)
+plot(bandPct > 0 ? upper : na, "Upper band", color = color.new(color.green, 50))
+plot(bandPct > 0 ? lower : na, "Lower band", color = color.new(color.red, 50))
+bgcolor(not na(sma) ? (state == 1.0 ? color.new(color.green, 93) : color.new(color.red, 93)) : na)

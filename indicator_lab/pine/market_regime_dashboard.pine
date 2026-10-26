@@ -1,0 +1,76 @@
+//@version=6
+// Market regime dashboard: the SMA200 rule (market_regime_sma200.pine) for up to 12 markets in one table.
+// IN = daily close above its 200-day SMA (with the optional band), UIT = below. Put it on any chart; the symbols are
+// evaluated on DAILY bars regardless of the chart's timeframe. During the trading day today's row is provisional:
+// only the daily close counts (as in the tested rule).
+indicator("Market regime dashboard", overlay = true)
+
+bandPct = input.float(0.0, "Band % (0 = T1, 2 = T2)", minval = 0.0, maxval = 10.0, step = 0.5)
+s1  = input.symbol("AMEX:SPY", "1")
+s2  = input.symbol("NASDAQ:QQQ", "2")
+s3  = input.symbol("AMEX:IWM", "3")
+s4  = input.symbol("AMEX:DIA", "4")
+s5  = input.symbol("AMEX:XLK", "5")
+s6  = input.symbol("AMEX:XLF", "6")
+s7  = input.symbol("AMEX:XLE", "7")
+s8  = input.symbol("AMEX:XLV", "8")
+s9  = input.symbol("AMEX:SMH", "9")
+s10 = input.symbol("AMEX:EFA", "10")
+s11 = input.symbol("AMEX:EEM", "11")
+s12 = input.symbol("AMEX:GLD", "12")
+
+regime() =>
+    sma = ta.sma(close, 200)
+    var float st = 0.0
+    var int since = 0
+    prev = st
+    if not na(sma)
+        if st == 0.0 and close > sma * (1 + bandPct / 100)
+            st := 1.0
+        else if st == 1.0 and close < sma * (1 - bandPct / 100)
+            st := 0.0
+    since := st != prev ? 0 : since + 1
+    [st, (close / sma - 1) * 100, since, na(sma)]
+
+get(sym) =>
+    request.security(sym, "D", regime(), lookahead = barmerge.lookahead_off, gaps = barmerge.gaps_off)
+
+[st1, d1, n1, x1] = get(s1)
+[st2, d2, n2, x2] = get(s2)
+[st3, d3, n3, x3] = get(s3)
+[st4, d4, n4, x4] = get(s4)
+[st5, d5, n5, x5] = get(s5)
+[st6, d6, n6, x6] = get(s6)
+[st7, d7, n7, x7] = get(s7)
+[st8, d8, n8, x8] = get(s8)
+[st9, d9, n9, x9] = get(s9)
+[st10, d10, n10, x10] = get(s10)
+[st11, d11, n11, x11] = get(s11)
+[st12, d12, n12, x12] = get(s12)
+
+var table tb = table.new(position.top_right, 4, 13, bgcolor = color.new(color.black, 15), border_width = 1)
+row(r, sym, st, d, n, x) =>
+    p = str.pos(sym, ":")
+    table.cell(tb, 0, r, na(p) ? sym : str.substring(sym, p + 1), text_color = color.white)
+    table.cell(tb, 1, r, x ? "te weinig data" : st == 1.0 ? "IN" : "UIT", text_color = color.white,
+         bgcolor = x ? color.gray : st == 1.0 ? color.green : color.red)
+    table.cell(tb, 2, r, x ? "" : str.tostring(d, "#.0") + "%", text_color = color.white)
+    table.cell(tb, 3, r, x ? "" : str.tostring(n) + " d", text_color = color.white)
+
+if barstate.islast
+    table.cell(tb, 0, 0, "Markt", text_color = color.white)
+    table.cell(tb, 1, 0, "Regime", text_color = color.white)
+    table.cell(tb, 2, 0, "t.o.v. SMA200", text_color = color.white)
+    table.cell(tb, 3, 0, "sinds", text_color = color.white)
+    row(1, s1, st1, d1, n1, x1)
+    row(2, s2, st2, d2, n2, x2)
+    row(3, s3, st3, d3, n3, x3)
+    row(4, s4, st4, d4, n4, x4)
+    row(5, s5, st5, d5, n5, x5)
+    row(6, s6, st6, d6, n6, x6)
+    row(7, s7, st7, d7, n7, x7)
+    row(8, s8, st8, d8, n8, x8)
+    row(9, s9, st9, d9, n9, x9)
+    row(10, s10, st10, d10, n10, x10)
+    row(11, s11, st11, d11, n11, x11)
+    row(12, s12, st12, d12, n12, x12)
