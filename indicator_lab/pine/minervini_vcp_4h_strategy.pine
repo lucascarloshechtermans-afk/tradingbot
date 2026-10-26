@@ -1,0 +1,48 @@
+//@version=6
+// Strategy version of minervini_vcp_4h.pine for TradingView's Strategy Tester (trade list, equity curve, statistics).
+// Same rules: BUY on the 4H close of a VCP breakout inside the Minervini trend template, fill at the next bar's open,
+// stop -8% from the fill, SELL at the next open after a close below SMA50. One position, at most one BUY per 14 days.
+// Commission 0.1% per side. Research status: failed its holdout (-0.4%/yr on never-used stocks). Use a 4H chart with
+// extended hours OFF (the research used regular-session 4H bars 09:30-13:30 and 13:30-16:00 New York).
+strategy("Minervini VCP 4H (strategy)", overlay = true, initial_capital = 10000,
+     default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
+     commission_type = strategy.commission.percent, commission_value = 0.1, process_orders_on_close = false)
+
+minRS    = input.float(0.0, "Min RS vs SPY (IBD score difference)", step = 0.05)
+stopPct  = input.float(8.0, "Stop % below fill", minval = 1.0)
+gapDays  = input.int(14, "Min days between BUY signals", minval = 0)
+spySym   = input.symbol("AMEX:SPY", "Benchmark")
+
+sma50  = ta.sma(close, 50)
+sma150 = ta.sma(close, 150)
+sma200 = ta.sma(close, 200)
+roc(n) => close / close[n] - 1
+rsScore = 0.4 * roc(63) + 0.2 * (roc(126) + roc(189) + roc(252))
+spyScore = request.security(spySym, timeframe.period, 0.4 * (close / close[63] - 1) + 0.2 * ((close / close[126] - 1) + (close / close[189] - 1) + (close / close[252] - 1)), lookahead = barmerge.lookahead_off)
+rsOK = rsScore - spyScore >= minRS
+
+tt = close > sma50 and sma50 > sma150 and sma150 > sma200 and sma200 > sma200[21] and close >= 1.3 * ta.lowest(low, 252) and close >= 0.75 * ta.highest(high, 252) and rsOK
+r10 = (ta.highest(high, 10) - ta.lowest(low, 10)) / close
+r40 = (ta.highest(high, 40) - ta.lowest(low, 40)) / close
+vAvg50 = ta.sma(volume, 50)
+vAvg10 = ta.sma(volume, 10)
+hi10 = ta.highest(high, 10)
+vcp = r10 <= 0.10 and r10 < 0.5 * r40 and vAvg10 < vAvg50
+liquid = close >= 5 and ta.sma(close * volume, 50) >= 2.5e6
+signal = tt[1] and vcp[1] and close > hi10[1] and volume >= 1.4 * vAvg50 and liquid
+
+var int lastSig = na
+flat = strategy.position_size == 0
+gapOK = na(lastSig) or (time - lastSig) >= gapDays * 86400000
+if signal and flat and gapOK and barstate.isconfirmed
+    strategy.entry("Long", strategy.long)
+    lastSig := time
+if strategy.position_size > 0
+    strategy.exit("Stop", "Long", stop = strategy.position_avg_price * (1 - stopPct / 100))
+    if close < sma50
+        strategy.close("Long", comment = "slot < SMA50")
+
+plot(sma50, "SMA50", color = color.blue)
+plot(sma150, "SMA150", color = color.new(color.orange, 30))
+plot(sma200, "SMA200", color = color.new(color.red, 30), linewidth = 2)
+plot(strategy.position_size > 0 ? strategy.position_avg_price * (1 - stopPct / 100) : na, "Stop", color = color.red, style = plot.style_linebr)

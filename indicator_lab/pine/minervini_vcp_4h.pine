@@ -30,9 +30,11 @@ tt = close > sma50 and sma50 > sma150 and sma150 > sma200 and sma200 > sma200[21
 r10 = (ta.highest(high, 10) - ta.lowest(low, 10)) / close
 r40 = (ta.highest(high, 40) - ta.lowest(low, 40)) / close
 vAvg50 = ta.sma(volume, 50)
-vcp = r10 <= 0.10 and r10 < 0.5 * r40 and ta.sma(volume, 10) < vAvg50
+vAvg10 = ta.sma(volume, 10)
+hi10 = ta.highest(high, 10)
+vcp = r10 <= 0.10 and r10 < 0.5 * r40 and vAvg10 < vAvg50
 liquid = close >= 5 and ta.sma(close * volume, 50) >= 2.5e6
-signal = tt[1] and vcp[1] and close > ta.highest(high, 10)[1] and volume >= 1.4 * vAvg50 and liquid
+signal = tt[1] and vcp[1] and close > hi10[1] and volume >= 1.4 * vAvg50 and liquid
 
 var bool  inPos   = false
 var bool  pendBuy = false
@@ -83,16 +85,20 @@ alertcondition(sellNow, "SELL", "Minervini VCP 4H: SELL")
 if buyNow
     alert(syminfo.ticker + ": BUY (VCP 4H) op " + str.tostring(close, format.mintick) + ", stop ~" + str.tostring(close * (1 - stopPct / 100), format.mintick), alert.freq_once_per_bar_close)
 
-var table tb = table.new(position.top_right, 2, 6, bgcolor = color.new(color.black, 15), border_width = 1)
+var table tb = table.new(position.top_right, 2, 11, bgcolor = color.new(color.black, 15), border_width = 1)
+cell(r, txt, val, ok) =>
+    table.cell(tb, 0, r, txt, text_color = color.white)
+    table.cell(tb, 1, r, val, text_color = color.white, bgcolor = ok ? color.new(color.green, 30) : color.new(color.red, 40))
 if barstate.islast
-    table.cell(tb, 0, 0, "Trend template", text_color = color.white)
-    table.cell(tb, 1, 0, tt ? "ja" : "nee", text_color = color.white, bgcolor = tt ? color.green : color.gray)
-    table.cell(tb, 0, 1, "VCP (strak + droog volume)", text_color = color.white)
-    table.cell(tb, 1, 1, vcp ? "ja" : "nee", text_color = color.white, bgcolor = vcp ? color.green : color.gray)
-    table.cell(tb, 0, 2, "RS vs SPY", text_color = color.white)
-    table.cell(tb, 1, 2, str.tostring((rsScore - spyScore) * 100, "#.0") + " pp", text_color = color.white)
-    table.cell(tb, 0, 3, "Status", text_color = color.white)
-    table.cell(tb, 1, 3, inPos ? "LONG" : pendBuy ? "BUY: koop bij open volgende bar" : "-", text_color = color.white)
-    table.cell(tb, 0, 4, "Stop", text_color = color.white)
-    table.cell(tb, 1, 4, inPos ? str.tostring(stopLvl, format.mintick) : "-", text_color = color.white)
-    table.cell(tb, 0, 5, timeframe.period == "240" ? "4H-grafiek" : "LET OP: zet de grafiek op 4H", text_color = timeframe.period == "240" ? color.gray : color.orange)
+    // why is there (no) BUY on this bar? Trend and VCP are checked on the PREVIOUS bar, breakout/volume on this one
+    cell(0, "Trend template (vorige bar)", tt[1] ? "ja" : "nee", tt[1])
+    cell(1, "RS vs SPY (min " + str.tostring(minRS * 100, "#") + " pp)", str.tostring((rsScore - spyScore) * 100, "#.0") + " pp", rsOK)
+    cell(2, "VCP: 10-bar range <= 10% (vorige bar)", str.tostring(r10[1] * 100, "#.0") + "%", r10[1] <= 0.10)
+    cell(3, "VCP: range < helft 40-bar", str.tostring(r10[1] * 100, "#.0") + "% < " + str.tostring(0.5 * r40[1] * 100, "#.0") + "%", r10[1] < 0.5 * r40[1])
+    cell(4, "VCP: volume droogt op", str.tostring(vAvg10[1] / vAvg50[1], "#.00") + "x", vAvg10[1] < vAvg50[1])
+    cell(5, "Breakout boven 10-bar high", str.tostring(hi10[1], format.mintick), close > hi10[1])
+    cell(6, "Volume >= 1.4x gemiddeld", str.tostring(volume / vAvg50, "#.00") + "x", volume >= 1.4 * vAvg50)
+    cell(7, "Liquide (>= $5, >= $2.5M/bar)", liquid ? "ja" : "nee", liquid)
+    cell(8, "Status", inPos ? "LONG, stop " + str.tostring(stopLvl, format.mintick) : pendBuy ? "BUY: koop bij open volgende bar" : barstate.isconfirmed ? "-" : "bar loopt nog", not inPos)
+    cell(9, "Grafiek op 4H", timeframe.period == "240" ? "ja" : "NEE, zet op 4H", timeframe.period == "240")
+    cell(10, "Extended hours uit", syminfo.session == session.regular ? "ja" : "NEE, zet uit", syminfo.session == session.regular)
