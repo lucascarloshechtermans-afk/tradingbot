@@ -100,3 +100,50 @@ Zie `indicator_lab/week/run.py` voor het protocol. Train = 2015-01-01 .. 2023-04
 | 47 | 8 Inside bar / NR7 aan S/R | marktregime (SPY > SMA50, EMA20 > EMA50) | test | 3395 | 40% | +8.5% | -6.7% | 0.84 | -0.62% | -52.1% | -16.5% | 29% | 6% | 5.6 d |
 | 48 | 8 Inside bar / NR7 aan S/R | ruimte >= 10% tot sterke weerstand | train | 2972 | 42% | +8.8% | -7.1% | 0.89 | -0.44% | -71.7% | -13.7% | 33% | 10% | 5.6 d |
 | 48 | 8 Inside bar / NR7 aan S/R | ruimte >= 10% tot sterke weerstand | test | 2126 | 42% | +8.9% | -7.2% | 0.88 | -0.50% | -49.5% | -14.8% | 31% | 10% | 5.7 d |
+| 49 | 8 Inside bar / NR7 aan S/R | RS top 20% | train | 1266 | 43% | +8.9% | -7.1% | 0.93 | -0.29% | -42.8% | -5.9% | 34% | 8% | 5.1 d |
+| 49 | 8 Inside bar / NR7 aan S/R | RS top 20% | test | 944 | 43% | +8.9% | -7.6% | 0.89 | -0.50% | -40.4% | -12.9% | 34% | 9% | 5.1 d |
+| 50 | 8 Inside bar / NR7 aan S/R | volume >= 1.5x op signaaldag | train | 765 | 44% | +8.7% | -7.1% | 0.96 | -0.14% | -25.1% | -2.0% | 35% | 10% | 5.1 d |
+| 50 | 8 Inside bar / NR7 aan S/R | volume >= 1.5x op signaaldag | test | 572 | 41% | +9.9% | -7.2% | 0.95 | -0.22% | -27.7% | -2.9% | 34% | 9% | 5.2 d |
+| 51 | 8 Inside bar / NR7 aan S/R | geen earnings in de houdtijd | train | 5650 | 41% | +8.2% | -6.6% | 0.87 | -0.48% | -73.3% | -14.8% | 30% | 6% | 5.7 d |
+| 51 | 8 Inside bar / NR7 aan S/R | geen earnings in de houdtijd | test | 4219 | 42% | +8.1% | -6.5% | 0.89 | -0.40% | -54.7% | -18.6% | 29% | 5% | 5.8 d |
+| 52 | 8 Inside bar / NR7 aan S/R | RS top 20% + volume >= 1.5x op signaaldag | train | 170 | 43% | +8.9% | -7.5% | 0.90 | -0.43% | -14.0% | -1.0% | 35% | 12% | 4.5 d |
+| 52 | 8 Inside bar / NR7 aan S/R | RS top 20% + volume >= 1.5x op signaaldag | test | 132 | 47% | +10.1% | -7.8% | 1.14 | +0.59% | -7.3% | 2.1% | 42% | 15% | 4.5 d |
+| 53 | 9 Anchored VWAP reclaim | geen filters | train | 18736 | 47% | +8.3% | -7.3% | 1.02 | +0.09% | -68.5% | -9.8% | 36% | 7% | 5.8 d |
+| 53 | 9 Anchored VWAP reclaim | geen filters | test | 13711 | 47% | +8.4% | -7.2% | 1.02 | +0.08% | -63.4% | -16.6% | 34% | 6% | 5.8 d |
+| 54 | 9 Anchored VWAP reclaim | marktregime (SPY > SMA50, EMA20 > EMA50) | train | 8482 | 43% | +8.2% | -7.1% | 0.86 | -0.56% | -71.2% | -13.5% | 31% | 6% | 6.0 d |
+| 54 | 9 Anchored VWAP reclaim | marktregime (SPY > SMA50, EMA20 > EMA50) | test | 8912 | 43% | +8.6% | -7.2% | 0.90 | -0.40% | -51.0% | -11.2% | 33% | 6% | 5.6 d |
+| 55 | 9 Anchored VWAP reclaim | ruimte >= 10% tot sterke weerstand | train | 9813 | 47% | +8.7% | -7.6% | 1.03 | +0.11% | -69.1% | -7.3% | 39% | 11% | 5.7 d |
+| 55 | 9 Anchored VWAP reclaim | ruimte >= 10% tot sterke weerstand | test | 6701 | 46% | +8.7% | -7.5% | 1.00 | +0.01% | -67.4% | -21.9% | 35% | 9% | 5.8 d |
+| 56 | 9 Anchored VWAP reclaim | RS top 20% | train | 2623 | 46% | +8.7% | -7.6% | 0.98 | -0.08% | -65.0% | -7.7% | 37% | 7% | 5.3 d |
+| 56 | 9 Anchored VWAP reclaim | RS top 20% | test | 1913 | 46% | +9.0% | -7.9% | 0.99 | -0.06% | -66.7% | -20.5% | 38% | 9% | 4.8 d |
+| 57 | 9 Anchored VWAP reclaim | volume >= 1.5x op signaaldag | train | 4173 | 47% | +8.3% | -7.6% | 0.95 | -0.19% | -52.6% | -3.2% | 37% | 8% | 5.2 d |
+| 57 | 9 Anchored VWAP reclaim | volume >= 1.5x op signaaldag | test | 3179 | 46% | +8.4% | -7.5% | 0.94 | -0.23% | -62.3% | -19.4% | 33% | 6% | 5.4 d |
+| 58 | 9 Anchored VWAP reclaim | geen earnings in de houdtijd | train | 17354 | 47% | +8.2% | -7.2% | 1.00 | -0.01% | -76.1% | -14.3% | 35% | 6% | 5.8 d |
+| 58 | 9 Anchored VWAP reclaim | geen earnings in de houdtijd | test | 12463 | 46% | +8.2% | -7.0% | 0.99 | -0.03% | -62.0% | -18.1% | 33% | 5% | 5.9 d |
+| 59 | 10 RS leader breakout | geen filters | train | 814 | 39% | +8.4% | -7.6% | 0.72 | -1.31% | -63.0% | -10.9% | 28% | 11% | 5.0 d |
+| 59 | 10 RS leader breakout | geen filters | test | 606 | 41% | +9.4% | -8.1% | 0.81 | -0.92% | -51.8% | -16.7% | 33% | 15% | 4.4 d |
+| 60 | 10 RS leader breakout | marktregime (SPY > SMA50, EMA20 > EMA50) | train | 470 | 37% | +9.0% | -7.8% | 0.67 | -1.65% | -52.1% | -8.3% | 29% | 14% | 4.2 d |
+| 60 | 10 RS leader breakout | marktregime (SPY > SMA50, EMA20 > EMA50) | test | 439 | 38% | +9.9% | -8.3% | 0.75 | -1.30% | -47.2% | -15.5% | 33% | 16% | 4.0 d |
+| 61 | 10 RS leader breakout | ruimte >= 10% tot sterke weerstand | train | 684 | 38% | +8.6% | -7.7% | 0.69 | -1.50% | -62.2% | -10.9% | 28% | 13% | 4.8 d |
+| 61 | 10 RS leader breakout | ruimte >= 10% tot sterke weerstand | test | 554 | 40% | +9.5% | -8.1% | 0.79 | -1.01% | -50.5% | -15.7% | 33% | 16% | 4.3 d |
+| 62 | 10 RS leader breakout | RS top 20% | train | 585 | 41% | +8.5% | -7.6% | 0.77 | -1.04% | -48.6% | -6.9% | 30% | 12% | 4.8 d |
+| 62 | 10 RS leader breakout | RS top 20% | test | 462 | 39% | +9.7% | -8.3% | 0.76 | -1.19% | -47.1% | -15.1% | 33% | 16% | 4.0 d |
+| 63 | 10 RS leader breakout | volume >= 1.5x op signaaldag | train | 814 | 39% | +8.4% | -7.6% | 0.72 | -1.31% | -63.0% | -10.9% | 28% | 11% | 5.0 d |
+| 63 | 10 RS leader breakout | volume >= 1.5x op signaaldag | test | 606 | 41% | +9.4% | -8.1% | 0.81 | -0.92% | -51.8% | -16.7% | 33% | 15% | 4.4 d |
+| 64 | 10 RS leader breakout | geen earnings in de houdtijd | train | 765 | 39% | +8.3% | -7.6% | 0.69 | -1.44% | -65.0% | -11.4% | 27% | 10% | 5.0 d |
+| 64 | 10 RS leader breakout | geen earnings in de houdtijd | test | 572 | 40% | +9.3% | -8.1% | 0.77 | -1.11% | -54.3% | -18.1% | 33% | 15% | 4.4 d |
+
+## Ranglijst (out-of-sample 2023-04-07 .. 2026-10-23, beste configuratie per strategie)
+
+| strategie                   | filters (gekozen op train)   |   test trades | winrate   |   PF | expectancy   | % +10%   | % +20%   | max DD   | CAGR   | houdtijd   | oordeel   |
+|:----------------------------|:-----------------------------|--------------:|:----------|-----:|:-------------|:---------|:---------|:---------|:-------|:-----------|:----------|
+| 6 Pullback in sterke trend  | vol_surge                    |           752 | 45%       | 1.05 | +0.18%       | 35%      | 8%       | -34.7%   | -3.6%  | 5.1 d      | verworpen |
+| 2 Qullamaggie breakout      | geen                         |          1505 | 48%       | 1.01 | +0.03%       | 33%      | 8%       | -38.1%   | -1.4%  | 6.4 d      | verworpen |
+| 9 Anchored VWAP reclaim     | room10                       |          6701 | 46%       | 1    | +0.01%       | 35%      | 9%       | -67.4%   | -21.9% | 5.8 d      | verworpen |
+| 4 S/R flip retest           | rs_top20                     |          3462 | 44%       | 0.98 | -0.08%       | 36%      | 8%       | -54.1%   | -13.2% | 4.5 d      | verworpen |
+| 8 Inside bar / NR7 aan S/R  | vol_surge                    |           572 | 41%       | 0.95 | -0.22%       | 34%      | 9%       | -27.7%   | -2.9%  | 5.2 d      | verworpen |
+| 1 VCP (Minervini)           | room10                       |           162 | 45%       | 0.94 | -0.26%       | 31%      | 10%      | -12.2%   | -1.5%  | 6.2 d      | verworpen |
+| 5 Failed breakdown / spring | vol_surge                    |           978 | 42%       | 0.79 | -0.91%       | 30%      | 5%       | -61.0%   | -21.9% | 5.2 d      | verworpen |
+| 7 Squeeze breakout (TTM)    | regime, rs_top20             |           195 | 43%       | 0.76 | -1.08%       | 34%      | 7%       | -22.5%   | -5.9%  | 5.2 d      | verworpen |
+| 10 RS leader breakout       | rs_top20                     |           462 | 39%       | 0.76 | -1.19%       | 33%      | 16%      | -47.1%   | -15.1% | 4.0 d      | verworpen |
+| 3 Episodic pivot            | regime                       |           360 | 36%       | 0.59 | -2.13%       | 31%      | 9%       | -56.6%   | -18.9% | 3.8 d      | verworpen |
