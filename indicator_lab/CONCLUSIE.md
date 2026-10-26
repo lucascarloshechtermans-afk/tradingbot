@@ -26,6 +26,9 @@ Indicator: `pine/market_regime_sma200.pine` (+ strategy-versie en dashboard). Ge
 | 9 methodes van pro's (Minervini, Qullamaggie, Raschke, Weinstein, pocket pivot, AVWAP, NR7) | geen beter dan SPY; Minervini 4H zakte op de holdout (-0,4%/jaar) | `h4/reports/pro_concepts_*.md`, `h4/reports/holdout_minervini4h.md` |
 | relatieve-sterkte-rotatie (top 10/20 sterkste aandelen) | -7% tot -22%/jaar | `rotation/reports/dev.md` |
 | volatiliteitsdoel, hefboom 2x in uptrend | gezakt / te groot risico (-81%) | `timing/reports/holdout.md`, `leverage.md` |
+| Connors-mean-reversion (RSI2, Double 7s, IBS) op 17 indexen, 1963-2026 | beter dan kopen-en-vasthouden in 1-2 van 17 perioden | `meanrev/reports/index_mr.md` |
+| 10 klassiekers op de 300 grootste Amerikaanse aandelen | geen enkele beter dan SPY (beste 9,7%/jaar vs 13,2%) | `largecap/reports/dev.md` |
+| post-earnings drift (winstverrassing / koersreactie, 60 dagen vasthouden) | op 131 bekende namen 24-28%/jaar, maar op 468 willekeurige nooit gebruikte aandelen 10-12% vs SPY 14,9%: het effect is echt (+0,4 tot +1,4% per trade) maar te klein | `earnings_drift/reports/` |
 
 ## Wat dit betekent voor jou
 1. Een mechanische koop/verkoop-indicator voor losse aandelen die de index verslaat, is in dit onderzoek niet gevonden.
