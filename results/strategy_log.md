@@ -219,3 +219,11 @@ combinaties (x train/test), elk vergeleken met 20 willekeurige runs op dezelfde 
   halen willekeurige instappen hetzelfde (66-74%). Eis 3 (10 procentpunt beter dan random) faalt overal.
 - Hoogste test-PF van alle 240 combinaties: 1,08 (6 pullback, 20 dagen, +10%; winrate 42%). Niets haalt PF >= 1,3.
 - Mediane MFE / MAE in 10 dagen: +5,5..+6,3% / -4,6..-8,0%: de koers beweegt ongeveer even ver mee als tegen.
+
+## Winrate-studie stap 2 en 3 (indicator_lab/week/variants.py; results/step2_stops.md, step3_exits.md)
+Stap 2: 10 setups x 10 stops (standaard, sterke support >= 1,5, 1/1,5/2 ATR; max 5% of 8%) x 4 doelen = 400
+combinaties. Stap 3: 10 setups x 81 exits (T1 +3/+5/+7%, 50/70/100% verkopen, rest op +10% / EMA10-trail / 2 ATR-trail /
+tijd, 10/15/20 dagen; alles max +10%) = 810 combinaties. Totaal winrate-studie tot nu toe: 240 + 400 + 810 = 1450.
+- Beste per setup (gekozen op train) haalt op test 39-61% winrate en PF 0,54-1,07; hoogste: 6 pullback (stop 2 ATR,
+  max 8%; 50% op +7%, rest 2 ATR-trail tot +10%, 20 dagen): 56% winrate, PF 1,07, +0,26% per trade, random 54% / 1,01.
+- Geen enkele variant haalt alle eisen (70% winrate, PF >= 1,3, 10 pp boven random): 0 van 1450.
