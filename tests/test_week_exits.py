@@ -79,3 +79,16 @@ def test_variant_fixed_small_target():
     tr = B.trade(o, h, lo, c, 0, "open", np.nan, 95.0, 2.0, np.nan, tgt=0.03)
     assert tr["reason"] == "target" and tr["exit_i"] == 1
     assert np.isclose(tr["ret"], 103 * K / (100 * (1 + B.COST)) - 1)
+
+
+def test_step1_outcome_fixed_target_costs_and_gaps():
+    from indicator_lab.week import mfe as M
+    o = np.array([100.0, 100.0, 104.5, 101.0])
+    h = np.array([100.0, 102.0, 105.0, 102.0])
+    lo = np.array([100.0, 99.5, 104.0, 100.0])
+    c = np.array([100.0, 101.0, 104.8, 101.0])
+    px, bars, kind, _, _ = M.outcome(o, h, lo, c, 1, 100.0, 95.0, 103.0, 10)
+    assert kind == 1 and bars == 2 and px == 104.5           # gap over the target fills at the open
+    assert np.isclose(M.net(100.0, 103.0), (103 - 0.02) * (1 - 0.0005) / (100.02 * 1.0005) - 1)
+    px, bars, kind, _, _ = M.outcome(o, h, lo, c, 1, 100.0, 99.6, 103.0, 10)
+    assert kind == 0 and bars == 1 and px == 99.6            # stop first on the entry bar
