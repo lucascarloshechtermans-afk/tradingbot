@@ -3,8 +3,9 @@ holdout), for the post-earnings setup (pead_week.py).
 
     python -m indicator_lab.week.earnings_eps fetch     # Yahoo get_earnings_dates(limit=100), 3 threads, cached
 
-Sources merged by load(): Alpha Vantage cache (earn_*.json: reportedDate, reportTime, EPS), the Yahoo caches of
-earnings_drift/confirm.py (earn_yf_holdout) and of this module (earn_yf_eps). Reaction day rule (fixed): Alpha Vantage
+Sources merged by load(), first one wins per ticker: Alpha Vantage cache (earn_*.json: reportedDate, reportTime, EPS),
+the Yahoo caches of earnings_drift/confirm.py (earn_yf_holdout) and of this module (earn_yf_eps), and the dates-only
+cache of week/earnings.py (earn_yf_week, no EPS). Reaction day rule (fixed): Alpha Vantage
 "post-market" -> next session, else the report day; Yahoo timestamps: hour < 12 (New York) -> the report day, else the
 next session (Yahoo's evening reports are stamped 15:00-20:00; morning ones 06:00-09:00).
 """
@@ -69,7 +70,7 @@ def load() -> dict:
                     est = rep = None
                 out.setdefault(t, []).append((pd.Timestamp(e["reportedDate"]),
                                               "next" if e.get("reportTime") == "post-market" else "same", est, rep))
-    for d in (os.path.join(CACHE, "earn_yf_holdout"), YF):
+    for d in (os.path.join(CACHE, "earn_yf_holdout"), YF, os.path.join(CACHE, "earn_yf_week")):  # earn_yf_week: dates only
         for p in glob.glob(os.path.join(d, "*.json")):
             t = os.path.basename(p)[:-5]
             if t in out:
