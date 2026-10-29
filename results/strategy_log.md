@@ -227,3 +227,19 @@ tijd, 10/15/20 dagen; alles max +10%) = 810 combinaties. Totaal winrate-studie t
 - Beste per setup (gekozen op train) haalt op test 39-61% winrate en PF 0,54-1,07; hoogste: 6 pullback (stop 2 ATR,
   max 8%; 50% op +7%, rest 2 ATR-trail tot +10%, 20 dagen): 56% winrate, PF 1,07, +0,26% per trade, random 54% / 1,01.
 - Geen enkele variant haalt alle eisen (70% winrate, PF >= 1,3, 10 pp boven random): 0 van 1450.
+
+## Winrate-studie stap 4 en 5 (indicator_lab/week/filters.py; results/step4_filters.md)
+
+12 extra combinaties (totaal 1462).
+
+| variant     |   test trades | winrate   |   PF |   PF zonder top 5% | exp.   |   exp. (R) | houdtijd   | max DD (10x10%)   | random winrate / PF   | train winrate / PF   | jaren met PF > 1   | oordeel                                                                                                                                                          |
+|:------------|--------------:|:----------|-----:|-------------------:|:-------|-----------:|:-----------|:------------------|:----------------------|:---------------------|:-------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| setup 2, F2 |          1191 | 60%       | 0.96 |               0.84 | -0.11% |      -0.01 | 4.4 d      | -26.9%            | 55% / 0.94            | 61% / 0.99           | 6 / 12             | AFGEWEZEN: winrate 60% < 70%; PF 0.96 < 1,3; PF zonder top 5% 0.84 < 1,2; winrate maar +5 pp vs random; PF maar +0.03 vs random; t = -0.6 < Bonferroni-grens 4.1 |
+| setup 6, F4 |          1415 | 56%       | 1.06 |               0.88 | +0.22% |       0.03 | 6.7 d      | -34.0%            | 55% / 1.02            | 57% / 1.13           | 8 / 12             | AFGEWEZEN: winrate 56% < 70%; PF 1.06 < 1,3; PF zonder top 5% 0.88 < 1,2; winrate maar +1 pp vs random; PF maar +0.04 vs random; t = 1.0 < Bonferroni-grens 4.1  |
+
+## Eindoordeel winrate-studie
+Na 1462 combinaties (stap 1-5) haalt geen enkele variant de eisen. Hoogste test-PF: 1,07 (6 pullback, 56% winrate);
+hoogste test-winrate bij een op train gekozen variant: 61% (2 Qullamaggie, PF 0,98). 70% winrate komt alleen voor bij
+doelen van +2/+3%, en dan is de PF < 1 en is willekeurig instappen even goed. Geen variant haalt PF >= 1,3, dus er is
+geen winrate-niveau dat eisen 2-5 haalt. build.py en week_swing.pine blijven daarom ongewijzigd (alleen bij een
+goedgekeurde variant zouden de defaults veranderen).
