@@ -56,3 +56,19 @@ def test_max_risk_8pct():
     o, h, lo, c = _bars([100, 100, 100], [100, 101, 101], [99, 99, 50], [100, 100, 60])
     tr = B.trade(o, h, lo, c, 0, "open", np.nan, 70.0, 2.0, np.nan)      # support far below: stop capped at -8%
     assert np.isclose(tr["risk"], 0.08)
+
+
+def test_variant_no_partial_runs_to_target():
+    o, h, lo, c = _bars([100, 100, 105, 112], [100, 104, 111, 121], [100, 99, 104, 111], [100, 103, 110, 120])
+    tr = B.trade(o, h, lo, c, 0, "open", np.nan, 95.0, 2.0, np.nan, partial=False)
+    assert not tr["half"] and tr["reason"] == "target"
+    assert np.isclose(tr["ret"], 120 * K / (100 * (1 + B.COST)) - 1)
+
+
+def test_variant_hold_5_and_wider_stop():
+    n = 14
+    o = np.full(n, 100.0)
+    tr = B.trade(o, o + 1, o - 1, o + 0.5, 0, "open", np.nan, 99.5, 2.0, np.nan, hold=5)
+    assert tr["hold"] == 5 and tr["reason"] == "tijdstop"
+    tr2 = B.trade(o, o + 1, o - 1, o + 0.5, 0, "open", np.nan, 99.5, 2.0, np.nan, min_atr=1.5)
+    assert np.isclose(tr2["risk"], 0.03)                     # stop = 100 - 1.5 x 2

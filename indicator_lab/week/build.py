@@ -197,7 +197,8 @@ def signals(df: pd.DataFrame, lv: pd.DataFrame, spy_c: np.ndarray) -> dict:
 
 
 # ----------------------------------------------------------------------------------------------- exits
-def trade(o, h, lo, c, s, etype, elevel, anchor, atr_s, res_strong_s):
+def trade(o, h, lo, c, s, etype, elevel, anchor, atr_s, res_strong_s, hold=HOLD, partial=True, min_atr=1.0):
+    """Standard exits; the keyword arguments are the exit variations tested later (defaults = the standard)."""
     n = len(c)
     d = s + 1
     if d >= n:
@@ -211,14 +212,14 @@ def trade(o, h, lo, c, s, etype, elevel, anchor, atr_s, res_strong_s):
     if not (fill > 0 and atr_s > 0):
         return None
     base = anchor - 0.25 * atr_s if np.isfinite(anchor) and anchor < fill else fill - 1.5 * atr_s
-    stop = max(fill * 0.92, min(base, fill - 1.0 * atr_s))
+    stop = max(fill * 0.92, min(base, fill - min_atr * atr_s))
     t1 = fill * 1.10
     t2 = min(max(res_strong_s, fill * 1.10), fill * 1.20) if np.isfinite(res_strong_s) and res_strong_s > fill else fill * 1.20
     buy = fill * (1 + COST)
     left, cash, half = 1.0, 0.0, False
     vals, hit10, hit20, mfe = [], False, False, 0.0
     exit_k, reason = None, None
-    for k in range(HOLD):
+    for k in range(hold):
         day = d + k
         if day >= n:
             exit_k, reason = k - 1, "einde data"
@@ -235,19 +236,19 @@ def trade(o, h, lo, c, s, etype, elevel, anchor, atr_s, res_strong_s):
                 hit10 = True
             if h[day] >= fill * 1.20:
                 hit20 = True
-            if not half and h[day] >= t1:
+            if partial and not half and h[day] >= t1:
                 px = t1 if k == 0 else max(op, t1)
                 cash += 0.5 * px * (1 - COST)
                 left, half = 0.5, True
                 newstop = fill
             else:
                 newstop = None
-            if half and h[day] >= t2:
+            if (half or not partial) and h[day] >= t2:
                 px = t2 if k == 0 else max(op, t2)
                 cash += left * px * (1 - COST)
                 left = 0.0
                 reason = "target"
-            if left > 0 and k == HOLD - 1:
+            if left > 0 and k == hold - 1:
                 cash += left * c[day] * (1 - COST)
                 left = 0.0
                 reason = "tijdstop"
