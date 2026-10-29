@@ -171,3 +171,43 @@ Combinatie test-PF 0.98 vs beste losse strategie 1.05: **combinatie NIET beter, 
   grootste winnaars weg; de genomen trades gemiddeld -0,08% in plaats van +0,18%.
 - Filters (regime, RS, ruimte >= 10%, geen earnings) verbeterden niets structureel; "geen earnings in de houdtijd"
   maakte het overal iets slechter (de grote uitschieters zitten vaak rond earnings).
+
+## Zoektocht naar 70% winrate (indicator_lab/week/winrate.py)
+
+Eén vast winstdoel voor de hele positie, verder dezelfde stop, tijdstop (10 dagen), kosten en universum; geen filters.
+
+| strategie                        | doel   |   train trades | train winrate   |   train PF | train per trade   |   test trades | test winrate   |   test PF | test per trade   | voldoet (test: >= 70% winrate én PF > 1,3)   |
+|:---------------------------------|:-------|---------------:|:----------------|-----------:|:------------------|--------------:|:---------------|----------:|:-----------------|:---------------------------------------------|
+| 0 Willekeurige instap (controle) | +3%    |          21574 | 64%             |       0.7  | -0.74%            |         17209 | 65%            |      0.78 | -0.52%           | –                                            |
+| 0 Willekeurige instap (controle) | +5%    |          21574 | 53%             |       0.77 | -0.76%            |         17209 | 55%            |      0.86 | -0.44%           | –                                            |
+| 0 Willekeurige instap (controle) | +10%   |          21574 | 39%             |       0.8  | -0.81%            |         17209 | 42%            |      0.93 | -0.28%           | –                                            |
+| 1 VCP (Minervini)                | +3%    |            253 | 65%             |       0.61 | -1.10%            |           305 | 67%            |      0.66 | -0.92%           | nee                                          |
+| 1 VCP (Minervini)                | +5%    |            252 | 53%             |       0.66 | -1.22%            |           305 | 57%            |      0.77 | -0.77%           | nee                                          |
+| 1 VCP (Minervini)                | +10%   |            251 | 41%             |       0.73 | -1.19%            |           302 | 45%            |      0.82 | -0.75%           | nee                                          |
+| 2 Qullamaggie breakout           | +3%    |           1712 | 71%             |       0.81 | -0.44%            |          1637 | 71%            |      0.83 | -0.40%           | nee                                          |
+| 2 Qullamaggie breakout           | +5%    |           1684 | 59%             |       0.89 | -0.34%            |          1605 | 61%            |      0.96 | -0.13%           | nee                                          |
+| 2 Qullamaggie breakout           | +10%   |           1612 | 46%             |       0.89 | -0.42%            |          1527 | 48%            |      0.98 | -0.07%           | nee                                          |
+| 3 Episodic pivot                 | +3%    |            431 | 50%             |       0.33 | -2.68%            |           459 | 49%            |      0.32 | -2.82%           | nee                                          |
+| 3 Episodic pivot                 | +5%    |            430 | 43%             |       0.45 | -2.46%            |           459 | 44%            |      0.43 | -2.61%           | nee                                          |
+| 3 Episodic pivot                 | +10%   |            429 | 34%             |       0.56 | -2.27%            |           459 | 35%            |      0.59 | -2.13%           | nee                                          |
+| 4 S/R flip retest                | +3%    |          26666 | 65%             |       0.79 | -0.46%            |         21571 | 65%            |      0.8  | -0.46%           | nee                                          |
+| 4 S/R flip retest                | +5%    |          24034 | 54%             |       0.87 | -0.39%            |         19624 | 55%            |      0.89 | -0.33%           | nee                                          |
+| 4 S/R flip retest                | +10%   |          21114 | 41%             |       0.91 | -0.32%            |         17247 | 42%            |      0.97 | -0.13%           | nee                                          |
+| 5 Failed breakdown / spring      | +3%    |           5913 | 70%             |       0.87 | -0.28%            |          4888 | 67%            |      0.78 | -0.53%           | nee                                          |
+| 5 Failed breakdown / spring      | +5%    |           5729 | 59%             |       0.94 | -0.19%            |          4781 | 57%            |      0.88 | -0.37%           | nee                                          |
+| 5 Failed breakdown / spring      | +10%   |           5499 | 45%             |       0.95 | -0.18%            |          4617 | 44%            |      0.95 | -0.20%           | nee                                          |
+| 6 Pullback in sterke trend       | +3%    |           5100 | 66%             |       0.78 | -0.50%            |          5153 | 67%            |      0.81 | -0.44%           | nee                                          |
+| 6 Pullback in sterke trend       | +5%    |           4832 | 55%             |       0.88 | -0.35%            |          4834 | 56%            |      0.92 | -0.24%           | nee                                          |
+| 6 Pullback in sterke trend       | +10%   |           4638 | 42%             |       0.96 | -0.13%            |          4603 | 43%            |      1    | +0.01%           | nee                                          |
+| 7 Squeeze breakout (TTM)         | +3%    |           1190 | 65%             |       0.63 | -1.06%            |          1068 | 72%            |      0.86 | -0.32%           | nee                                          |
+| 7 Squeeze breakout (TTM)         | +5%    |           1190 | 56%             |       0.75 | -0.85%            |          1068 | 60%            |      0.93 | -0.21%           | nee                                          |
+| 7 Squeeze breakout (TTM)         | +10%   |           1190 | 43%             |       0.76 | -1.05%            |          1067 | 46%            |      0.92 | -0.34%           | nee                                          |
+| 8 Inside bar / NR7 aan S/R       | +3%    |           6368 | 67%             |       0.79 | -0.48%            |          4821 | 67%            |      0.84 | -0.37%           | nee                                          |
+| 8 Inside bar / NR7 aan S/R       | +5%    |           6296 | 55%             |       0.86 | -0.41%            |          4756 | 56%            |      0.89 | -0.33%           | nee                                          |
+| 8 Inside bar / NR7 aan S/R       | +10%   |           6172 | 42%             |       0.91 | -0.36%            |          4667 | 43%            |      0.93 | -0.25%           | nee                                          |
+| 9 Anchored VWAP reclaim          | +3%    |          21329 | 72%             |       0.91 | -0.19%            |         15560 | 70%            |      0.85 | -0.34%           | nee                                          |
+| 9 Anchored VWAP reclaim          | +5%    |          20104 | 61%             |       0.98 | -0.07%            |         14661 | 59%            |      0.94 | -0.17%           | nee                                          |
+| 9 Anchored VWAP reclaim          | +10%   |          18879 | 47%             |       1.03 | +0.12%            |         13804 | 47%            |      1.01 | +0.05%           | nee                                          |
+| 10 RS leader breakout            | +3%    |           1001 | 64%             |       0.59 | -1.20%            |           777 | 62%            |      0.52 | -1.52%           | nee                                          |
+| 10 RS leader breakout            | +5%    |            960 | 55%             |       0.71 | -1.03%            |           738 | 53%            |      0.64 | -1.38%           | nee                                          |
+| 10 RS leader breakout            | +10%   |            861 | 40%             |       0.7  | -1.39%            |           663 | 41%            |      0.75 | -1.22%           | nee                                          |
