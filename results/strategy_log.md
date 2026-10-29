@@ -211,3 +211,11 @@ Eén vast winstdoel voor de hele positie, verder dezelfde stop, tijdstop (10 dag
 | 10 RS leader breakout            | +3%    |           1001 | 64%             |       0.59 | -1.20%            |           777 | 62%            |      0.52 | -1.52%           | nee                                          |
 | 10 RS leader breakout            | +5%    |            960 | 55%             |       0.71 | -1.03%            |           738 | 53%            |      0.64 | -1.38%           | nee                                          |
 | 10 RS leader breakout            | +10%   |            861 | 40%             |       0.7  | -1.39%            |           663 | 41%            |      0.75 | -1.22%           | nee                                          |
+
+## Winrate-studie stap 1 (indicator_lab/week/mfe.py, rapport: results/step1_mfe.md)
+Kosten 0,05%/kant + 2 ticks; vast doel (max +10%, hele positie eruit); 10 setups x 4 houdtijden x 6 doelen = 240
+combinaties (x train/test), elk vergeleken met 20 willekeurige runs op dezelfde datums.
+- >= 70% winrate op test kan alleen met een doel van +2% of +3%; dan is de profit factor 0,63-0,93 (verliesgevend) en
+  halen willekeurige instappen hetzelfde (66-74%). Eis 3 (10 procentpunt beter dan random) faalt overal.
+- Hoogste test-PF van alle 240 combinaties: 1,08 (6 pullback, 20 dagen, +10%; winrate 42%). Niets haalt PF >= 1,3.
+- Mediane MFE / MAE in 10 dagen: +5,5..+6,3% / -4,6..-8,0%: de koers beweegt ongeveer even ver mee als tegen.
