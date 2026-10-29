@@ -143,7 +143,14 @@ def summarize(rows: list) -> dict:
 
 
 def main():
-    arrs, sigs, elig = load_all()
+    cache = os.path.join(B.CACHE, "step1_inputs.pkl")
+    if os.path.exists(cache):
+        with open(cache, "rb") as fh:
+            arrs, sigs, elig = pickle.load(fh)
+    else:
+        arrs, sigs, elig = load_all()
+        with open(cache, "wb") as fh:
+            pickle.dump((arrs, sigs, elig), fh)
     by_date: dict = {}
     for t, ix in elig.items():
         idx = arrs[t]["idx"]
@@ -154,9 +161,9 @@ def main():
     for sid in B.NAMES:
         for part in ("train", "test"):
             rows, dates = [], []
-            for t, lst in sigs.items():
+            for t, per_setup in sigs.items():
                 idx = arrs[t]["idx"]
-                for s, etype, elevel, anchor in lst:
+                for s, etype, elevel, anchor in per_setup[sid]:
                     day = idx[s]
                     if (part == "train") != (day <= TRAIN_END):
                         continue
