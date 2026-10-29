@@ -255,3 +255,9 @@ instap (gewone dag-low i.p.v. gap-dag-low), waardoor random een lagere winrate h
 Uitkomst: gaps ZONDER earnings verliezen in alle 27 varianten (test-PF 0,52-0,82, -1,1 tot -3,8% per trade, max
 daling -86 tot -98%); dezelfde gaps MET earnings zitten rond quitte (PF 0,81-1,06). De cijfers zijn dus de motor van
 het effect, niet de gap zelf: een gap zonder nieuws is eerder een valkuil.
+
+## Post-earnings gap stap 5 (results/pead_improve.md): 5 extra varianten; eindvariant test PF 1.03, exp +0.12%, 656 trades, random-PF 0.85: niet goedgekeurd
+Correctie met volledige EPS-data (99% van de events): de eerdere PF 1,19 voor "EPS-verrassing > 0" (stap 1-4) was een
+artefact van de onvolledige EPS-dekking (vooral bekende namen). Met volledige data: ADR > 2%, EMA20-trail, 40 dagen:
+"any" PF 1,06 (test), "verrassing > 0" PF 1,00. Stap 5: verbeteringen tilden train-PF naar 1,28 maar test zakte naar
+1,03 (t = 0,22): overfit op train. Niet goedgekeurd; build.py en week_swing.pine blijven ongewijzigd.
