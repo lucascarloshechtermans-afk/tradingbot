@@ -243,3 +243,10 @@ hoogste test-winrate bij een op train gekozen variant: 61% (2 Qullamaggie, PF 0,
 doelen van +2/+3%, en dan is de PF < 1 en is willekeurig instappen even goed. Geen variant haalt PF >= 1,3, dus er is
 geen winrate-niveau dat eisen 2-5 haalt. build.py en week_swing.pine blijven daarom ongewijzigd (alleen bij een
 goedgekeurde variant zouden de defaults veranderen).
+
+## Post-earnings gap (setup 11), stap 1-4: 54 varianten — zie results/pead_week.md
+Uitkomst (test 2023-2026): hoogste PF 1,19 (ADR > 2%, EPS-verrassing > 0, exit A-EMA20, 40 dagen; 604 trades, winrate
+30%, +0,66%/trade, train-PF 1,16); geen variant haalt PF >= 1,3 en PF zonder top 5% is overal < 1 (max 0,95).
+EPS-verrassing > 0 verbetert de PF met ~0,1-0,15; ADR > 4% is het slechtst (tegenwind van de beweeglijkste aandelen).
+Let op: EPS-data voor 1735 van 3044 aandelen met earningsdatums (ophalen liep nog); random-stop ligt dichter bij de
+instap (gewone dag-low i.p.v. gap-dag-low), waardoor random een lagere winrate heeft.
