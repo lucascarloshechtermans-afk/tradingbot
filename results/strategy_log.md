@@ -250,3 +250,8 @@ Uitkomst (test 2023-2026): hoogste PF 1,19 (ADR > 2%, EPS-verrassing > 0, exit A
 EPS-verrassing > 0 verbetert de PF met ~0,1-0,15; ADR > 4% is het slechtst (tegenwind van de beweeglijkste aandelen).
 Let op: EPS-data voor 1735 van 3044 aandelen met earningsdatums (ophalen liep nog); random-stop ligt dichter bij de
 instap (gewone dag-low i.p.v. gap-dag-low), waardoor random een lagere winrate heeft.
+
+## Controle gap-setup zonder earnings (results/pead_nonearn.md): 27 varianten x 2 groepen
+Uitkomst: gaps ZONDER earnings verliezen in alle 27 varianten (test-PF 0,52-0,82, -1,1 tot -3,8% per trade, max
+daling -86 tot -98%); dezelfde gaps MET earnings zitten rond quitte (PF 0,81-1,06). De cijfers zijn dus de motor van
+het effect, niet de gap zelf: een gap zonder nieuws is eerder een valkuil.
