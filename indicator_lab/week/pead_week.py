@@ -129,6 +129,7 @@ def load():
             for i in np.where(base & (adr > a))[0]:
                 pool[a].setdefault(df.index[i], []).append((t, int(i)))
         va50 = B.prev(B.sma(v, 50))
+        sma200 = B.sma(c, 200)
         reg = spy_up.reindex(df.index).ffill().fillna(False).to_numpy(bool)
         for ts, rule, est, rep in earn.get(t, []):
             i = int(df.index.searchsorted(ts))
@@ -139,14 +140,19 @@ def load():
             if not (o[i] >= 1.05 * c[i - 1] and v[i] >= 2 * va50[i] and c[i] > o[i]):
                 continue
             sur = (rep - est) if est is not None and rep is not None else None
-            events.append({"ticker": t, "s": i, "day": df.index[i], "adr": adr[i], "surprise": sur,
+            sur_pct = sur / abs(est) if sur is not None and abs(est) >= 0.05 else None
+            rng_ = h[i] - lo[i]
+            events.append({"ticker": t, "s": i, "day": df.index[i], "adr": adr[i], "surprise": sur, "surprise_pct": sur_pct,
+                           "gap": o[i] / c[i - 1] - 1, "vol_x": v[i] / va50[i],
+                           "ibs": (c[i] - lo[i]) / rng_ if rng_ > 0 else 0.5, "above200": bool(c[i] > sma200[i]),
                            "split": "train" if df.index[i] <= TRAIN_END else "test"})
         if j % 500 == 0:
             print(f"load {j}/{len(tickers)}: {len(events)} events", flush=True)
     return arrs, events, pool
 
 
-def simulate(ar, s, mode, hold, gap_low=None):
+def simulate(ar, s, mode, hold, risk_pct=None):
+    """risk_pct: stop at this fraction below the fill instead of below the signal day's low (fair random control)."""
     d = s + 1
     if d + hold > len(ar["c"]):
         return None
@@ -154,9 +160,12 @@ def simulate(ar, s, mode, hold, gap_low=None):
     a = ar["atr"][s]
     if not (fill > 0 and a > 0):
         return None
-    stop = (ar["l"][s] if gap_low is None else gap_low) - 0.1 * a
-    if stop >= fill:
-        stop = fill - a                                 # opened below the gap-day low: 1 ATR stop
+    if risk_pct is not None:
+        stop = fill * (1 - risk_pct)
+    else:
+        stop = ar["l"][s] - 0.1 * a
+        if stop >= fill:
+            stop = fill - a                             # opened below the gap-day low: 1 ATR stop
     r, bars = exit_sim(ar["o"], ar["h"], ar["l"], ar["c"], ar["e20"], ar["atr"], d, fill, stop, mode, hold)
     return r, bars, 1 - stop / fill, ar["idx"][d], ar["idx"][min(d + bars - 1, len(ar["c"]) - 1)]
 
