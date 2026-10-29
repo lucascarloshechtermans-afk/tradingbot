@@ -72,3 +72,10 @@ def test_variant_hold_5_and_wider_stop():
     assert tr["hold"] == 5 and tr["reason"] == "tijdstop"
     tr2 = B.trade(o, o + 1, o - 1, o + 0.5, 0, "open", np.nan, 99.5, 2.0, np.nan, min_atr=1.5)
     assert np.isclose(tr2["risk"], 0.03)                     # stop = 100 - 1.5 x 2
+
+
+def test_variant_fixed_small_target():
+    o, h, lo, c = _bars([100, 100, 101], [100, 104, 103], [100, 99, 100], [100, 103, 102])
+    tr = B.trade(o, h, lo, c, 0, "open", np.nan, 95.0, 2.0, np.nan, tgt=0.03)
+    assert tr["reason"] == "target" and tr["exit_i"] == 1
+    assert np.isclose(tr["ret"], 103 * K / (100 * (1 + B.COST)) - 1)

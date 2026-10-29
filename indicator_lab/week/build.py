@@ -197,7 +197,7 @@ def signals(df: pd.DataFrame, lv: pd.DataFrame, spy_c: np.ndarray) -> dict:
 
 
 # ----------------------------------------------------------------------------------------------- exits
-def trade(o, h, lo, c, s, etype, elevel, anchor, atr_s, res_strong_s, hold=HOLD, partial=True, min_atr=1.0):
+def trade(o, h, lo, c, s, etype, elevel, anchor, atr_s, res_strong_s, hold=HOLD, partial=True, min_atr=1.0, tgt=None):
     """Standard exits; the keyword arguments are the exit variations tested later (defaults = the standard)."""
     n = len(c)
     d = s + 1
@@ -215,6 +215,8 @@ def trade(o, h, lo, c, s, etype, elevel, anchor, atr_s, res_strong_s, hold=HOLD,
     stop = max(fill * 0.92, min(base, fill - min_atr * atr_s))
     t1 = fill * 1.10
     t2 = min(max(res_strong_s, fill * 1.10), fill * 1.20) if np.isfinite(res_strong_s) and res_strong_s > fill else fill * 1.20
+    if tgt is not None:                       # variation: one fixed target for the whole position (no 50% step)
+        t2, partial = fill * (1 + tgt), False
     buy = fill * (1 + COST)
     left, cash, half = 1.0, 0.0, False
     vals, hit10, hit20, mfe = [], False, False, 0.0
