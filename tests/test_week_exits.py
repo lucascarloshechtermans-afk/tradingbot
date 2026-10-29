@@ -92,3 +92,21 @@ def test_step1_outcome_fixed_target_costs_and_gaps():
     assert np.isclose(M.net(100.0, 103.0), (103 - 0.02) * (1 - 0.0005) / (100.02 * 1.0005) - 1)
     px, bars, kind, _, _ = M.outcome(o, h, lo, c, 1, 100.0, 99.6, 103.0, 10)
     assert kind == 0 and bars == 1 and px == 99.6            # stop first on the entry bar
+
+
+def test_step3_partial_then_breakeven_and_cap():
+    from indicator_lab.week import variants as V
+    buy = 100.02 * 1.0005
+    o = np.array([100.0, 100.0, 104.0, 103.0, 99.0])
+    h = np.array([100.0, 101.0, 106.0, 104.0, 100.0])
+    lo = np.array([100.0, 99.0, 103.0, 101.0, 98.0])
+    c = np.array([100.0, 100.5, 105.5, 102.0, 99.0])
+    e10 = np.full(5, 90.0)
+    a = np.full(5, 2.0)
+    r, bars, hit = V.run_exit(o, h, lo, c, e10, a, 1, 100.0, 95.0, 105.0, 0.5, 3, 10)
+    assert hit and bars == 4                                         # half at 105, rest stopped at break-even (open 99)
+    assert np.isclose(r, (0.5 * (105 - 0.02) * 0.9995 + 0.5 * (99 - 0.02) * 0.9995) / buy - 1)
+    h2 = h.copy()
+    h2[2] = 115.0                                                    # rest capped at +10%
+    r2, _, _ = V.run_exit(o, h2, lo, c, e10, a, 1, 100.0, 95.0, 105.0, 0.5, 3, 10)
+    assert np.isclose(r2, (0.5 * (105 - 0.02) * 0.9995 + 0.5 * (110 - 0.02) * 0.9995) / buy - 1)
