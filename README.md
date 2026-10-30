@@ -12,6 +12,30 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 19 — low volatility and blends (`research/round19.py`, 2026-10-30)
+
+Pre-registered, point-in-time S&P 500, same strict rule as round 18 (higher Sharpe than SPY in all
+three periods). Win rate of the current momentum rule for reference (2011-07..2026-09,
+point-in-time): positive months 59% vs SPY 69%; months better than SPY 50% (58% / 46% / 40% per
+period); per stock position 53% positive, 49% better than SPY.
+
+| CAGR / max DD / Sharpe | 2011–18 | 2019–22 | 2023–26 | whole period | verdict |
+|---|---|---|---|---|---|
+| SPY buy and hold | 11.1% / 19% / 0.80 | 13.1% / 34% / 0.66 | 21.9% / 19% / 1.40 | 14.2% / 34% / 0.86 | — |
+| L1 50 lowest-volatility members | 12.6% / 11% / **1.12** | 12.6% / 35% / 0.70 | 5.1% / 11% / 0.49 | 10.7% / 35% / 0.80 | 2 of 3 |
+| L2 L1 + SPY filter | 7.9% / 13% / 0.80 | 8.3% / 14% / 0.85 | 4.4% / 12% / 0.49 | 7.1% / 14% / 0.74 | 2 of 3 |
+| L3 low-vol momentum top 20 | 8.9% / 19% / 0.75 | 5.5% / 16% / 0.48 | 8.7% / 10% / 0.84 | 7.9% / 21% / 0.69 | no |
+| B1 80% SPY + 20% momentum | 10.5% / 22% / 0.76 | 11.3% / 30% / 0.63 | 22.3% / 18% / 1.33 | 13.5% / 30% / 0.85 | no |
+| B2 50% SPY + 50% low vol | 12.0% / 14% / 0.98 | 13.1% / 34% / 0.71 | 13.5% / 12% / 1.22 | 12.6% / 34% / **0.89** | 2 of 3 |
+| current momentum rule | 7.3% / 34% / 0.48 | 2.5% / 23% / 0.22 | 20.8% / 31% / 0.78 | 9.1% / 34% / 0.51 | no |
+
+- **Nothing passes the strict rule.** Low volatility was much better than SPY in 2011–18 and
+  slightly better in 2019–22, but far behind in 2023–26 (the AI/tech rally).
+- **B2 (half SPY, half low-vol stocks) has the best whole-period Sharpe of anything tested
+  (0.89 vs 0.86)**, with milder years (worst year −10% vs −18%). The price is a lower return
+  (12.6% vs 14.2%/yr). Possible, not proven.
+- **The current momentum rule is the weakest option tested in rounds 17–19.**
+
 ## Research round 18 — "try everything" (`research/round18.py`, 2026-10-30)
 
 Pre-registered. ETF strategies have no survivorship problem (ETFs do not disappear). Stock

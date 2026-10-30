@@ -400,3 +400,20 @@ ALL three periods DEV, VAL, OOS. 2 of 3 = "possible, unproven". Otherwise "does 
   M4 0.61/0.25/0.69 · M5 0.67/0.29/0.46 · M6 0.78/0.67/0.98.
 - Only E6 (QQQ buy and hold, not a timing rule) passes 3/3, with a 0.01 margin in VAL. E4 2/3.
   No technical timing or stock-selection rule beats SPY.
+
+# Round 19 — low volatility and blends (written 2026-10-30, before running)
+"Make it better": the one well-documented price-only effect not yet tested is low volatility
+(calm stocks earned more per unit of risk in the literature). Point-in-time S&P 500, monthly at
+the month-end close, next-open trades, 0.10% per side, same periods.
+- L1 the 50 members with the lowest 252-day daily-return volatility, equal weight, always invested.
+- L2 L1 with the SPY > 200-day filter (else T-bills).
+- L3 low-vol momentum: among the 100 lowest-volatility members, the 20 with the best 12-1 return,
+  SPY filter.
+- B1 core-satellite: 80% SPY + 20% current momentum rule (M0), rebalanced monthly.
+- B2 50% SPY + 50% L1.
+Rule as round 18: beats SPY only with a higher Sharpe in all three periods (DEV, VAL, OOS).
+
+## Round 19 results
+- Sharpe DEV / VAL / OOS (SPY 0.80 / 0.66 / 1.40): L1 1.12 / 0.70 / 0.49 (2/3) · L2 0.80 / 0.85 / 0.49 (2/3) ·
+  L3 0.75 / 0.48 / 0.84 (0/3) · B1 0.76 / 0.63 / 1.33 (0/3) · B2 0.98 / 0.71 / 1.22 (2/3) · M0 0.48 / 0.22 / 0.78.
+- Nothing passes 3/3. Whole period: B2 Sharpe 0.89 (12.6%/yr) vs SPY 0.86 (14.2%/yr); M0 0.51 (9.1%/yr).
