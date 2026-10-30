@@ -43,53 +43,72 @@ TRAIN_END = pd.Timestamp("2022-12-31")
 NAMES = {**B.NAMES, "S11": "earnings gap", "S12": "jouw indicator v4.1", "RND": "willekeurig (controle)"}
 
 
-def load():
-    data20.final_mode()
+def calendar():
     spy = R.load("SPY")
     spy = spy[(spy.index >= B.START) & (spy.index <= B.END)]
     wk = pd.Series(spy.index.to_period("W-FRI"), index=spy.index)
     week_last = wk.groupby(wk).apply(lambda s: s.index[-1])           # last trading day of each week
     week_first = wk.groupby(wk).apply(lambda s: s.index[0])
+    return spy, wk, week_first, week_last
+
+
+def load_ticker(t, spy, earn):
+    """(arrays, {strategy id: candidates}) for one ticker, or None (no data / never in the universe)."""
+    try:
+        df = data20.load(t)
+    except PermissionError:
+        return None
+    if df is None or len(df) < 300:
+        return None
+    df = df[(df[["open", "high", "low", "close"]] > 0).all(axis=1) & (df.index <= B.END)]
+    m = B.universe_mask(df) & np.asarray(df.index >= B.START)
+    if not m.any():
+        return None
+    lv = sr.levels(df)
+    o, h, lo, c, v = (df[k].to_numpy(float) for k in ("open", "high", "low", "close", "volume"))
+    arr = {"idx": df.index, "o": o, "h": h, "l": lo, "c": c, "atr": lv["atr"].to_numpy(), "sup_lo": lv["sup_lo"].to_numpy()}
+    sup = arr["sup_lo"]
+    cands = {k: [] for k in NAMES}
+
+    def add(sid, s, etype="open", elevel=np.nan, anchor=None):
+        if s + 1 < len(m) and m[s]:
+            cands[sid].append((t, int(s), etype, elevel, sup[s] if anchor is None else anchor))
+
+    for sid, lst in B.signals(df, lv, spy.reindex(df.index).ffill().to_numpy()).items():
+        for s, etype, elevel, anchor in lst:
+            add(sid, s, etype, elevel, anchor)
+    va50 = B.prev(B.sma(v, 50))
+    for ts, rule, _e, _r in earn.get(t, []):
+        i = int(df.index.searchsorted(ts))
+        if i < len(df) and df.index[i] == ts and rule == "next":
+            i += 1
+        if 1 <= i < len(df) and o[i] >= 1.05 * c[i - 1] and v[i] >= 2 * va50[i] and c[i] > o[i]:
+            add("S11", i)
+    for s in np.where(PS.run(df, t, PS.V41)["buy"])[0]:
+        add("S12", int(s))
+    for s in np.where(m)[0]:
+        add("RND", int(s))
+    return arr, cands
+
+
+def tickers():
+    return sorted(set(data20.DEV) | data20.H_TICKERS)
+
+
+def load():
+    data20.final_mode()
+    spy, wk, week_first, week_last = calendar()
     earn = EE.load()
     arrs, cands = {}, {k: [] for k in NAMES}
-    tickers = sorted(set(data20.DEV) | data20.H_TICKERS)
-    for j, t in enumerate(tickers):
-        try:
-            df = data20.load(t)
-        except PermissionError:
-            continue
-        if df is None or len(df) < 300:
-            continue
-        df = df[(df[["open", "high", "low", "close"]] > 0).all(axis=1) & (df.index <= B.END)]
-        m = B.universe_mask(df) & np.asarray(df.index >= B.START)
-        if not m.any():
-            continue
-        lv = sr.levels(df)
-        o, h, lo, c, v = (df[k].to_numpy(float) for k in ("open", "high", "low", "close", "volume"))
-        arrs[t] = {"idx": df.index, "o": o, "h": h, "l": lo, "c": c, "atr": lv["atr"].to_numpy(),
-                   "sup_lo": lv["sup_lo"].to_numpy()}
-        sup = arrs[t]["sup_lo"]
-
-        def add(sid, s, etype="open", elevel=np.nan, anchor=None, t=t, m=m, sup=sup):
-            if s + 1 < len(m) and m[s]:
-                cands[sid].append((t, int(s), etype, elevel, sup[s] if anchor is None else anchor))
-
-        for sid, lst in B.signals(df, lv, spy.reindex(df.index).ffill().to_numpy()).items():
-            for s, etype, elevel, anchor in lst:
-                add(sid, s, etype, elevel, anchor)
-        va50 = B.prev(B.sma(v, 50))
-        for ts, rule, _e, _r in earn.get(t, []):
-            i = int(df.index.searchsorted(ts))
-            if i < len(df) and df.index[i] == ts and rule == "next":
-                i += 1
-            if 1 <= i < len(df) and o[i] >= 1.05 * c[i - 1] and v[i] >= 2 * va50[i] and c[i] > o[i]:
-                add("S11", i)
-        for s in np.where(PS.run(df, t, PS.V41)["buy"])[0]:
-            add("S12", int(s))
-        for s in np.where(m)[0]:
-            add("RND", int(s))
+    tk = tickers()
+    for j, t in enumerate(tk):
+        res = load_ticker(t, spy, earn)
+        if res is not None:
+            arrs[t] = res[0]
+            for sid, lst in res[1].items():
+                cands[sid] += lst
         if j % 400 == 0:
-            print(f"load {j}/{len(tickers)}", flush=True)
+            print(f"load {j}/{len(tk)}", flush=True)
     return arrs, cands, wk, week_first, week_last
 
 
