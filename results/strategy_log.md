@@ -268,3 +268,5 @@ geaccepteerd (MAR 0,12 vs -0,02). Enige holdout-run (1304 aandelen): v4.2 MAR 0,
 (SPY 13,2%): NIET goedgekeurd. v4.1 blijft de versie; swing_v4_2.pine heeft beide filters standaard uit.
 
 ## Weekplan 3 posities, +10% en eruit, vrijdag eruit (results/three_week.md): 26 varianten; beste op train = M1 5 Failed breakdown / spring: test +0.20%/week, +10% geraakt 24%, winrate 48%, 3x +10% in 1.3% van de weken
+
+## Exit-test (results/exit_test.md, branch claude/exit-test): 78 varianten; aantoonbaar beter dan RND: 0, aantoonbaar beter dan SPY: 0
