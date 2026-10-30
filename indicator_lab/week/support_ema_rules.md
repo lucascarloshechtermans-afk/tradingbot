@@ -51,4 +51,6 @@ Code: `indicator_lab/week/support_ema.py`. Rapport: `results/support_ema.md`.
 - Geen advies om (papier) te traden, tenzij een variant in de test aantoonbaar beter is dan SPY.
 
 ## Nieuwe hypotheses (na het zien van resultaten; niet in de hoofdtabel)
-_(nog geen)_
+- H1 (opgeschreven na de run, NIET getest): "alle liquide aandelen, EMA 50/100/200 of 100/200, RSI <= 35, uitstap (b) of (c)"
+  was in de test 2023-2026 ongeveer gelijk aan SPY en net niet aantoonbaar beter dan random, maar op train bijna nul.
+  Alleen geldig als nieuwe test op data die hier niet gebruikt is.
