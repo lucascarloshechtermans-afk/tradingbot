@@ -60,5 +60,17 @@ Nieuw uit het onderzoek:
 - C17 **NR7** (Crabel): kleinste dagrange van 7 dagen en slot > SMA200; buy-stop boven de high van de signaaldag.
 - RND: willekeurig aandeel uit het universum (controle).
 
+## Correcties vóór de eerste run (na een code-review, er was nog geen enkel resultaat)
+- Per trade: **één open trade per aandeel** (een nieuw signaal van hetzelfde aandeel telt pas na de uitstap van de
+  vorige), zodat een aandeel dat 8 dagen op rij een breakout geeft niet als 8 bijna gelijke trades telt. De bootstrap
+  van het verschil met random trekt **weken** (clusters per instapweek) in plaats van dagen.
+- Train / test op de **instapdag** (t+1), zoals in de rekening-simulatie.
+- Trades waarvoor de data geen 20 handelsdagen na de instap heeft (de laatste weken van 2026) tellen niet mee, zodat
+  ze niet als "geen +10% gehaald" worden geteld.
+- Bonferroni-grens berekend: 30 tests, tweezijdig 5% -> |t| > 3,14 (de eerder genoemde 3,19 was een rekenfout).
+- Sharpe per run berekend en dan gemiddeld (niet op het gemiddelde van de 20 runs, dat de schommeling verkleint).
+- Let op: W1-W10, S11 en S12 draaien hier op alle liquide aandelen, niet op het ADR > 4%-universum van
+  `three_week.py`; hun cijfers zijn dus niet een-op-een vergelijkbaar met die eerdere rapporten.
+
 ## Nieuwe hypotheses (na het zien van resultaten; niet in de hoofdtabel)
 _(nog geen)_

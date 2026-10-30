@@ -105,6 +105,10 @@ def make_trade(ar, s, etype, elevel, anchor, ex, week_last_of):
         tgt, trail = fill * 1.10, 0.0
     elif ex == "b":
         hold, tgt, trail = 20, fill * 1.20, 0.0
+    elif ex == "d":                                     # popular.py: +10% target, max 20 days, full window needed
+        hold, tgt, trail = 20, fill * 1.10, 0.0
+        if d + hold > len(c):
+            return None
     else:
         hold, tgt, trail = 60, 0.0, 2.0
     if hold < 1:
@@ -113,6 +117,7 @@ def make_trade(ar, s, etype, elevel, anchor, ex, week_last_of):
     buy = (fill + M.TICK2) * (1 + M.COMM)
     sell = (px - M.TICK2) * (1 - M.COMM)
     return {"entry": ar["idx"][d], "exit": ar["idx"][xi], "buy": buy, "sell": sell, "ret": sell / buy - 1,
+            "hit": bool(tgt > 0 and px >= tgt * (1 - 1e-12)),
             "bars": int(xi - d + 1), "dates": ar["idx"][d:xi + 1], "closes": c[d:xi + 1]}
 
 
