@@ -1,5 +1,5 @@
-"""30 popular strategies (internet research + earlier work), all with the user's exit: +10% and out (stop below
-support, max 20 days). Rules: indicator_lab/week/popular_rules.md (committed before the first run).
+"""30 popular strategies (internet research + earlier work), all with the user's exits: (d) +10% and out, (e) half out
+at +5% and the rest at +10% (stop below support, max 20 days). Rules: indicator_lab/week/popular_rules.md (committed before the first run).
 
     python -m indicator_lab.week.popular            # results/popular_strategies.md (inputs cached in /tmp)
 """
@@ -32,7 +32,7 @@ except ImportError:
 OUT = os.path.join(os.path.dirname(W.LOG), "popular_strategies.md")
 CACHE = os.path.join(B.CACHE, "popular_inputs.pkl")
 TRAIN_END = X.TRAIN_END
-EX = "d"
+EXITS = {"d": "+10% en eruit", "e": "helft eruit op +5%, rest op +10%"}
 RUNS = 20
 BOOT = 10_000
 NAMES = {**{f"W{k}": v for k, v in B.NAMES.items()},
@@ -239,19 +239,22 @@ def by_day(arrs, lst):
     return out
 
 
-def trade_stats(rets, hits, days):
+def trade_stats(rets, hits, hits10, days):
+    """hit = the first target reached (+10% for exit d, +5% for exit e); hit10 = +10% reached."""
     r = np.asarray(rets)
     if len(r) == 0:
         return {"n": 0}
     hit, dd = np.asarray(hits), np.asarray(days)
     w, lz = r[r > 0], r[r <= 0]
-    return {"n": len(r), "hit": hit.mean(), "hit5": (hit & (dd <= 5)).mean(), "hit10": (hit & (dd <= 10)).mean(),
+    return {"n": len(r), "hit": hit.mean(), "hit_10pct": np.asarray(hits10).mean(),
+            "hit5": (hit & (dd <= 5)).mean(), "hit10": (hit & (dd <= 10)).mean(),
             "win": (r > 0).mean(), "exp": r.mean(), "pf": w.sum() / -lz.sum() if lz.sum() < 0 else np.inf,
             "days": dd.mean()}
 
 
-def per_trade(key):
+def per_trade(job):
     """Trade-level results (one open trade per stock) + 5 random same-day trades per signal; train and test by entry day."""
+    key, EX = job
     arrs, wl, pool = _G["arrs"], _G["wl"], _G["rnd"]
     rng = np.random.default_rng(5)
     out = {}
@@ -272,13 +275,13 @@ def per_trade(key):
                 if tr is None:
                     continue
                 busy[t] = tr["exit"]
-                real.append((tr["ret"], tr["hit"], tr["bars"]))
+                real.append((tr["ret"], tr["hit"], tr["hit10"], tr["bars"]))
                 rr.append(tr["ret"])
                 for _ in range(5 if p else 0):
                     t2, s2, et2, el2, an2 = p[rng.integers(len(p))]
                     tq = X.make_trade(arrs[t2], s2, et2, el2, an2, EX, wl)
                     if tq is not None:
-                        rand.append((tq["ret"], tq["hit"], tq["bars"]))
+                        rand.append((tq["ret"], tq["hit"], tq["hit10"], tq["bars"]))
                         qq.append(tq["ret"])
         day_r = [(sum(a), len(a)) for a, b in clus.values() if a and b]
         day_q = [(sum(b), len(b)) for a, b in clus.values() if a and b]
@@ -292,10 +295,11 @@ def per_trade(key):
             est = a[:, 0].sum() / a[:, 1].sum() - b[:, 0].sum() / b[:, 1].sum()
             ci = (est, np.percentile(diff, 2.5), np.percentile(diff, 97.5), est / diff.std() if diff.std() > 0 else np.nan)
         out[part] = {"real": st, "rand": sq, "diff": ci}
-    return key, out
+    return job, out
 
 
-def portfolio(key):
+def portfolio(job):
+    key, EX = job
     cand = _G["rnd"] if key == "RND" else _G["cand"][key]
     cache: dict = {}
     runs = []
@@ -307,7 +311,7 @@ def portfolio(key):
         te["sharpe"] = float(wt.mean() / wt.std() * np.sqrt(52)) if wt.std() > 0 else np.nan
         runs.append((wr, X.part_stats(eq, wr, trades, False), te))
     avg = lambda i, k: float(np.nanmean([q[i][k] for q in runs]))
-    return key, {"weekly": pd.concat([q[0] for q in runs], axis=1).mean(axis=1), "train_wk": avg(1, "wk"),
+    return job, {"weekly": pd.concat([q[0] for q in runs], axis=1).mean(axis=1), "train_wk": avg(1, "wk"),
                  "train_cagr": avg(1, "cagr"), "test": {k: avg(2, k) for k in runs[0][2]},
                  "test_sd": float(np.std([q[2]["wk"] for q in runs]))}
 
@@ -323,20 +327,29 @@ def main():
     keys = [k for k in NAMES if k != "RND"]
     tr_res, pf_res = {}, {}
     with ProcessPoolExecutor(4) as ex:
-        for key, r in ex.map(per_trade, keys):
-            tr_res[key] = r
+        for job, r in ex.map(per_trade, [(k, e) for e in EXITS for k in keys]):
+            tr_res[job] = r
             te = r["test"]["real"]
-            print(f"trades {key}: n {te.get('n')} hit {te.get('hit', np.nan) * 100:.0f}% win {te.get('win', np.nan) * 100:.0f}% "
+            print(f"trades {job}: n {te.get('n')} hit {te.get('hit', np.nan) * 100:.0f}% win {te.get('win', np.nan) * 100:.0f}% "
                   f"exp {te.get('exp', np.nan) * 100:+.2f}%", flush=True)
-        for key, r in ex.map(portfolio, [*keys, "RND"]):
-            pf_res[key] = r
-            print(f"account {key}: test {r['test']['wk'] * 100:+.2f}%/wk", flush=True)
+        for job, r in ex.map(portfolio, [(k, e) for e in EXITS for k in [*keys, "RND"]]):
+            pf_res[job] = r
+            print(f"account {job}: test {r['test']['wk'] * 100:+.2f}%/wk", flush=True)
     with open(os.path.join(B.CACHE, "popular_results.pkl"), "wb") as fh:
         pickle.dump((tr_res, pf_res, spy_w), fh)
-    write(tr_res, pf_res, spy_w, len(arrs))
+    parts = [write({k: v for (k, e), v in tr_res.items() if e == ex}, {k: v for (k, e), v in pf_res.items() if e == ex},
+                   spy_w, len(arrs), ex) for ex in EXITS]
+    txt = ("# 30 populaire strategieën met twee uitstappen: +10% en eruit, of de helft op +5% en de rest op +10%\n\n"
+           "<!-- CONCLUSIE -->\n\n" + "".join(t for t, _ in parts))
+    with open(OUT, "w") as fh:
+        fh.write(txt)
+    with open(W.LOG, "a") as fh:
+        fh.write("\n## 30 populaire strategieën (results/popular_strategies.md, branch claude/popular-strategies): "
+                 + "; ".join(line for _, line in parts) + "\n")
+    print(txt[:4000])
 
 
-def write(tr_res, pf_res, spy_w, n_tickers):
+def write(tr_res, pf_res, spy_w, n_tickers, ex):
     rng = np.random.default_rng(2026)
     test_idx = [p for p in spy_w.index if p.end_time > TRAIN_END]
     spy_t = spy_w.loc[test_idx]
@@ -345,6 +358,7 @@ def write(tr_res, pf_res, spy_w, n_tickers):
     pc = lambda x, d=1: "-" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{x * 100:.{d}f}%"
     ci = lambda t: "-" if np.isnan(t[0]) else f"{t[0] * 100:+.2f}% [{t[1] * 100:+.2f}, {t[2] * 100:+.2f}]"
     rows_t, rows_p, flags = [], [], []
+    first = "+10%" if ex == "d" else "+5%"
     for key, name in NAMES.items():
         if key != "RND":
             r = tr_res[key]
@@ -352,11 +366,12 @@ def write(tr_res, pf_res, spy_w, n_tickers):
             tr = r["train"]["real"]
             rows_t.append({"strategie": f"{key} {name}", "train trades": tr.get("n", 0), "train winrate": pc(tr.get("win", np.nan), 0),
                            "train gem./trade": pc(tr.get("exp", np.nan), 2),
-                           "test trades": a.get("n", 0), "+10% geraakt (≤5 / ≤10 / ≤20 d)":
+                           "test trades": a.get("n", 0), f"{first} geraakt (≤5 / ≤10 / ≤20 d)":
                            f"{pc(a.get('hit5', np.nan), 0)} / {pc(a.get('hit10', np.nan), 0)} / {pc(a.get('hit', np.nan), 0)}",
+                           "+10% geraakt": pc(a.get("hit_10pct", np.nan), 0),
                            "test winrate": pc(a.get("win", np.nan), 0), "test gem./trade": pc(a.get("exp", np.nan), 2),
                            "test PF": f"{a.get('pf', np.nan):.2f}", "gem. dagen": f"{a.get('days', np.nan):.1f}",
-                           "random: +10% / winrate / gem.": f"{pc(q.get('hit', np.nan), 0)} / {pc(q.get('win', np.nan), 0)} / "
+                           f"random: {first} / winrate / gem.": f"{pc(q.get('hit', np.nan), 0)} / {pc(q.get('win', np.nan), 0)} / "
                                                              f"{pc(q.get('exp', np.nan), 2)}",
                            "verschil vs random per trade [95%]": ci(d), "t (cluster)": f"{d[3]:.2f}"})
             flags.append((key, d))
@@ -377,29 +392,25 @@ def write(tr_res, pf_res, spy_w, n_tickers):
     crit = float(SS.norm.ppf(1 - 0.05 / (2 * len(flags))))       # Bonferroni, 30 tests, two-sided 5%
     sig_t = [k for k, d in flags if not np.isnan(d[3]) and d[3] > crit]
     spy_sh = spy_t.mean() / spy_t.std() * np.sqrt(52)
-    txt = ("# 30 populaire strategieën met jouw uitstap: +10% en eruit\n\n<!-- CONCLUSIE -->\n\n"
+    txt = (f"# Uitstap ({ex}): {EXITS[ex]}\n\n"
            f"Regels: `indicator_lab/week/popular_rules.md` (vooraf gecommit); onderzoek en bronnen: "
            f"`results/research_popular_strategies.md`. {n_tickers} liquide aandelen (> $5, > $20M/dag), alleen aandelen "
-           "die op 2026-10-23 genoteerd waren (geen gedelistte aandelen). Uitstap: +10% (limiet), stop onder support "
-           "(max 8%), anders na 20 handelsdagen. Kosten 0,05% + $0,02 per kant. Train 2015-2022, test 2023-01 .. 2026-10. "
+           "die op 2026-10-23 genoteerd waren (geen gedelistte aandelen). "
+           f"Uitstap: {EXITS[ex]} (limieten), stop onder support (max 8%), anders na 20 handelsdagen. Kosten 0,05% + $0,02 per kant. Train 2015-2022, test 2023-01 .. 2026-10. "
            f"SPY in de testweken: {spy_t.mean() * 100:+.2f}% per week, CAGR {((1 + spy_t).prod() ** (1 / yrs) - 1) * 100:.1f}%, "
            f"Sharpe {spy_sh:.2f}.\n\n"
            f"- Per trade aantoonbaar beter dan willekeurig (hele interval > 0): "
            f"{', '.join(k for k, d in flags if d[1] > 0) or 'geen'}; ook na Bonferroni (t > {crit:.2f}): {', '.join(sig_t) or 'geen'}.\n"
            f"- Rekening aantoonbaar beter dan RND: {', '.join(better_r) or 'geen'}.\n"
            f"- Rekening aantoonbaar beter dan SPY: {', '.join(better_s) or 'geen'}.\n\n"
-           "## 1. Per trade: hoe vaak +10%, winrate (testjaren 2023-2026)\n\n"
+           f"### Per trade: hoe vaak {first} en +10%, winrate (testjaren 2023-2026)\n\n"
            + pd.DataFrame(rows_t).sort_values("test gem./trade", key=lambda s: s.str.rstrip("%").replace("-", "nan").astype(float),
                                               ascending=False).to_markdown(index=False)
-           + "\n\n## 2. Als rekening: max 3 posities, elk 1/3 (testjaren 2023-2026, gesorteerd op gem./week)\n\n"
-           + dp.drop(columns=["_rnd_lo", "_spy_lo", "_wk"]).to_markdown(index=False) + "\n")
-    with open(OUT, "w") as fh:
-        fh.write(txt)
-    with open(W.LOG, "a") as fh:
-        fh.write(f"\n## 30 populaire strategieën, +10% en eruit (results/popular_strategies.md, branch claude/popular-strategies): "
-                 f"per trade beter dan random (Bonferroni): {sig_t or 'geen'}; rekening beter dan RND: {len(better_r)}, "
-                 f"beter dan SPY: {len(better_s)}\n")
-    print(txt[:3000])
+           + "\n\n### Als rekening: max 3 posities, elk 1/3 (testjaren 2023-2026, gesorteerd op gem./week)\n\n"
+           + dp.drop(columns=["_rnd_lo", "_spy_lo", "_wk"]).to_markdown(index=False) + "\n\n")
+    line = (f"uitstap {ex}: per trade beter dan random (Bonferroni): {sig_t or 'geen'}, rekening beter dan RND: "
+            f"{len(better_r)}, beter dan SPY: {len(better_s)}")
+    return txt, line
 
 
 if __name__ == "__main__":

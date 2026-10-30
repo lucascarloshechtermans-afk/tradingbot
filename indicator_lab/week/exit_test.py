@@ -91,12 +91,43 @@ def path(o, h, lo, c, a, d, fill, stop, tgt, hold, trail):
     return min(d + hold - 1, n - 1), c[min(d + hold - 1, n - 1)]
 
 
+@njit(cache=True)
+def path_half(o, h, lo, c, d, fill, stop, t1, t2, hold):
+    """Half out at t1, the rest at t2 (stop first on a bar; gaps fill at the open). -> exit bar, exit price of the rest,
+    bar of the half exit (-1 if none) and its price."""
+    pi, pp = -1, 0.0
+    for k in range(hold):
+        day = d + k
+        op = fill if k == 0 else o[day]
+        if lo[day] <= stop:
+            return day, (stop if k == 0 else min(op, stop)), pi, pp
+        if pi < 0 and h[day] >= t1:
+            pi, pp = day, (t1 if k == 0 else max(op, t1))
+        if h[day] >= t2:
+            return day, (t2 if k == 0 else max(op, t2)), pi, pp
+        if k == hold - 1:
+            return day, c[day], pi, pp
+    return d + hold - 1, c[d + hold - 1], pi, pp
+
+
 def make_trade(ar, s, etype, elevel, anchor, ex, week_last_of):
     o, h, lo, c, a = ar["o"], ar["h"], ar["l"], ar["c"], ar["atr"]
     d, fill = M.entry(o, h, s, etype, elevel)
     if d is None or not (fill > 0 and a[s] > 0):
         return None
     stop = M.std_stop(fill, anchor, a[s])
+    buy = (fill + M.TICK2) * (1 + M.COMM)
+    if ex == "e":                                       # popular.py: half at +5%, the rest at +10%, max 20 days
+        if d + 20 > len(c):
+            return None
+        xi, px, pi, pp = path_half(o, h, lo, c, d, fill, stop, fill * 1.05, fill * 1.10, 20)
+        sell = (px - M.TICK2) * (1 - M.COMM)
+        psell = (pp - M.TICK2) * (1 - M.COMM) if pi >= 0 else np.nan
+        ret = (0.5 * psell + 0.5 * sell) / buy - 1 if pi >= 0 else sell / buy - 1
+        return {"entry": ar["idx"][d], "exit": ar["idx"][xi], "buy": buy, "sell": sell, "ret": ret,
+                "hit": pi >= 0, "hit10": bool(px >= fill * 1.10 * (1 - 1e-12)),
+                "pdate": ar["idx"][pi] if pi >= 0 else None, "psell": psell,
+                "bars": int(xi - d + 1), "dates": ar["idx"][d:xi + 1], "closes": c[d:xi + 1]}
     if ex == "a":
         last = week_last_of(ar["idx"][d])
         if last is None:
@@ -114,10 +145,9 @@ def make_trade(ar, s, etype, elevel, anchor, ex, week_last_of):
     if hold < 1:
         return None
     xi, px = path(o, h, lo, c, a, d, fill, stop, tgt, hold, trail)
-    buy = (fill + M.TICK2) * (1 + M.COMM)
     sell = (px - M.TICK2) * (1 - M.COMM)
     return {"entry": ar["idx"][d], "exit": ar["idx"][xi], "buy": buy, "sell": sell, "ret": sell / buy - 1,
-            "hit": bool(tgt > 0 and px >= tgt * (1 - 1e-12)),
+            "hit": bool(tgt > 0 and px >= tgt * (1 - 1e-12)), "hit10": bool(tgt > 0 and px >= tgt * (1 - 1e-12)),
             "bars": int(xi - d + 1), "dates": ar["idx"][d:xi + 1], "closes": c[d:xi + 1]}
 
 
@@ -169,6 +199,10 @@ def simulate(arrs, days, cand, ex, wk, week_last, rng, cache):
         keep = []
         for p in pos:
             tr = p["tr"]
+            if tr.get("pdate") is not None and tr["pdate"] == day and not p.get("half"):
+                cash += p["sh"] * 0.5 * tr["psell"]             # half sold at the first target
+                p["sh"] *= 0.5
+                p["half"] = True
             if tr["exit"] == day:
                 cash += p["sh"] * tr["sell"]
                 continue

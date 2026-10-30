@@ -72,5 +72,12 @@ Nieuw uit het onderzoek:
 - Let op: W1-W10, S11 en S12 draaien hier op alle liquide aandelen, niet op het ADR > 4%-universum van
   `three_week.py`; hun cijfers zijn dus niet een-op-een vergelijkbaar met die eerdere rapporten.
 
+## Toegevoegd op verzoek van de gebruiker (nadat alleen de eerste regel van de eerste run zichtbaar was)
+- Tweede uitstap **(e)**, naast (d) "+10% en eruit": de **helft eruit op +5%** (limiet), de **rest op +10%**;
+  stop en maximaal 20 handelsdagen zoals (d); de stop wordt na de eerste helft niet verplaatst. Trade-rendement =
+  gemiddelde van de twee helften. Gemeten: % dat +5% haalt, % dat +10% haalt, winrate, enzovoort, voor dezelfde
+  30 strategieën en dezelfde controles. De eerste run (alleen uitstap d) is afgebroken voordat er resultaten waren
+  behalve één regel (C1: +10% in 26%, winrate 37%, +0,26% per trade) en opnieuw gestart met beide uitstappen.
+
 ## Nieuwe hypotheses (na het zien van resultaten; niet in de hoofdtabel)
 _(nog geen)_
