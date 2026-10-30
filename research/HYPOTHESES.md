@@ -350,3 +350,24 @@ confirmed); if it fails, the dashboard says waiting did not help in the test.
   -0.86% (t -1.6 / -0.9 / -2.2); R1 -0.57 / -1.89 / -2.67% (t -2.2 / -4.3 / -5.0). B1 similar.
 - Book Sharpe A vs B: P1 0.39 vs 0.37, -0.35 vs -0.79, 1.06 vs 1.17; R1 0.62 vs 0.56, 0.78 vs 0.22, 1.52 vs 1.24.
 - FAILED (DEV lower). Dashboard keeps the user's WACHT rule with this result shown.
+
+# Round 17 — alternatives to the plan before the 30-10 rebalance (written 2026-10-30, before running)
+After a -22% month, the user asked to test the alternatives on POINT-IN-TIME S&P 500 membership
+(round 15 data and method, coverage 75 / 89 / 96%). Same periods DEV / VAL / OOS.
+- M0 current rule: month-end top 20 by 12-1 return, SPY > 200d, equal weight.
+- M1 M0 with at most 5 names per GICS sector (today's sector labels; names without one count alone).
+- M2 M0 with volatility targeting: at each month-end the book is scaled to 20% annualised ex-ante
+  volatility (63-day returns of the chosen names), never above 100%; the rest earns T-bills.
+- M3 M1 + M2.
+- I0 SPY buy and hold. I1 SPY while it closes the month above its 200-day, else T-bills.
+Costs 0.10% per side (SPY 0.02%).
+Decision rule: the recommended option is the one with the highest Sharpe in at least 2 of the 3
+periods; a momentum variant replaces M0 only if its Sharpe is higher than M0 in DEV and not lower
+in VAL and OOS. Max drawdown and worst year are reported alongside.
+
+## Round 17 results
+- Sharpe DEV / VAL / OOS: M0 0.48 / 0.22 / 0.78 · M1 0.48 / 0.24 / 0.81 · M2 0.47 / 0.13 / 0.79 ·
+  M3 0.47 / 0.14 / 0.87 · I0 0.80 / 0.66 / 1.40 · I1 0.70 / 0.51 / 1.11.
+- Highest Sharpe in 3 of 3 periods: I0 SPY buy and hold -> the recommended option.
+- No momentum variant beats M0 in DEV (M1 ties at 0.48) -> M0 stays the momentum rule.
+- Whole 2011-07..2026-09: M0 9.1%/yr, max DD 34%, Sharpe 0.51; I0 14.2%/yr, 34%, 0.86.

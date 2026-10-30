@@ -47,7 +47,9 @@ HINDSIGHT_NOTE = (
     "<p class='nt'><b>Belangrijk (onderzoeksronde 15):</b> de oude backtest gebruikte de S&amp;P-leden van <i>vandaag</i> en "
     "hield zo aandelen vast voordat ze in de index kwamen (CVNA, TSLA, LULU, AXON...). Met de ledenlijst van toen versloeg deze "
     "momentum top 20 SPY in geen enkele periode: Sharpe 0,48 / 0,22 / 0,78 tegen SPY 0,80 / 0,66 / 1,40 (2011-18 / 2019-22 / "
-    "2023-26). Een gewoon S&amp;P 500-indexfonds deed het in die test beter. Getest op het S&amp;P 500-deel; README ronde 15.</p>")
+    "2023-26). Ronde 17: SPY kopen en houden was in alle drie de periodes het best (2011-2026: 14,2%/jaar tegen 9,1% voor "
+    "deze lijst, zelfde grootste daling 34%); sectorlimiet en volatiliteitsbegrenzing hielpen niet genoeg. "
+    "Getest op het S&amp;P 500-deel; README rondes 15 en 17.</p>")
 
 BACKTEST_NOTE = {
     (100.0, 0.0): "<p class='sm'>Oude backtest alleen momentum (juni 2008 - sept 2026): 22,3% per jaar, grootste daling 36%; "

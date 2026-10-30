@@ -12,6 +12,31 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 17 — alternatives to the plan (`research/round17.py`, 2026-10-30)
+
+Pre-registered after a −22% October for the list. Same point-in-time S&P 500 data as round 15
+(coverage 75 / 89 / 96%; missing delisted names flatter the momentum rows, not SPY).
+
+| CAGR / max DD / Sharpe | 2011–18 | 2019–22 | 2023–26 | whole 2011–2026 |
+|---|---|---|---|---|
+| current rule (top 20, SPY > 200d) | 7.3% / 34% / 0.48 | 2.5% / 23% / 0.22 | 20.8% / 31% / 0.78 | 9.1% / 34% / 0.51 |
+| + max 5 per sector | 7.2% / 34% / 0.48 | 2.7% / 23% / 0.24 | 17.6% / 20% / 0.81 | 8.4% / 34% / 0.51 |
+| + 20% volatility target | 7.0% / 31% / 0.47 | 0.7% / 18% / 0.13 | 14.6% / 16% / 0.79 | 7.1% / 32% / 0.47 |
+| + both | 7.0% / 31% / 0.47 | 0.9% / 19% / 0.14 | 15.9% / 16% / 0.87 | 7.4% / 31% / 0.49 |
+| **SPY buy and hold** | **11.1% / 19% / 0.80** | **13.1% / 34% / 0.66** | **21.9% / 19% / 1.40** | **14.2% / 34% / 0.86** |
+| SPY with the 200-day filter | 8.3% / 22% / 0.70 | 6.0% / 22% / 0.51 | 13.4% / 10% / 1.11 | 8.9% / 24% / 0.74 |
+
+- **SPY buy-and-hold had the highest Sharpe in all three periods**, so by the pre-registered
+  rule it is the recommended option: about 14%/yr against 9%/yr for the current rule, with the
+  same worst drawdown (34%).
+- No momentum variant replaces the current rule. The sector cap ties it in 2011–18. The
+  volatility target and the combination are lower there. The sector cap and the volatility
+  target do cut the drawdown in 2023–26 (20% and 16% vs 31%), but at a lower return.
+- The 200-day filter on SPY lowered the return more than it lowered the risk in this period.
+- European retail investors usually cannot buy US-listed ETFs such as SPY (PRIIPs). The
+  UCITS equivalents track the same index (e.g. iShares Core S&P 500 UCITS, Vanguard S&P 500 UCITS).
+- The scanner and the momentum plan stay as configured: switching is the user's decision.
+
 ## Research round 16 — wait for two closes above the resistance before buying? (`research/round16.py`)
 
 User rule: say KOPEN only after a pick has reacted positively at the resistance just above
