@@ -38,9 +38,29 @@ def test_compute_structure_stop_none_when_no_support():
     assert stop is None
 
 
-def test_compute_stop_prefers_structure_when_close():
+def test_compute_stop_never_tighter_than_atr_stop():
+    """A support 2 points below a $100 entry with ATR 2 (a 1-ATR structure
+    stop) is tighter than the 2-ATR stop at 96 -- that's the noise-stopped
+    failure mode the full-universe backtest flagged, so the ATR stop wins."""
     levels = [Level(price=98.0, kind="support", touches=3, strength=60, last_touch=None)]
     result = compute_stop(entry=100.0, atr=2.0, levels=levels, direction="long", atr_multiplier=2.0)
+    assert result.final_stop_method == "atr"
+    assert result.final_stop == 96.0
+    assert result.structure_stop == pytest.approx(98.0 * 0.997)
+
+
+def test_compute_stop_uses_structure_when_wider_than_atr_stop():
+    levels = [Level(price=94.0, kind="support", touches=3, strength=60, last_touch=None)]
+    result = compute_stop(entry=100.0, atr=2.0, levels=levels, direction="long", atr_multiplier=2.0)
+    assert result.final_stop_method == "structure"
+    assert result.final_stop == pytest.approx(94.0 * 0.997)
+
+
+def test_compute_stop_legacy_flag_allows_tight_structure_stop():
+    levels = [Level(price=98.0, kind="support", touches=3, strength=60, last_touch=None)]
+    result = compute_stop(
+        entry=100.0, atr=2.0, levels=levels, direction="long", atr_multiplier=2.0, allow_tight_structure_stop=True,
+    )
     assert result.final_stop_method == "structure"
     assert result.final_stop == pytest.approx(98.0 * 0.997)
 

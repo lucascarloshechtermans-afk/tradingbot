@@ -1,0 +1,98 @@
+"""Run the full-universe screener backtest with per-trade feature capture
+enabled, and dump the result (trade outcomes + the feature vector at entry
+for each one) to a pickle for offline analysis by feature_importance.py.
+
+    python -m research.capture_trades --period 5y --out /path/to/trades.pkl
+
+Kept separate from backtest_screener.py's own CLI: this is a research tool,
+not something the live scanner or its default validation workflow depends
+on, and pickling ~9k dataclass Trade objects + feature dicts has no place in
+the production reporting path.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import pickle
+import sys
+import time
+
+from backtest_screener import run_universe_backtest
+from config.schema import load_config
+from data.cache import DiskCache
+from data.provider import DataProvider
+from data.universe import DEFAULT_UNIVERSE
+from data.yfinance_provider import YFinanceProvider
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("capture_trades")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--period", type=str, default="5y")
+    parser.add_argument("--tickers", type=str, default=None)
+    parser.add_argument("--config", type=str, default=None)
+    parser.add_argument("--out", type=str, required=True)
+    parser.add_argument("--workers", type=int, default=1, help="Parallelize the per-ticker loop across this many processes")
+    parser.add_argument("--max-holding-days", type=int, default=None, help="Override config.risk.max_holding_days, for A/B comparison")
+    parser.add_argument("--min-rr", type=float, default=None, help="Override config.gates.min_risk_reward")
+    parser.add_argument("--legacy-stops", action="store_true", help="Allow structure stops tighter than the ATR stop (pre-audit behavior), for A/B comparison")
+    parser.add_argument("--max-entry-gap-atr", type=float, default=None, help="Override config.gates.max_entry_gap_atr (no-chase buy-limit); use -1 to disable")
+    parser.add_argument("--min-momentum-pct", type=float, default=None, help="Override config.gates.min_momentum_percentile; use -1 to disable")
+    parser.add_argument("--min-efficiency", type=float, default=None, help="Override config.gates.min_efficiency_ratio; use -1 to disable")
+    parser.add_argument("--rank-tickers", type=str, default=None, help="Comma list (or 'default' for DEFAULT_UNIVERSE) to rank composite momentum against; defaults to --tickers")
+    args = parser.parse_args(argv)
+
+    config = load_config(args.config)
+    if args.max_holding_days is not None:
+        # an explicit override means a UNIFORM cap for every strategy
+        config.risk.max_holding_days = args.max_holding_days
+        config.risk.holding_days_by_strategy = {}
+    if args.min_rr is not None:
+        config.gates.min_risk_reward = args.min_rr
+    if args.legacy_stops:
+        config.risk.allow_tight_structure_stop = True
+    if args.max_entry_gap_atr is not None:
+        config.gates.max_entry_gap_atr = None if args.max_entry_gap_atr < 0 else args.max_entry_gap_atr
+    if args.min_momentum_pct is not None:
+        config.gates.min_momentum_percentile = None if args.min_momentum_pct < 0 else args.min_momentum_pct
+    if args.min_efficiency is not None:
+        config.gates.min_efficiency_ratio = None if args.min_efficiency < 0 else args.min_efficiency
+    cache = DiskCache(cache_dir=config.data.cache_dir, ttl_hours=config.data.cache_ttl_hours)
+    provider: DataProvider = YFinanceProvider(cache=cache, max_retries=config.data.max_retries, retry_backoff_seconds=config.data.retry_backoff_seconds)
+    tickers = args.tickers.split(",") if args.tickers else DEFAULT_UNIVERSE
+    if args.rank_tickers == "default":
+        rank_tickers = list(DEFAULT_UNIVERSE)
+    else:
+        rank_tickers = args.rank_tickers.split(",") if args.rank_tickers else None
+
+    started = time.time()
+    (
+        all_trades, all_trade_strategies, all_trade_scores, all_trade_regimes, all_trade_rrs,
+        all_trade_overexts, per_ticker_summaries, errors, all_trade_features,
+    ) = run_universe_backtest(provider, config, tickers, args.period, min_score=None, capture_features=True, workers=args.workers,
+                              rank_tickers=rank_tickers)
+    logger.info("done in %.1fs — %d trades, %d errors", time.time() - started, len(all_trades), len(errors))
+
+    payload = {
+        "trades": all_trades,
+        "strategies": all_trade_strategies,
+        "scores": all_trade_scores,
+        "regimes": all_trade_regimes,
+        "rrs": all_trade_rrs,
+        "overexts": all_trade_overexts,
+        "features": all_trade_features,
+        "per_ticker_summaries": per_ticker_summaries,
+        "errors": errors,
+        "period": args.period,
+    }
+    with open(args.out, "wb") as f:
+        pickle.dump(payload, f)
+    logger.info("wrote %s", args.out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

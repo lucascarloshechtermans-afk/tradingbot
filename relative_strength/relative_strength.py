@@ -96,3 +96,57 @@ def universe_rs_rank_series(closes: dict[str, pd.Series], window: int = RS_RANK_
     """
     roc_frame = pd.DataFrame({ticker: roc(close, window) for ticker, close in closes.items()})
     return roc_frame.rank(axis=1, pct=True) * 100
+
+
+# Composite momentum, from the externally supplied "Explosive Breakout"
+# scanner (alt_scanners/): the mean of three trailing returns, all measured
+# up to 5 sessions ago -- the most recent week is skipped because of the
+# short-term reversal effect. research/compare_scanners.py found its top-decile
+# rank the one ingredient of that scanner that also improves OUR trades.
+MOMENTUM_HORIZONS = (63, 126, 252)
+MOMENTUM_SKIP = 5
+MIN_MOMENTUM_RANK_TICKERS = 10  # below this a percentile is meaningless (their rule too)
+
+
+def composite_momentum(close: pd.Series, horizons: tuple[int, ...] = MOMENTUM_HORIZONS, skip: int = MOMENTUM_SKIP) -> pd.Series:
+    """Per-bar composite momentum in %: mean over `horizons` of
+    close[t-skip] / close[t-skip-h] - 1. Strictly trailing; NaN until the
+    longest horizon has enough history (max(horizons) + skip + 1 bars)."""
+    parts = [(close.shift(skip) / close.shift(skip + h) - 1) * 100 for h in horizons]
+    return pd.concat(parts, axis=1).mean(axis=1, skipna=False)
+
+
+def universe_momentum_rank_series(closes: dict[str, pd.Series]) -> pd.DataFrame:
+    """Walk-forward percentile rank (0-100) of each ticker's composite momentum
+    among all tickers with a value on that date (NaN = not enough history,
+    excluded from the ranking rather than treated as weakest). A date with
+    fewer than MIN_MOMENTUM_RANK_TICKERS ranked tickers is all-NaN."""
+    frame = pd.DataFrame({ticker: composite_momentum(close) for ticker, close in closes.items()})
+    ranks = frame.rank(axis=1, pct=True) * 100
+    ranks[frame.notna().sum(axis=1) < MIN_MOMENTUM_RANK_TICKERS] = float("nan")
+    return ranks
+
+
+def compute_universe_momentum_ranks(closes: dict[str, pd.Series]) -> dict[str, float]:
+    """Live-scan snapshot of `universe_momentum_rank_series`: each ticker's
+    percentile on its most recent bar. Tickers lacking the history are absent."""
+    latest = {}
+    for ticker, close in closes.items():
+        m = composite_momentum(close).iloc[-1] if len(close) else float("nan")
+        if pd.notna(m):
+            latest[ticker] = float(m)
+    if len(latest) < MIN_MOMENTUM_RANK_TICKERS:
+        return {}
+    return (pd.Series(latest).rank(pct=True) * 100).to_dict()
+
+
+def efficiency_ratio(close: pd.Series, window: int = 30) -> float | None:
+    """Kaufman efficiency ratio of the last `window` bars: |net move| / total
+    path length (0 = pure chop, 1 = straight line). None without enough data."""
+    if len(close) < window + 1:
+        return None
+    tail = close.iloc[-(window + 1):]
+    path = tail.diff().abs().sum()
+    if path <= 0:
+        return 0.0
+    return float(abs(tail.iloc[-1] - tail.iloc[0]) / path)

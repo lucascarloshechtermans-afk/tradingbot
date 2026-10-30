@@ -42,6 +42,10 @@ class DiskCache:
             logger.warning("cache read failed for %s: %s", key, exc)
             return None
 
+    def age_seconds(self, key: str) -> float | None:
+        path = self._key_to_path(key)
+        return time.time() - path.stat().st_mtime if path.exists() else None
+
     def set(self, key: str, df: pd.DataFrame) -> None:
         path = self._key_to_path(key)
         try:

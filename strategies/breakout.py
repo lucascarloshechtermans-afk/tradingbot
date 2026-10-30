@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from price_action.patterns import is_breakout, has_volume_confirmation
 from strategies.base import Strategy, StrategySignal
 from strategies.context import TickerContext
@@ -67,6 +69,37 @@ class BreakoutStrategy(Strategy):
 
         if ctx.atr_pct.iloc[-1] > 6:
             risks.append(f"ATR high ({ctx.atr_pct.iloc[-1]:.1f}% of price) — wide expected swings")
+
+        # Late-entry / chase penalty (item 15 of the optimization audit): a
+        # breakout that already gapped/ran several ATRs past its OWN trigger
+        # level is a materially worse entry than one still close to it, even
+        # when both still pass `is_breakout` -- catches the classic "huge gap
+        # day, already extended" chase that a generic EMA21-relative extension
+        # check can miss (EMA21 hasn't caught up yet the same day). NOTE, an
+        # honestly-documented limitation found while testing this: because
+        # `breakout_level` is recomputed fresh from the same trailing window
+        # `is_breakout` itself uses, a slow multi-day grind (each day sets a
+        # marginal new high) keeps re-anchoring the "trigger" to just behind
+        # itself, understating how far price has drifted from where the move
+        # actually started -- this penalty is real but narrower than "catches
+        # every late entry": it reliably catches a single/few-bar extended
+        # gap, not a creeping multi-day chase.
+        breakout_level = ctx.high.iloc[-(self.lookback + 1):-1].max()
+        atr_now = ctx.atr14.iloc[-1]
+        if pd.notna(breakout_level) and pd.notna(atr_now) and atr_now > 0:
+            atr_above_level = (ctx.last_close - breakout_level) / atr_now
+            if atr_above_level > 2.5:
+                risks.append(
+                    f"Price is {atr_above_level:.1f} ATRs above its own breakout trigger "
+                    f"(${breakout_level:.2f}) — this chases an already-extended move, not a fresh break"
+                )
+                confidence -= 15
+            elif atr_above_level > 1.5:
+                risks.append(f"Price is {atr_above_level:.1f} ATRs above its own breakout trigger — somewhat extended")
+                confidence -= 6
+            elif atr_above_level <= 0.5:
+                reasons.append("Still within 0.5 ATR of the breakout trigger — a fresh entry, not a chase")
+                confidence += 5
 
         return StrategySignal(
             strategy=self.name,

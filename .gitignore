@@ -11,3 +11,4 @@ alerts_log.json
 dashboard.html
 scan_results.json
 dist/
+logs/

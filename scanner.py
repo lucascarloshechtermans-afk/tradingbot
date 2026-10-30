@@ -12,6 +12,7 @@ See README.md for the full option list and an explanation of every output column
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
 import sys
@@ -31,7 +32,7 @@ from data.yfinance_provider import YFinanceProvider
 from events.earnings import EarningsWarning, check_earnings_proximity
 from indicators.trend import sma
 from market_regime.regime import MarketRegime, classify_market_regime
-from relative_strength.relative_strength import compute_universe_rs_ranks
+from relative_strength.relative_strength import compute_universe_momentum_ranks, compute_universe_rs_ranks, efficiency_ratio
 from risk.gap_risk import earnings_gap_fraction
 from risk.stops_targets import plan_trade_levels
 from scoring.multi_timeframe import multi_timeframe_confluence, resample_weekly
@@ -72,6 +73,15 @@ class TradePlan:
     max_holding_days: int = 5
     category_breakdown: list[dict] = field(default_factory=list)
     explanation: dict = field(default_factory=dict)
+    # buy-limit for the next session (signal close + gates.max_entry_gap_atr
+    # ATRs); None when the no-chase rule is disabled
+    max_entry: float | None = None
+    # composite-momentum percentile vs. the scanned universe (see
+    # gates.min_momentum_percentile); None when unavailable
+    momentum_percentile: float | None = None
+    # trader-style chart read (analysis/chart_read.py): headlines, plan,
+    # invalidation, bias and an annotated SVG chart; empty when unavailable
+    chart_read: dict = field(default_factory=dict)
 
 
 def compute_breadth_pct_above_50ma(universe_histories: dict[str, pd.DataFrame]) -> float | None:
@@ -104,6 +114,7 @@ def build_trade_plan(
     earnings_gap_frac: float | None = None,
     no_trade_log: dict[str, str] | None = None,
     earnings_growth: float | None = None,
+    momentum_rank: float | None = None,
 ) -> TradePlan | None:
     """Returns None when the setup is rejected outright by a hard gate — the
     NO-TRADE engine. A high composite score must never override one of these:
@@ -126,6 +137,21 @@ def build_trade_plan(
     best = best_tradeable_signal(matched_strategies)
 
     gates = config.gates
+    # Momentum-rank and efficiency gates apply to EVERY strategy (unlike the
+    # RS/regime gates below): that is how they were validated -- see
+    # GatesConfig and the README's scanner-comparison section.
+    if gates.min_momentum_percentile is not None:
+        if momentum_rank is None:
+            return _reject("momentum_rank_unavailable: needs ~258 bars of history (data.period >= 2y) "
+                           "and >= 10 ranked tickers")
+        if momentum_rank < gates.min_momentum_percentile:
+            return _reject(f"weak_momentum_rank: {momentum_rank:.0f} < {gates.min_momentum_percentile:.0f}")
+    if gates.min_efficiency_ratio is not None:
+        er = efficiency_ratio(ctx.close)
+        if er is None or er < gates.min_efficiency_ratio:
+            shown = "unavailable" if er is None else f"{er:.2f}"
+            return _reject(f"choppy_price_action: efficiency ratio {shown} < {gates.min_efficiency_ratio:.2f}")
+
     # Mean Reversion / Support Bounce buy weakness by design, so the RS/regime
     # gates (which require the stock/market to already be STRONG) are exempted
     # for them — see Strategy.counter_trend. A ticker with no confirmed setup at
@@ -158,11 +184,12 @@ def build_trade_plan(
     ):
         return _reject(f"resistance_too_close: only {ctx.distance_to_resistance_atr:.2f} ATRs of room")
 
-    max_holding_days = config.risk.max_holding_days
+    max_holding_days = config.risk.holding_days_for(best.strategy if best else None)
 
     trade_levels = plan_trade_levels(
         entry, atr, ctx.levels, max_holding_days, direction="long", rr_multiples=(1.5, 3.0),
         target_volatility_multiplier=config.risk.target_volatility_multiplier,
+        allow_tight_structure_stop=config.risk.allow_tight_structure_stop,
     )
     if trade_levels is None:
         return _reject("insufficient_data: could not compute a valid stop/target")
@@ -189,7 +216,13 @@ def build_trade_plan(
         rs_percentile=rs_rank,
     )
 
+    max_entry = None
+    if config.gates.max_entry_gap_atr is not None:
+        max_entry = entry + config.gates.max_entry_gap_atr * float(atr)
+
     reasons = list(best.reasons) if best else []
+    if momentum_rank is not None:
+        reasons.append(f"Momentum-rank: top {max(1.0, 100 - momentum_rank):.0f}% van het gescande universum (3/6/12 maanden)")
     reasons.append(f"Doel is berekend om binnen ~{max_holding_days} handelsdagen haalbaar te zijn (op basis van ATR)")
     risks = list(best.risks) if best else []
     if earnings_warning and earnings_warning.message:
@@ -258,6 +291,7 @@ def build_trade_plan(
         ),
         "levels": [
             f"Entry: {entry:.2f}",
+            *([f"Max entry (buy-limit, skip if it opens above): {max_entry:.2f}"] if max_entry is not None else []),
             f"Stop: {stop_levels.final_stop:.2f} ({stop_levels.final_stop_method}-based)",
             f"Target: {target2:.2f}",
             f"Risk/reward: {rr:.1f}:1",
@@ -293,6 +327,8 @@ def build_trade_plan(
         max_holding_days=max_holding_days,
         category_breakdown=category_breakdown,
         explanation=explanation,
+        max_entry=round(max_entry, 2) if max_entry is not None else None,
+        momentum_percentile=round(momentum_rank, 1) if momentum_rank is not None else None,
     )
 
 
@@ -307,6 +343,7 @@ def scan_ticker(
     qqq_close: pd.Series | None = None,
     sector_histories: dict[str, pd.DataFrame] | None = None,
     no_trade_log: dict[str, str] | None = None,
+    momentum_rank: float | None = None,
 ) -> TradePlan | None:
     try:
         history = provider.get_history(ticker, period=config.data.period)
@@ -363,8 +400,94 @@ def scan_ticker(
 
     return build_trade_plan(
         ticker, ctx, weekly_ctx, config, market_regime, earnings_warning, rs_rank, earnings_gap_frac, no_trade_log,
-        earnings_growth=earnings_growth,
+        earnings_growth=earnings_growth, momentum_rank=momentum_rank,
     )
+
+
+def build_chart_read(provider: DataProvider, ticker: str, period: str) -> dict:
+    """Daily + 4h chart read for one setup (see analysis/chart_read.py). Only
+    run for the few tickers that produced a setup: it needs an extra 1h
+    history download per ticker."""
+    from analysis.chart_read import read_chart
+    from ui.chart_svg import render_chart_svg
+
+    try:
+        daily = provider.get_history(ticker, period=period)
+    except DataUnavailable:
+        return {}
+    try:
+        hourly = provider.get_history(ticker, period="730d", interval="1h")
+    except DataUnavailable:
+        hourly = None
+    try:
+        read = read_chart(ticker, daily, hourly)
+        svg = render_chart_svg(daily, read)
+    except Exception as exc:  # noqa: BLE001 - a chart read must never break the scan
+        logger.warning("chart read failed for %s: %s", ticker, exc)
+        return {}
+    return {"headlines": read.headlines, "plan": read.plan, "invalidation": read.invalidation,
+            "bias": read.bias, "ema200_4h": read.ema200_4h, "svg": svg}
+
+
+def find_validated_leader_dips(provider: DataProvider, histories: dict[str, pd.DataFrame],
+                               benchmarks: dict[str, pd.DataFrame]) -> tuple[list, dict, list]:
+    """The validated primary setup (analysis/leader_dip.py) and the leaders
+    closest to triggering it, each with its chart read. Momentum is ranked
+    against every fetched candidate."""
+    from analysis.chart_read import read_chart
+    from analysis.leader_dip import dip_alerts, find_leader_dips, market_state
+
+    spy, vix = benchmarks.get("spy"), benchmarks.get("vix")
+    try:
+        dips = find_leader_dips(histories, spy, vix)
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("leader-dip search failed: %s", exc)
+        return [], {}, []
+
+    def with_read(items: list) -> list:
+        res = []
+        for d in items:
+            try:
+                hourly = provider.get_history(d.ticker, period="730d", interval="1h")
+            except DataUnavailable:
+                hourly = None
+            res.append((d, read_chart(d.ticker, d.daily, hourly)))
+        return res
+
+    alerts = dip_alerts(histories, top=10)
+    return with_read(dips), market_state(spy, vix), with_read(alerts)
+
+
+def find_pattern_setups(provider: DataProvider, histories: dict[str, pd.DataFrame], top: int = 15) -> list:
+    """'Ready to boom' chart-pattern setups over every fetched candidate (see
+    analysis/setup_finder.py), each with its chart read for the dashboard."""
+    from analysis.chart_read import read_chart, resample_to_4h
+    from analysis.setup_finder import find_setups
+    from indicators.trend import ema as ema_fn
+
+    hourly_cache: dict[str, pd.DataFrame | None] = {}
+
+    def hourly(ticker: str) -> pd.DataFrame | None:
+        if ticker not in hourly_cache:
+            try:
+                hourly_cache[ticker] = provider.get_history(ticker, period="730d", interval="1h")
+            except DataUnavailable:
+                hourly_cache[ticker] = None
+        return hourly_cache[ticker]
+
+    def ema200_4h(ticker: str) -> float | None:
+        h = hourly(ticker)
+        if h is None:
+            return None
+        h4 = resample_to_4h(h)
+        return float(ema_fn(h4["close"], 200).iloc[-1]) if len(h4) >= 200 else None
+
+    try:
+        setups = find_setups(histories, ema200_4h_fn=ema200_4h)[:top]
+        return [(s, read_chart(s.ticker, s.daily, hourly(s.ticker))) for s in setups]
+    except Exception as exc:  # noqa: BLE001 - the pattern list must never break the scan
+        logger.warning("pattern setup search failed: %s", exc)
+        return []
 
 
 @dataclass
@@ -375,6 +498,248 @@ class ScanRun:
     universe_size: int
     scan_duration_s: float
     no_trade: dict[str, str] = field(default_factory=dict)
+    # [(analysis.setup_finder.Setup, ChartRead)] -- the 'ready to boom' list
+    pattern_setups: list = field(default_factory=list)
+    # [(analysis.leader_dip.LeaderDip, ChartRead)] -- the validated primary setup
+    leader_dips: list = field(default_factory=list)
+    market_state: dict = field(default_factory=dict)
+    # [(analysis.leader_dip.DipAlert, ChartRead)] -- leaders closest to a dip trigger
+    dip_alerts: list = field(default_factory=list)
+    sector_by_ticker: dict = field(default_factory=dict)
+    # round-6 portfolio plan (price-only): analysis.momentum_portfolio.MomentumBook,
+    # [analysis.index_rsi2.IndexSignal], and the universe closes for sparklines
+    momentum_book: object | None = None
+    index_signals: list = field(default_factory=list)
+    momentum_closes: pd.DataFrame | None = None
+    # [(analysis.leader_breakout.LeaderBreakout, ChartRead)] -- today's / almost
+    leader_breakouts: list = field(default_factory=list)
+    near_breakouts: list = field(default_factory=list)
+    spy_history: pd.DataFrame | None = None
+    momentum_reads: dict = field(default_factory=dict)   # ticker -> (ChartRead, daily) for the momentum list
+    niche_book: object | None = None   # NICHE FINDS: MomentumBook over US stocks outside the S&P 500
+    # ta/ engine: [ta.engine.TechnicalReport] for the momentum list + scanner candidates, and ta.regime.Regime
+    technical_reports: list = field(default_factory=list)
+    technical_regime: object | None = None
+
+
+def _naive_close(df: pd.DataFrame) -> pd.Series:
+    """Close series with a tz-naive New York calendar-date index."""
+    c = df["close"].copy()
+    if c.index.tz is not None:
+        c.index = c.index.tz_convert("America/New_York").tz_localize(None).normalize()
+    return c
+
+
+def find_index_signals(provider: DataProvider) -> list:
+    """INDEX RSI(2) state for SPY/QQQ/IWM/DIA (analysis/index_rsi2.py)."""
+    from analysis.index_rsi2 import ETFS, index_signals
+
+    hist = {}
+    for etf in ETFS:
+        try:
+            hist[etf] = provider.get_history(etf, period="2y")
+        except DataUnavailable as exc:
+            logger.warning("index RSI(2): no data for %s: %s", etf, exc)
+    try:
+        return index_signals(hist)
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("index RSI(2) failed: %s", exc)
+        return []
+
+
+def find_momentum_book(provider: DataProvider, config: AppConfig, spy: pd.DataFrame | None,
+                       extra_sectors: dict[str, str | None] | None = None):
+    """MOMENTUM TOP 20 over the S&P 500 + 400 plus the scanner's own universe
+    -- the same 966-name universe the research backtest ranked
+    (analysis/momentum_portfolio.py). Returns (book, closes, volumes, sectors);
+    Nones when unavailable."""
+    none = (None, None, None, {})
+    if spy is None or spy.empty:
+        return none
+    from analysis.momentum_portfolio import MIN_PRICE, build_book, load_small_caps, load_universe
+
+    try:
+        sectors = load_universe()
+        for t in DEFAULT_UNIVERSE:
+            sectors.setdefault(t, (extra_sectors or {}).get(t))
+        min_price: dict[str, float] = {}
+        if config.portfolio.include_small_caps:
+            for t, sec in load_small_caps().items():
+                if t not in sectors:
+                    sectors[t] = f"{sec or '?'} (small cap)"
+                    min_price[t] = max(config.portfolio.small_cap_min_price, MIN_PRICE)
+        spy_close = _naive_close(spy)
+        closes, volumes = provider.get_universe_closes(sorted(sectors), latest_session=spy_close.index[-1])
+        if closes.empty:
+            return none
+        book = build_book(closes, volumes, spy_close, sectors, top_n=config.portfolio.momentum_top_n,
+                          min_price=min_price or None)
+        book.min_price = min_price
+        return book, closes, volumes, sectors
+    except NotImplementedError:
+        logger.info("momentum book skipped: this data provider has no bulk universe download")
+        return none
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("momentum book failed: %s", exc)
+        return none
+
+
+def find_niche_book(provider: DataProvider, config: AppConfig, spy: pd.DataFrame | None):
+    """NICHE FINDS: the month-end 12-1 momentum rule over all US-listed common stocks
+    outside the S&P 500 (price >= niche_min_price, >= $10M traded per day). Same code
+    as the MOMENTUM TOP 20 (analysis/momentum_portfolio.build_book); NOT part of the
+    tested plan. Returns a MomentumBook (pick.sector holds the company name) or None."""
+    pc = config.portfolio
+    if not pc.niche_enabled or spy is None or spy.empty:
+        return None
+    import json
+    from pathlib import Path
+
+    from analysis.momentum_portfolio import build_book
+
+    try:
+        listed = provider.get_us_listed()
+        sp500 = set(json.load(open(Path(__file__).resolve().parent / "data" / "sp500_members.json"))["members"])
+        names = {t: nm.split(" - ")[0].split(" Common Stock")[0].strip() for t, nm in listed.items() if t not in sp500}
+        spy_close = _naive_close(spy)
+        closes, volumes = provider.get_universe_closes(sorted(names), latest_session=spy_close.index[-1], key="niche")
+        if closes.empty:
+            return None
+        return build_book(closes, volumes, spy_close, names, top_n=pc.niche_top_n, min_price=pc.niche_min_price,
+                          near_high=pc.niche_near_high_pct / 100 if pc.niche_near_high_pct > 0 else None,
+                          max_jump=pc.niche_max_jump_share if pc.niche_max_jump_share < 1 else None)
+    except NotImplementedError:
+        logger.info("niche finds skipped: this data provider has no US listing / bulk download")
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("niche finds failed: %s", exc)
+    return None
+
+
+def analyze_momentum_picks(provider: DataProvider, config: AppConfig, book) -> dict:
+    """Full chart read (daily EMAs, 4H 200 EMA, zones, patterns) for every stock in
+    the momentum list and every name that would enter at the next rebalance.
+    ticker -> (ChartRead, daily)."""
+    if book is None or config.portfolio.momentum_pct <= 0:
+        return {}
+    from analysis.chart_read import read_chart
+
+    tickers = [p.ticker for p in book.picks] + [t for t in book.preview_in if t not in {p.ticker for p in book.picks}]
+    out = {}
+    for t in tickers:
+        try:
+            daily = provider.get_history(t, period=config.data.period)
+            try:
+                hourly = provider.get_history(t, period="730d", interval="1h")
+            except DataUnavailable:
+                hourly = None
+            out[t] = (read_chart(t, daily, hourly), daily)
+        except Exception as exc:  # noqa: BLE001 - one chart must never break the scan
+            logger.warning("momentum chart read failed for %s: %s", t, exc)
+    return out
+
+
+def technical_names(book, breakouts: list, near_breakouts: list, trade_plans: list, pattern_setups: list,
+                    max_names: int, niche_book=None) -> list[str]:
+    """Names for the technical engine, most relevant first: the momentum list,
+    next month's entries, the niche finds, breakouts, then the scanner's own
+    setups and patterns."""
+    names: list[str] = []
+    if book is not None:
+        names += [p.ticker for p in book.picks] + list(book.preview_in)
+    if niche_book is not None:
+        names += [p.ticker for p in niche_book.picks] + list(niche_book.preview_in)
+    names += [b.ticker for b, _r in breakouts + near_breakouts]
+    names += [p.ticker for p in trade_plans if p.setup != "No confirmed setup"]
+    names += [s.ticker for s, _r in pattern_setups]
+    return list(dict.fromkeys(names))[:max_names]
+
+
+def run_technical_analysis(provider: DataProvider, config: AppConfig, names: list[str],
+                           sectors: dict[str, str | None]) -> tuple[list, object | None]:
+    """ta/ engine over `names` in two passes: daily/weekly/monthly for every name,
+    then 4H/1H for the first `technical.hourly_top_n` names (in `names` order).
+    Chart analysis only -- nothing here sizes or allocates. ([TechnicalReport], Regime)."""
+    tc = config.technical
+    if not tc.enabled or not names:
+        return [], None
+    from sector.rotation import SECTOR_ETF_MAP
+    from ta.engine import analyze
+    from ta.regime import classify_regime
+    from ui.overview import GICS_TO_YAHOO
+
+    def hist(t: str) -> pd.DataFrame:
+        return provider.get_history(t, period=tc.history_period)
+
+    try:
+        spy = hist("SPY")
+        regime = classify_regime(spy)
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("technical analysis skipped: no SPY history (%s)", exc)
+        return [], None
+    bench_cache: dict[str, pd.Series | None] = {"SPY": spy["close"]}
+
+    def bench(t: str) -> pd.Series | None:
+        if t not in bench_cache:
+            try:
+                bench_cache[t] = hist(t)["close"]
+            except Exception:  # noqa: BLE001
+                bench_cache[t] = None
+        return bench_cache[t]
+
+    weights = tc.weights or None
+    reports, inputs = {}, {}
+    for t in names:
+        try:
+            daily = hist(t)
+            sec = (sectors.get(t) or "").replace(" (small cap)", "")
+            bm = {k: v for k, v in (("SPY", bench("SPY")), ("QQQ", bench("QQQ"))) if v is not None}
+            etf = SECTOR_ETF_MAP.get(GICS_TO_YAHOO.get(sec, sec))
+            if etf and bench(etf) is not None:
+                bm[etf] = bench(etf)
+            inputs[t] = (daily, bm)
+            reports[t] = analyze(t, daily, None, bm, regime, weights=weights)
+        except Exception as exc:  # noqa: BLE001 - one chart must never break the scan
+            logger.warning("technical analysis failed for %s: %s", t, exc)
+    for t in [t for t in names if t in reports][:tc.hourly_top_n]:
+        try:
+            hourly = provider.get_history(t, period="730d", interval="1h")
+            reports[t] = analyze(t, inputs[t][0], hourly, inputs[t][1], regime, weights=weights)
+        except Exception as exc:  # noqa: BLE001 - keep the daily-only report
+            logger.info("no 4H/1H analysis for %s: %s", t, exc)
+    return [reports[t] for t in names if t in reports], regime
+
+
+def find_breakouts(provider: DataProvider, config: AppConfig, closes, volumes, spy: pd.DataFrame | None,
+                   sectors: dict, held: set[str], book_min_price: dict | None = None) -> tuple[list, list]:
+    """LEADER BREAKOUTs today and leaders close to one (analysis/leader_breakout.py),
+    each with full OHLC (ATR stop) and a chart read. ([(item, read)], [(item, read)])."""
+    if closes is None or closes.empty or spy is None:
+        return [], []
+    from analysis.chart_read import read_chart
+    from analysis.leader_breakout import attach_daily, find_leader_breakouts, prioritize_breakouts
+
+    try:
+        outs, near, bull = find_leader_breakouts(closes, volumes, _naive_close(spy), sectors, min_price=book_min_price or None)
+    except Exception as exc:  # noqa: BLE001 - must never break the scan
+        logger.warning("leader breakouts failed: %s", exc)
+        return [], []
+    if not bull:
+        outs = []  # the rule only trades while SPY is above its 200-day
+    res = []
+    for item in outs + near[:10]:
+        try:
+            daily = provider.get_history(item.ticker, period=config.data.period)
+            attach_daily(item, daily)
+            try:
+                hourly = provider.get_history(item.ticker, period="730d", interval="1h")
+            except DataUnavailable:
+                hourly = None
+            res.append((item, read_chart(item.ticker, daily, hourly)))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("breakout detail failed for %s: %s", item.ticker, exc)
+    trades = prioritize_breakouts([x for x in res if not x[0].near], held)
+    alerts = prioritize_breakouts([x for x in res if x[0].near], held)
+    return trades, alerts
 
 
 def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | None = None, max_workers: int = 8) -> ScanRun:
@@ -435,6 +800,18 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
     )
     logger.info("computed RS rank for %d/%d tickers (min_rs_percentile=%.0f)", len(rs_ranks), len(filter_result.included), config.gates.min_rs_percentile)
 
+    # Composite-momentum rank vs. EVERY fetched candidate, not just the
+    # universe-filter survivors: the backtest that validated this gate ranked
+    # against the full universe list (it has no market-cap/ATR filter).
+    momentum_ranks: dict[str, float] = {}
+    if config.gates.min_momentum_percentile is not None:
+        momentum_ranks = compute_universe_momentum_ranks({t: c[1]["close"] for t, c in candidates.items()})
+        logger.info("computed momentum rank for %d/%d tickers (min_momentum_percentile=%.0f)",
+                    len(momentum_ranks), len(candidates), config.gates.min_momentum_percentile)
+        if not momentum_ranks:
+            logger.warning("no momentum ranks: the momentum gate needs >= 10 tickers with ~258 bars each "
+                           "(data.period is %r; use 2y or more) -- every setup will be rejected", config.data.period)
+
     # The NO-TRADE engine: every ticker that build_trade_plan/scan_ticker rejects
     # gets a specific, named reason recorded here instead of silently vanishing —
     # see ScanRun.no_trade and print_no_trade_summary. A single dict written by
@@ -449,7 +826,7 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
         futures = {
             pool.submit(
                 scan_ticker, ticker, provider, config, spy_close, sector_ranked, market_regime, rs_ranks.get(ticker),
-                qqq_close, sector_histories, no_trade_log,
+                qqq_close, sector_histories, no_trade_log, momentum_ranks.get(ticker),
             ): ticker
             for ticker in filter_result.included
         }
@@ -465,14 +842,111 @@ def run_scan(provider: DataProvider, config: AppConfig, universe: list[str] | No
                 trade_plans.append(plan)
                 no_trade_log.pop(ticker, None)
 
-    trade_plans.sort(key=lambda p: p.score, reverse=True)
+    # With the momentum gate on, list the strongest momentum first: in the
+    # comparison backtest, picking ~4 setups/week by momentum rank gave
+    # +0.14R/trade vs +0.06R picking by composite score.
+    if config.gates.min_momentum_percentile is not None:
+        # (a ticker with no confirmed setup is never a trade, keep it below real setups)
+        trade_plans.sort(
+            key=lambda p: (p.setup != "No confirmed setup", p.momentum_percentile or 0.0, p.score), reverse=True
+        )
+    else:
+        trade_plans.sort(key=lambda p: p.score, reverse=True)
+
+    for plan in trade_plans:
+        if plan.setup != "No confirmed setup":
+            plan.chart_read = build_chart_read(provider, plan.ticker, config.data.period)
     duration = time.time() - started
     logger.info("scan complete: %d tickers scanned, %d setups found in %.1fs", len(filter_result.included), len(trade_plans), duration)
 
+    pattern_setups = find_pattern_setups(provider, {t: c[1] for t, c in candidates.items()})
+    leader_dips, mstate, alerts = find_validated_leader_dips(provider, {t: c[1] for t, c in candidates.items()}, benchmarks)
+    logger.info("building the portfolio plan: index RSI(2) + momentum top %d", config.portfolio.momentum_top_n)
+    signals = find_index_signals(provider) if config.portfolio.index_rsi2_pct > 0 else []
+    book, mom_closes, mom_volumes, mom_sectors = find_momentum_book(provider, config, benchmarks.get("spy"),
+                                                                    {t: c[0].sector for t, c in candidates.items()})
+    from analysis.leader_dip import prioritize
+
+    held = {p.ticker for p in book.picks} if book is not None and book.invested and config.portfolio.momentum_pct > 0 else set()
+    leader_dips = prioritize(leader_dips, held, config.portfolio.dip_max_positions)
+    if config.portfolio.dip_pct <= 0:  # no dip buying in the plan (user's choice)
+        leader_dips, alerts = [], []
+    breakouts, near_breakouts = [], []
+    if config.portfolio.breakout_pct > 0:
+        breakouts, near_breakouts = find_breakouts(provider, config, mom_closes, mom_volumes, benchmarks.get("spy"),
+                                                   mom_sectors, held, getattr(book, "min_price", None))
+    if config.portfolio.momentum_pct <= 0:
+        book = None
+    momentum_reads = analyze_momentum_picks(provider, config, book)
+    logger.info("niche finds: momentum over US stocks outside the S&P 500")
+    niche_book = find_niche_book(provider, config, benchmarks.get("spy"))
+    ta_sectors = {**(mom_sectors or {}), **{t: c[0].sector for t, c in candidates.items()}}
+    ta_names = technical_names(book, breakouts, near_breakouts, trade_plans, pattern_setups, config.technical.max_names,
+                               niche_book)
+    logger.info("technical analysis (ta/ engine) for %d names", len(ta_names))
+    ta_reports, ta_regime = run_technical_analysis(provider, config, ta_names, ta_sectors)
     return ScanRun(
         trade_plans=trade_plans, market_regime=market_regime, sector_ranked=sector_ranked,
         universe_size=len(filter_result.included), scan_duration_s=duration, no_trade=no_trade_log,
+        pattern_setups=pattern_setups, leader_dips=leader_dips, market_state=mstate, dip_alerts=alerts,
+        sector_by_ticker={t: c[0].sector for t, c in candidates.items()},
+        momentum_book=book, index_signals=signals, momentum_closes=mom_closes,
+        leader_breakouts=breakouts, near_breakouts=near_breakouts, spy_history=benchmarks.get("spy"),
+        momentum_reads=momentum_reads, technical_reports=ta_reports, technical_regime=ta_regime, niche_book=niche_book,
     )
+
+
+def print_entry_check(scan_run: ScanRun, config: AppConfig) -> None:
+    """The user's rule for the momentum list: buy only once a pick has closed twice above the
+    resistance just above it (dashboard 'Instappen of niet?')."""
+    book = scan_run.momentum_book
+    if book is None or book.as_of is None or not book.invested or not config.portfolio.wait_for_resistance_break:
+        return
+    from ui.portfolio import decision_rows
+
+    rows = decision_rows(book, {r.ticker: r for r in scan_run.technical_reports}, True)
+    wait = [r for r in rows if r["verdict"] == "WACHT"]
+    buy = [r["ticker"] for r in rows if r["verdict"] == "JA"]
+    print("--- Instap-check: pas kopen na 2 slotkoersen boven de weerstand vlak erboven ---")
+    print(f"  JA (geen weerstand binnen 1 ATR, of al 2x erboven gesloten): {', '.join(buy) or '-'}")
+    for r in wait:
+        print(f"  WACHT {r['ticker']:<6} kopen pas na 2 slotkoersen boven {r['gate']:,.2f}")
+    print()
+
+
+def print_niche_finds(book) -> None:
+    """Terminal list of the NICHE FINDS (round 14: no edge -- follow only)."""
+    if book is None or book.as_of is None:
+        return
+    print(f"--- NICHE FINDS: top {len(book.picks)} op 12-1 maand momentum, US-aandelen buiten de S&P 500 "
+          f"(lijst van {book.as_of:%d-%m-%Y}) ---")
+    print("  Getest in ronde 14: GEEN voorsprong op een willekeurig klein aandeel en slechter dan SPY -- alleen volgen.")
+    if not book.invested:
+        print("  SPY sloot de maand onder zijn 200-daags: ook hier niets kopen.")
+    for p in book.picks:
+        print(f"  {p.rank:>3}. {p.ticker:<6} {p.status:<7} 12-1m {p.mom_12_1:>+6.0f}%  laatste maand {p.ret_1m:>+6.1f}%  "
+              f"slot {p.close:>9.2f}  {(p.sector or '')[:40]}")
+    if book.preview_in:
+        print(f"  als de maand vandaag eindigde: erin {', '.join(book.preview_in)}; eruit {', '.join(book.preview_out) or '-'}")
+    print()
+
+
+def print_technical_summary(reports: list, regime, limit: int = 25) -> None:
+    """Terminal summary of the ta/ engine (full reports: dashboard tab 'Technische analyse')."""
+    reports = [r for r in reports if r.daily.ok and r.score is not None]
+    if not reports:
+        return
+    print(f"--- Technische analyse: {len(reports)} aandelen (score = eensgezindheid van het technische beeld, geen winstkans) ---")
+    if regime is not None:
+        print(f"  Marktregime: {regime.label_nl} -- {regime.breakout_context()}")
+    print(f"  {'TICKER':<7}{'SCORE':>5}  {'HOOFDSETUP':<26}{'STATUS':<30}{'TREND (dag)':<30}{'TRIGGER':>10}{'INVALIDATIE':>13}")
+    for r in sorted(reports, key=lambda r: -r.score.total)[:limit]:
+        p = r.primary
+        trig = f"{p.trigger_price:.2f}" if p is not None and p.trigger_price is not None else "-"
+        inv = f"{p.invalidation_price:.2f}" if p is not None and p.invalidation_price is not None else "-"
+        print(f"  {r.ticker:<7}{r.score.total:>5.0f}  {(p.name_nl if p else '-'):<26}{(p.status_nl if p else '-')[:29]:<30}"
+              f"{r.daily.trend.label_nl[:29]:<30}{trig:>10}{inv:>13}")
+    print()
 
 
 def print_scan_results(trade_plans: list[TradePlan], min_score: float = 65.0) -> None:
@@ -495,6 +969,127 @@ def print_scan_results(trade_plans: list[TradePlan], min_score: float = 65.0) ->
             f"{plan.stop:<9.2f}{plan.target2:<9.2f}{plan.risk_reward:<6.1f}{plan.trend:<10}"
             f"{plan.relative_volume:<7.1f}{plan.rsi:<6.0f}{plan.market_regime:<10}"
         )
+    print()
+    for i, plan in enumerate(shown, start=1):
+        cr = plan.chart_read
+        if not cr:
+            continue
+        print(f"{i}. {plan.ticker} chart read ({cr['bias'].upper()}):")
+        for h in cr["headlines"]:
+            print(f"     {h}")
+        if cr.get("plan"):
+            print(f"     PLAN: {cr['plan']}")
+        if cr.get("invalidation"):
+            print(f"     INVALID: {cr['invalidation']}")
+        print()
+
+
+def print_leader_dips(leader_dips: list, market: dict, risk_pct: float = 0.5) -> None:
+    vix, weak, bear = market.get("vix"), market.get("spy_below_50"), market.get("spy_below_200")
+    print()
+    print("=== LEADER DIP -- disciplined dip entry (buy next open, stop 2.5 ATR, exit after 10 sessions) ===")
+    print("    research round 4: no setup beat a random stock bought the same day (2008-2026) -- the grade is a")
+    print(f"    RISK DIAL: N = normal size ({risk_pct:.2f}% of the account at risk), H = half ({risk_pct / 2:.2f}%) while SPY < 200d")
+    if vix is not None:
+        print(f"    market: VIX {vix:.1f}, SPY {'BELOW' if weak else 'above'} its 50-day"
+              f"{'' if bear is None else (', BELOW its 200-day' if bear else ', above its 200-day')}")
+    if not leader_dips:
+        print("    NO TRADE: no leader dip today.")
+    if leader_dips:
+        print("    order: #1 first; score = momentum rank (the backtest's tie-break when slots run out); NEEM = take,")
+        print("    RESERVE = only if a slot frees up, OVERLAP = already in the momentum book -> skip (no double position)")
+    for d, read in leader_dips:
+        tag = {"N": "TRADE", "H": "HALF"}.get(d.grade, "watch")
+        order = f"#{d.priority:<2} {d.action:<8} score {d.score:3.0f}  " if d.priority is not None else ""
+        print(f"  {order}[{d.grade}] {d.ticker:<6} {tag:<6} close {d.close:.2f}  stop~{d.stop_estimate:.2f} ({d.risk_pct:.1f}%)  "
+              f"dip {d.dip_atr:+.1f} ATR  momentum {d.momentum_rank:.0f}")
+        print("        + " + "; ".join(d.reasons[2:]) if len(d.reasons) > 2 else "        + (no context notes)")
+        if d.missing:
+            print("        - " + "; ".join(d.missing))
+    print()
+
+
+def update_forward_log(provider: DataProvider, scan_run: ScanRun, spy: pd.DataFrame | None):
+    """Log today's signals and evaluate every logged one (tracking/forward_log.py).
+    Returns (summary, breakout results, momentum table) or (None, [], None)."""
+    from tracking.forward_log import append_signals, evaluate_breakout, evaluate_momentum, read_log, rows_from_scan, summary
+
+    try:
+        added = append_signals(rows_from_scan(scan_run.leader_breakouts, scan_run.momentum_book))
+        log = read_log()
+        results = []
+        for r in log[log.system == "BREAKOUT"].itertuples():
+            try:
+                daily = provider.get_history(r.ticker, period="2y")
+                results.append(evaluate_breakout(r.ticker, daily, r.signal_date, float(r.atr)))
+            except (DataUnavailable, ValueError) as exc:
+                logger.warning("forward log: cannot evaluate %s: %s", r.ticker, exc)
+        mom = evaluate_momentum(log, scan_run.momentum_closes, _naive_close(spy)) if spy is not None else None
+        logger.info("forward log: %d new signal(s) logged, %d breakout(s) tracked", added, len(results))
+        return summary(results), results, mom
+    except Exception as exc:  # noqa: BLE001 - the log must never break the scan
+        logger.warning("forward log failed: %s", exc)
+        return None, [], None
+
+
+def print_leader_breakouts(scan_run: ScanRun, risk_pct: float) -> None:
+    print()
+    print("=== LEADER BREAKOUT -- first close above the 50-day closing high in a top-50 momentum leader, SPY > 200d ===")
+    print("    buy next open, stop 2.5 ATR, trailing exit: sell next open after a close below the 20-day lowest close;")
+    print("    tested: better than a random stock, NOT better than buying a leader without a breakout (t < 2)")
+    if not scan_run.leader_breakouts:
+        print("    no leader breakout today")
+    for b, _r in scan_run.leader_breakouts:
+        stop = f"stop~{b.stop_estimate:.2f} ({b.risk_pct:.1f}%)" if b.stop_estimate is not None else "stop: n/a"
+        print(f"  #{b.priority:<2} {b.action:<8} score {b.score:3.0f}  {b.ticker:<6} close {b.close:.2f} > 50d high {b.breakout_level:.2f}  "
+              f"{stop}  trail exit < {b.exit_level:.2f}  leader #{b.leader_rank}  risk {risk_pct:.2f}%")
+    if scan_run.near_breakouts:
+        print("--- almost: leaders within 3% of their 50-day closing high (close above the level = breakout) ---")
+        for b, _r in scan_run.near_breakouts:
+            print(f"  {b.ticker:<6} close {b.close:>9.2f}  breakout if close > {b.breakout_level:>9.2f} ({b.distance_pct:+.1f}%)  "
+                  f"leader #{b.leader_rank}{'  (already in momentum book)' if b.in_momentum else ''}")
+    print()
+
+
+def print_portfolio_plan(scan_run: ScanRun, config: AppConfig) -> None:
+    """Terminal version of the dashboard's 'Vandaag te doen' + Portefeuille tab."""
+    from ui.portfolio import allocation_rows
+
+    pc = config.portfolio
+    bear = scan_run.market_state.get("spy_below_200")
+    print()
+    parts = [f"{n} {v:.0f}%" for n, v in (("momentum", pc.momentum_pct), ("breakouts", pc.breakout_pct),
+                                           ("dips", pc.dip_pct), ("index RSI2", pc.index_rsi2_pct)) if v > 0]
+    print(f"=== PORTFOLIO PLAN {' / '.join(parts)} -- price data only ===")
+    for name, pct, amount, rule in allocation_rows(pc, config.risk.account_size, bear):
+        print(f"  {name:<22}{pct:>5}  {amount:>10}  {rule}")
+    if pc.momentum_pct > 0:
+        print("  LET OP (onderzoeksronde 15): met de S&P-ledenlijst van toen versloeg de momentum top 20 SPY in geen enkele")
+        print("  periode (Sharpe 0,48 / 0,22 / 0,78 tegen SPY 0,80 / 0,66 / 1,40). De oude 22%/jaar was kennis achteraf.")
+    book = scan_run.momentum_book
+    if pc.momentum_pct > 0:
+        print()
+        if book is None or book.as_of is None:
+            print("--- MOMENTUM TOP 20: not available (no universe data)")
+        else:
+            state = "INVESTED" if book.invested else "CASH (SPY closed below its 200-day at month-end)"
+            print(f"--- MOMENTUM TOP {len(book.picks)}: month-end list of {book.as_of.date()} -- {state}; "
+                  f"next rebalance at the close of {book.next_rebalance.date() if book.next_rebalance is not None else '?'}")
+            for p in book.picks:
+                print(f"  {p.rank:>2}. {p.ticker:<6} {p.status:<7} 12-1m {p.mom_12_1:+6.0f}%  last month {p.ret_1m:+6.1f}%  month-end close {p.close:>9.2f}  {p.sector or ''}")
+            if book.exits:
+                print(f"  sell (left the list): {', '.join(book.exits)}")
+            if book.preview:
+                print(f"  preview if the month ended today ({book.preview_date.date()}): in {', '.join(book.preview_in) or '-'}; "
+                      f"out {', '.join(book.preview_out) or '-'}")
+    if pc.index_rsi2_pct > 0 and scan_run.index_signals:
+        print()
+        print("--- INDEX RSI(2): buy next open after close > SMA200 and RSI(2) < 10; sell next open after close > SMA5")
+        for sig in scan_run.index_signals:
+            trig = (f"sell if close > {sig.sell_above:.2f}" if sig.sell_above is not None else
+                    f"buy if close <= {sig.buy_below:.2f}" if sig.buy_below is not None and sig.above_200 else "below 200d: no trade")
+            print(f"  {sig.etf:<4} {sig.state:<8} close {sig.close:>8.2f}  RSI2 {sig.rsi2:5.1f}  SMA5 {sig.sma5:>8.2f}  "
+                  f"SMA200 {sig.sma200:>8.2f}  tomorrow: {trig}")
     print()
 
 
@@ -588,7 +1183,10 @@ class SyntheticDataProvider(DataProvider):
 def run_dry_run(config: AppConfig) -> ScanRun:
     provider = SyntheticDataProvider()
     tiny_universe = ["SYNA", "SYNB", "SYNC", "SYND", "SYNE", "SYNF", "SYNG", "SYNH"]
-    return run_scan(provider, config, universe=tiny_universe, max_workers=4)
+    # a cross-sectional percentile over 8 random walks means nothing (and needs
+    # >= 10 tickers), so the dry run shows the pipeline without those gates
+    gates = dataclasses.replace(config.gates, min_momentum_percentile=None, min_efficiency_ratio=None)
+    return run_scan(provider, dataclasses.replace(config, gates=gates), universe=tiny_universe, max_workers=4)
 
 
 # --------------------------------------------------------------------------- #
@@ -629,8 +1227,39 @@ def main(argv: list[str] | None = None) -> int:
         provider = YFinanceProvider(cache=cache, max_retries=config.data.max_retries, retry_backoff_seconds=config.data.retry_backoff_seconds)
         scan_run = run_scan(provider, config, max_workers=args.max_workers)
 
+    print_portfolio_plan(scan_run, config)
+    print_entry_check(scan_run, config)
+    print_niche_finds(scan_run.niche_book)
+    if config.portfolio.breakout_pct > 0:
+        print_leader_breakouts(scan_run, config.portfolio.breakout_risk_pct_of_account)
+    if config.portfolio.dip_pct > 0:
+        print_leader_dips(scan_run.leader_dips, scan_run.market_state, config.portfolio.dip_risk_pct_of_account)
+    if scan_run.dip_alerts:
+        print("--- Next-session alerts: momentum leaders closest to a LEADER DIP trigger ---")
+        for a, _r in scan_run.dip_alerts:
+            print(f"  {a.ticker:<6} close {a.close:>9.2f}  dip trigger <= {a.alert_price:>9.2f} ({-a.distance_pct:+.1f}%)  "
+                  f"deep-dip (21 EMA - 1 ATR) <= {a.deep_dip_price:>9.2f}  momentum {a.momentum_rank:.0f}  ATR {a.atr_pct:.1f}%")
+        print()
+    print("--- Other strategy setups (NOT validated: bought short-term strength and did worse than random")
+    print("    entries in the same stocks out-of-sample -- see README 'Optimization round 3'; info only) ---")
     print_scan_results(scan_run.trade_plans, min_score=args.min_score)
+    if scan_run.pattern_setups:
+        print(f"--- Ready to boom: {len(scan_run.pattern_setups)} chart-pattern setups (hold up to 20 days) ---")
+        for i, (s, _read) in enumerate(scan_run.pattern_setups, 1):
+            print(f"  {i:<3}{s.ticker:<7}{s.score:>4.0f}  {s.status:<17}{s.names[:40]:<41}trigger {s.trigger:.2f}  stop {s.stop:.2f}  target {s.target:.2f}")
+        print()
     print_no_trade_summary(scan_run.no_trade)
+    print_technical_summary(scan_run.technical_reports, scan_run.technical_regime)
+
+    fw_summary, fw_results, fw_momentum = (None, [], None)
+    if not args.dry_run:
+        fw_summary, fw_results, fw_momentum = update_forward_log(provider, scan_run, scan_run.spy_history)
+        if fw_summary:
+            s = fw_summary
+            print(f"--- LIVE LOG (forward test): {s['signals']} breakout signals, {s['closed']} closed, {s['open']} open"
+                  + (f", win {s['win_pct']:.0f}%, avg {s['avg_r']:+.2f}R, total {s['total_r']:+.1f}R" if s["closed"] else "")
+                  + " -- logs/signal_log.csv")
+            print()
 
     from ui.dashboard import build_dashboard_html, trade_plan_to_row
     from watchlist.store import WatchlistStore
@@ -653,6 +1282,22 @@ def main(argv: list[str] | None = None) -> int:
         watchlist_entries=watchlist_entries,
         universe_size=scan_run.universe_size,
         scan_duration_s=scan_run.scan_duration_s,
+        pattern_setups=scan_run.pattern_setups,
+        leader_dips=scan_run.leader_dips,
+        market_state=scan_run.market_state,
+        dip_alerts=scan_run.dip_alerts,
+        sector_by_ticker=scan_run.sector_by_ticker,
+        portfolio_cfg=config.portfolio,
+        account_size=config.risk.account_size,
+        momentum_book=scan_run.momentum_book,
+        index_signals=scan_run.index_signals,
+        momentum_closes=scan_run.momentum_closes,
+        leader_breakouts=scan_run.leader_breakouts,
+        near_breakouts=scan_run.near_breakouts,
+        forward=(fw_summary, fw_results, fw_momentum),
+        momentum_reads=scan_run.momentum_reads,
+        technical=(scan_run.technical_reports, scan_run.technical_regime),
+        niche_book=scan_run.niche_book,
     )
     with open(args.dashboard, "w") as f:
         f.write(html)

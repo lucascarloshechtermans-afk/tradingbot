@@ -25,7 +25,19 @@ PAGE_TEMPLATE = """<!doctype html>
   .badge.bearish {{ background: rgba(248,81,73,.15); color: var(--red); }}
   .badge.neutral {{ background: rgba(210,153,34,.15); color: var(--amber); }}
   .badge.high_volatility {{ background: rgba(248,81,73,.25); color: var(--red); }}
+  {setup_css}
+  {overview_css}
+  {ta_css}
+  {decision_css}
+  details.bg>summary {{ cursor: pointer; }}
   .tabs {{ display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }}
+  .tabs {{ overflow-x: auto; }} .tab {{ white-space: nowrap; }}
+  @media (max-width: 700px) {{
+    body {{ padding: 12px; }}
+    table {{ display: block; overflow-x: auto; }}
+    .dec table {{ display: table; }}
+    .dec td, .dec th {{ padding: 6px 4px; }}
+  }}
   .tab {{ padding: 8px 16px; cursor: pointer; color: var(--ink-soft); border-bottom: 2px solid transparent; font-size: 14px; }}
   .tab.active {{ color: var(--ink); border-bottom-color: var(--blue); }}
   .panel {{ display: none; }}
@@ -70,33 +82,54 @@ PAGE_TEMPLATE = """<!doctype html>
 
   <div class="tabs">
     <div class="tab active" data-tab="dashboard">Dashboard</div>
+    <div class="tab" data-tab="portfolio">Portefeuille</div>
+    <div class="tab" data-tab="ta">Technische analyse</div>
     <div class="tab" data-tab="scanner">Scanner</div>
+    <div class="tab" data-tab="boom">Ready to boom</div>
     <div class="tab" data-tab="watchlist">Watchlist</div>
   </div>
 
   <div id="dashboard" class="panel active">
-    <div class="card">
-      <div class="grid">
+    {decision_html}
+    <details class="card bg" id="details-per-stock">
+      <summary><b>Details per aandeel</b> <span class="sm">grafiek, steun/weerstand en uitleg voor elk aandeel in de lijst -- klik</span></summary>
+      {overview_html}
+    </details>
+    <details class="card bg">
+      <summary><b>Achtergrond</b> <span class="sm">marktregime, sectoren, oude strategie-setups en chartpatronen -- info, niet gevalideerd</span></summary>
+      <div class="grid" style="margin-top:12px">
         <div class="stat"><div class="label">Market Regime</div><div class="value"><span class="badge {regime_class}">{regime_label}</span></div></div>
         <div class="stat"><div class="label">Regime Score</div><div class="value">{regime_score}</div></div>
-        <div class="stat"><div class="label">Setups Found</div><div class="value">{setup_count}</div></div>
+        <div class="stat"><div class="label">Oude strategie-setups (info)</div><div class="value">{setup_count}</div></div>
         <div class="stat"><div class="label">Universe Scanned</div><div class="value">{universe_size}</div></div>
       </div>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Market regime factors</h3>
+      <h3>Market regime factors</h3>
       <ul class="plain">{regime_factors_html}</ul>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Sector strength</h3>
+      <h3>Sector strength</h3>
       <table><thead><tr><th>Rank</th><th>ETF</th><th>5D Perf</th><th>1M Perf</th><th>3M Perf</th><th>RS vs SPY</th><th>Volatility</th><th>Trend</th></tr></thead>
       <tbody>{sector_rows_html}</tbody></table>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Top setups</h3>
+      <h3>Other strategy setups (not validated -- info only)</h3>
       <table><thead><tr><th>Rank</th><th>Ticker</th><th>Score</th><th>Setup</th></tr></thead>
       <tbody>{top_setups_html}</tbody></table>
-    </div>
+      <h3>Chart patterns (info only)</h3>
+      <table><thead><tr><th>#</th><th>Ticker</th><th>Score</th><th>Status</th><th>Pattern</th><th>Trigger</th><th>Stop</th><th>Target</th><th>R:R</th></tr></thead>
+      <tbody>{boom_rows_html}</tbody></table>
+    </details>
+  </div>
+
+  <div id="portfolio" class="panel">
+    {portfolio_html}
+  </div>
+
+  <div id="ta" class="panel">
+    {ta_html}
+  </div>
+
+  <div id="boom" class="panel">
+    <div class="card"><p style="margin:0;color:var(--ink-soft)"><strong>Info / confirmation only, not a validated setup.</strong>
+    Bullish chart patterns that broke out today / 1-3 days ago or sit just under their trigger. On the scanner's own candidates a
+    pattern breakout did not add edge out-of-sample (README, optimization round 3); use it as context, not as a reason to trade.</p></div>
+    {boom_cards_html}
   </div>
 
   <div id="scanner" class="panel">
@@ -121,6 +154,17 @@ PAGE_TEMPLATE = """<!doctype html>
   </div>
 
 <script>
+{ta_js}
+function openCard(t) {{
+  document.querySelector('[data-tab=dashboard]').click();
+  for (const id of ['ov-mo-' + t, 'ov-bo-' + t, 'ov-' + t, 'ov-nb-' + t, 'ov-alert-' + t, 'ov-pat-' + t]) {{
+    const el = document.getElementById(id);
+    if (el) {{
+      for (let p = el; p; p = p.parentElement) {{ if (p.tagName === 'DETAILS') p.open = true; }}
+      el.scrollIntoView({{behavior: 'smooth', block: 'start'}}); return;
+    }}
+  }}
+}}
 const SCAN_DATA = {scan_data_json};
 const WATCHLIST_DATA = {watchlist_data_json};
 
@@ -151,6 +195,17 @@ const EXPLANATION_LABELS = {{
   momentum: 'Momentum', volume: 'Volume', context: 'Context', levels: 'Levels', risk: 'Risk',
 }};
 const EXPLANATION_ORDER = ['why_it_passed', 'why_it_could_fail', 'structure', 'momentum', 'volume', 'context', 'levels', 'risk'];
+
+function renderChartRead(cr) {{
+  if (!cr || !cr.svg) return '';
+  const esc = (t) => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const heads = (cr.headlines || []).map(h => `<li>${{esc(h)}}</li>`).join('');
+  const plan = cr.plan ? `<div style="margin:4px 0 8px;padding:6px 10px;background:#edf2ff;border-left:3px solid #364fc7;color:#364fc7;font-weight:700">${{esc(cr.plan)}}</div>` : '';
+  const inv = cr.invalidation ? `<div style="font-size:12px;color:var(--ink-soft)">Invalid: ${{esc(cr.invalidation)}}</div>` : '';
+  return `<div style="margin-top:12px"><strong>Chart read (${{esc(cr.bias)}})</strong>
+    <ul style="margin:4px 0;padding-left:18px;color:#364fc7;font-weight:600;font-size:12px">${{heads}}</ul>${{plan}}
+    <div style="max-width:980px">${{cr.svg}}</div>${{inv}}</div>`;
+}}
 
 function renderExplanation(explanation) {{
   if (!explanation) return '';
@@ -208,9 +263,12 @@ SCAN_DATA.forEach((row, idx) => {{
         <strong>ATR%</strong><div>${{row.atr_pct.toFixed(1)}}%</div>
         <strong>Sector</strong><div>${{row.sector || 'n/a'}}</div>
         <strong>Max holding period</strong><div>${{row.max_holding_days}} trading days</div>
+        ${{row.max_entry != null ? `<strong>Max entry (buy-limit)</strong><div>${{row.max_entry.toFixed(2)}}</div>` : ''}}
+        ${{row.momentum_percentile != null ? `<strong>Momentum rank</strong><div>${{row.momentum_percentile.toFixed(0)}}/100</div>` : ''}}
       </div>
       <div class="cat-breakdown"><strong>Score breakdown</strong>${{renderCategoryBreakdown(row.category_breakdown)}}</div>
     </div>
+    ${{renderChartRead(row.chart_read)}}
   </td>`;
 
   tr.addEventListener('click', () => {{ detailTr.classList.toggle('open'); }});
@@ -250,8 +308,40 @@ def build_dashboard_html(
     universe_size: int,
     scan_duration_s: float,
     generated_at: datetime | None = None,
+    pattern_setups: list | None = None,
+    leader_dips: list | None = None,
+    market_state: dict | None = None,
+    dip_alerts: list | None = None,
+    sector_by_ticker: dict | None = None,
+    portfolio_cfg=None,
+    account_size: float = 10_000.0,
+    momentum_book=None,
+    index_signals: list | None = None,
+    momentum_closes=None,
+    leader_breakouts: list | None = None,
+    near_breakouts: list | None = None,
+    forward: tuple | None = None,
+    momentum_reads: dict | None = None,
+    technical: tuple | None = None,
+    niche_book=None,
 ) -> str:
+    """`pattern_setups`: [(analysis.setup_finder.Setup, ChartRead), ...] for the
+    'Ready to boom' tab."""
+    from html import escape
+
+    from ui.chart_svg import SETUP_CSS, render_setup_cards
+    from config.schema import PortfolioConfig
+    from ui.overview import OVERVIEW_CSS, build_overview_html
+    from ui.portfolio import DECISION_CSS, build_decision_html, build_forward_html, build_portfolio_tab_html, build_todo_html
+    from ui.ta_report import TA_CSS, TA_JS, ta_card_line, ta_tab
+    ta_reports, ta_regime = technical or ([], None)
+    ta_html = (ta_tab(ta_reports, ta_regime) if ta_reports else
+               "<div class='card'><p>Geen technische analyse in deze run (technical.enabled uit, of geen data).</p></div>")
+    ta_lines = {r.ticker: ta_card_line(r) for r in ta_reports if r.daily.ok}
     generated_at = generated_at or datetime.now()
+    portfolio_cfg = portfolio_cfg or PortfolioConfig()
+    index_signals = index_signals or []
+    bear = (market_state or {}).get("spy_below_200")
     setup_count = len(scan_rows)
 
     regime_factors_html = "".join(
@@ -266,7 +356,16 @@ def build_dashboard_html(
     )
     top_setups_html = "".join(
         f"<tr><td>{i+1}</td><td><strong>{r['ticker']}</strong></td><td>{r['score']:.1f}</td><td>{r['setup']}</td></tr>"
-        for i, r in enumerate(scan_rows[:10])
+        for i, r in enumerate([r for r in scan_rows if r["setup"] != "No confirmed setup"][:10])
+    )
+    pattern_setups = pattern_setups or []
+    leader_dips = leader_dips or []
+    dip_alerts = dip_alerts or []
+    boom_rows_html = "".join(
+        f"<tr><td>{i}</td><td><a style='color:#74c0fc' href='#setup-{escape(s.ticker)}' onclick=\"document.querySelector('[data-tab=boom]').click()\">"
+        f"<strong>{escape(s.ticker)}</strong></a></td><td>{s.score:.0f}</td><td>{escape(s.status)}</td><td>{escape(s.names)}</td>"
+        f"<td>{s.trigger:.2f}</td><td>{s.stop:.2f}</td><td>{s.target:.2f}</td><td>{s.rr:.1f}</td></tr>"
+        for i, (s, _read) in enumerate(pattern_setups, 1)
     )
 
     return PAGE_TEMPLATE.format(
@@ -280,6 +379,29 @@ def build_dashboard_html(
         regime_factors_html=regime_factors_html or "<li>No regime data</li>",
         sector_rows_html=sector_rows_html or "<tr><td colspan=8>No sector data</td></tr>",
         top_setups_html=top_setups_html or "<tr><td colspan=4>No setups found</td></tr>",
+        boom_rows_html=boom_rows_html or "<tr><td colspan=9>No pattern setups</td></tr>",
+        boom_cards_html=render_setup_cards(pattern_setups) if pattern_setups else "",
+        setup_css=SETUP_CSS,
+        decision_html=build_decision_html(portfolio_cfg, momentum_book, ta_reports, account_size, niche_book),
+        decision_css=DECISION_CSS,
+        # the decision card covers the momentum plan; the to-do list only matters when other systems are on
+        overview_html=(build_todo_html(portfolio_cfg, momentum_book, index_signals, len(leader_dips), bear,
+                                       n_breakouts=len(leader_breakouts or []))
+                       if (portfolio_cfg.breakout_pct > 0 or portfolio_cfg.dip_pct > 0 or portfolio_cfg.index_rsi2_pct > 0
+                           or momentum_book is None) else "")
+        + build_overview_html(leader_dips, dip_alerts, pattern_setups, sector_ranked,
+                              sector_by_ticker or {}, market_state or {},
+                              dip_risk_pct=portfolio_cfg.dip_risk_pct_of_account,
+                              leader_breakouts=leader_breakouts, near_breakouts=near_breakouts,
+                              breakout_risk_pct=portfolio_cfg.breakout_risk_pct_of_account,
+                              momentum=((momentum_book, momentum_reads, portfolio_cfg.momentum_pct / max(portfolio_cfg.momentum_top_n, 1), ta_lines)
+                                        if momentum_book is not None and momentum_reads else None)),
+        portfolio_html=build_portfolio_tab_html(portfolio_cfg, account_size, momentum_book, index_signals, bear,
+                                                momentum_closes) + build_forward_html(*(forward or (None, [], None))),
+        overview_css=OVERVIEW_CSS,
+        ta_css=TA_CSS,
+        ta_js=TA_JS,
+        ta_html=ta_html,
         scan_data_json=json.dumps(scan_rows),
         watchlist_data_json=json.dumps(watchlist_entries),
     )
@@ -307,6 +429,9 @@ def trade_plan_to_row(plan) -> dict[str, Any]:
         "risks": plan.risks,
         "recent_closes": plan.recent_closes,
         "max_holding_days": plan.max_holding_days,
+        "max_entry": getattr(plan, "max_entry", None),
+        "momentum_percentile": getattr(plan, "momentum_percentile", None),
+        "chart_read": getattr(plan, "chart_read", {}),
         "category_breakdown": getattr(plan, "category_breakdown", []),
         "explanation": getattr(plan, "explanation", {}),
     }

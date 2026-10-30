@@ -69,3 +69,14 @@ class DataProvider(ABC):
     @abstractmethod
     def get_splits(self, ticker: str) -> pd.Series:
         ...
+
+    def get_universe_closes(self, tickers: list[str], latest_session=None, key: str = "momuni") -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Adjusted daily closes and volumes (date x ticker, ~15 months) for a
+        large universe in bulk -- used by the MOMENTUM TOP 20 book. Optional:
+        providers that cannot do this cheaply raise NotImplementedError and
+        the momentum book is skipped. `key` separates the cache of different universes."""
+        raise NotImplementedError
+
+    def get_us_listed(self) -> dict[str, str]:
+        """ticker -> name for all US-listed common stocks (for the niche list). Optional."""
+        raise NotImplementedError
