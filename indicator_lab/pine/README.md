@@ -114,3 +114,10 @@ S/R-zones op de grafiek, labels met setup, support en ruimte, en alerts. **Onder
 volume, 2 Qullamaggie). Scanner: zet de indicator in de **Pine Screener** en filter op kolom *Signaal* = 1; de
 kolommen *Setup nr*, *Afstand support %/ATR* en *Ruimte %* tonen de rest. `sr_zones.pine` tekent alleen de S/R-zones.
 
+
+## Earnings gap (`earnings_gap.pine`)
+Setup 11 van `indicator_lab/week/pead_week.py` en `pead_improve.py` (dagbars, alleen long). Signaal op de
+reactiedag van de cijfers: gap >= 5%, volume >= 3x, slot boven de open, SPY boven de SMA200, slot boven de eigen SMA200.
+Instap op de volgende open; stop onder de laag van de signaaldag; exits A-EMA20 / A-3ATR / B met tijdsexit (standaard
+40 dagen). De tabel rekent per aandeel met de kosten van het onderzoek (0,05% + $0,02 per kant). Verdict van het
+onderzoek: **niet goedgekeurd** (test 2023-2026 PF 1,03); gebruik hem als watchlist of voor papier-traden.
