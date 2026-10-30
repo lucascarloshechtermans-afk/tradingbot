@@ -261,3 +261,8 @@ Correctie met volledige EPS-data (99% van de events): de eerdere PF 1,19 voor "E
 artefact van de onvolledige EPS-dekking (vooral bekende namen). Met volledige data: ADR > 2%, EMA20-trail, 40 dagen:
 "any" PF 1,06 (test), "verrassing > 0" PF 1,00. Stap 5: verbeteringen tilden train-PF naar 1,28 maar test zakte naar
 1,03 (t = 0,22): overfit op train. Niet goedgekeurd; build.py en week_swing.pine blijven ongewijzigd.
+
+## Swing v4.2-ronde (indicator_lab/swing7/reports): 3 regels uit eerder onderzoek op v4.1
+Ontwikkeling (1260 aandelen): R1 SPY > SMA200 verworpen, R3 geen cijfers binnen 5 sessies verworpen, R2 1-jaars ATR% <= 5
+geaccepteerd (MAR 0,12 vs -0,02). Enige holdout-run (1304 aandelen): v4.2 MAR 0,08 vs v4.1 0,11, CAGR 2,5% vs 3,4%
+(SPY 13,2%): NIET goedgekeurd. v4.1 blijft de versie; swing_v4_2.pine heeft beide filters standaard uit.

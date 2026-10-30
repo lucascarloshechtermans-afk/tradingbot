@@ -38,7 +38,9 @@ TRAIN_TXT   = "model getraind op n=20/m=20/trail=4/ibs=0.7/SMA200"
 FINAL_THR   = 0.393009
 // <</GEN:TRAIN>>
 
-// v4.2 filter defaults: set from indicator_lab/swing7/reports (draft: off until the round is finished)
+// v4.2 round (indicator_lab/swing7/reports): R1 (SPY > SMA200) and R3 (no earnings within 5 sessions) failed on the
+// development data; R2 (1y ATR% <= 5) passed there but FAILED the single holdout (MAR 0.08 vs 0.11 for v4.1).
+// So both filters stay OFF: with the defaults this script gives exactly the v4.1 signals. Use v4.1.
 R1_DEF = false
 R2_DEF = false
 
