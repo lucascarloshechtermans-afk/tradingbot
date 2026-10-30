@@ -272,3 +272,5 @@ geaccepteerd (MAR 0,12 vs -0,02). Enige holdout-run (1304 aandelen): v4.2 MAR 0,
 ## Exit-test (results/exit_test.md, branch claude/exit-test): 78 varianten; aantoonbaar beter dan RND: 0, aantoonbaar beter dan SPY: 0
 
 ## Support + EMA-tap + lage RSI (results/support_ema.md, branch claude/support-ema-rsi): 36 varianten; aantoonbaar beter dan RND: 0, aantoonbaar beter dan SPY: 0
+
+## 30 populaire strategieën (results/popular_strategies.md, branch claude/popular-strategies): uitstap d: per trade beter dan random (Bonferroni): ['C6'], rekening beter dan RND: 0, beter dan SPY: 0; uitstap e: per trade beter dan random (Bonferroni): ['C6'], rekening beter dan RND: 0, beter dan SPY: 0
