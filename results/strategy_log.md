@@ -266,3 +266,5 @@ artefact van de onvolledige EPS-dekking (vooral bekende namen). Met volledige da
 Ontwikkeling (1260 aandelen): R1 SPY > SMA200 verworpen, R3 geen cijfers binnen 5 sessies verworpen, R2 1-jaars ATR% <= 5
 geaccepteerd (MAR 0,12 vs -0,02). Enige holdout-run (1304 aandelen): v4.2 MAR 0,08 vs v4.1 0,11, CAGR 2,5% vs 3,4%
 (SPY 13,2%): NIET goedgekeurd. v4.1 blijft de versie; swing_v4_2.pine heeft beide filters standaard uit.
+
+## Weekplan 3 posities, +10% en eruit, vrijdag eruit (results/three_week.md): 26 varianten; beste op train = M1 5 Failed breakdown / spring: test +0.20%/week, +10% geraakt 24%, winrate 48%, 3x +10% in 1.3% van de weken
