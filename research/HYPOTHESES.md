@@ -371,3 +371,32 @@ in VAL and OOS. Max drawdown and worst year are reported alongside.
 - Highest Sharpe in 3 of 3 periods: I0 SPY buy and hold -> the recommended option.
 - No momentum variant beats M0 in DEV (M1 ties at 0.48) -> M0 stays the momentum rule.
 - Whole 2011-07..2026-09: M0 9.1%/yr, max DD 34%, Sharpe 0.51; I0 14.2%/yr, 34%, 0.86.
+
+# Round 18 — "try everything": every reasonable technical alternative vs SPY (written 2026-10-30, before running)
+Two data sets without the hindsight problem: (a) ETFs (they do not disappear, so no survivorship),
+yfinance daily since 2005; (b) point-in-time S&P 500 members (round 15). Monthly decisions at
+the month-end close, trades at the next open, 0.02% per side for ETFs, 0.10% for stocks.
+Periods as before: DEV 2011-07..2018 · VAL 2019-2022 · OOS 2023-2026-09, plus PRE 2006-2010
+(ETF strategies only, includes 2008) for information.
+ETF strategies:
+- E1 sector momentum: the 3 sector SPDRs (XLB XLE XLF XLI XLK XLP XLU XLV XLY; XLRE, XLC once they
+  exist) with the best 12-1 month return, equal weight.
+- E2 E1 but only while SPY closes the month above its 200-day, else T-bills.
+- E3 dual momentum (GEM): SPY or EFA, whichever had the better 12-month return, if that beats
+  T-bills; otherwise IEF.
+- E4 QQQ/SPY: hold whichever had the better 12-1 month return.
+- E5 trend on asset classes (Faber): SPY, EFA, IEF, GLD, each 25% while above its 10-month SMA,
+  otherwise that quarter in T-bills.
+- E6 QQQ buy and hold. E7 60% SPY / 40% IEF, rebalanced monthly.
+Stock strategies (point-in-time S&P 500):
+- M4 momentum top 50 (12-1). M5 momentum top 20 on 6-1 month return. M6 equal weight over all
+  members (the "average S&P 500 stock"). All with the SPY > 200d filter except M6.
+Decision rule (11 strategies, so strict): "beats SPY" = higher Sharpe than SPY buy-and-hold in
+ALL three periods DEV, VAL, OOS. 2 of 3 = "possible, unproven". Otherwise "does not beat SPY".
+
+## Round 18 results
+- Sharpe DEV / VAL / OOS vs SPY 0.79 / 0.65 / 1.41: E1 0.62/0.79/1.05 · E2 0.48/0.72/0.77 · E3 0.50/0.38/0.94 ·
+  E4 0.91/0.79/1.37 (2/3) · E5 0.45/0.65/1.34 · E6 QQQ 0.92/0.66/1.50 (3/3) · E7 1.03/0.65/1.40 (1/3) ·
+  M4 0.61/0.25/0.69 · M5 0.67/0.29/0.46 · M6 0.78/0.67/0.98.
+- Only E6 (QQQ buy and hold, not a timing rule) passes 3/3, with a 0.01 margin in VAL. E4 2/3.
+  No technical timing or stock-selection rule beats SPY.

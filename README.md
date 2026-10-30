@@ -12,6 +12,37 @@ does **not** predict the future, does not guarantee profit, and a high score is
 not investment advice. Read the "Reasons" and "Risks" for every setup before
 acting on it, and never risk money you can't afford to lose.
 
+## Research round 18 — "try everything" (`research/round18.py`, 2026-10-30)
+
+Pre-registered. ETF strategies have no survivorship problem (ETFs do not disappear). Stock
+strategies use point-in-time S&P 500 membership. Monthly decisions, next-open trades. The rule
+was strict because 11 strategies were tested: **beats SPY only with a higher Sharpe in all three
+periods**. Full table in `research/round18_results.txt`.
+
+| Sharpe (CAGR) | 2006–10 | 2011–18 | 2019–22 | 2023–26 | verdict |
+|---|---|---|---|---|---|
+| SPY buy and hold | 0.19 (1.6%) | 0.79 (11.1%) | 0.65 (12.9%) | 1.41 (22.0%) | — |
+| E1 sector momentum, top 3 SPDRs | 0.25 | 0.62 | 0.79 | 1.05 | no |
+| E2 E1 + SPY 200-day filter | 0.71 | 0.48 | 0.72 | 0.77 | no |
+| E3 dual momentum (SPY/EFA/IEF) | 0.55 | 0.50 | 0.38 | 0.94 | no |
+| E4 QQQ/SPY switch on 12-1 momentum | 0.27 | 0.91 | 0.79 | 1.37 | 2 of 3 |
+| E5 asset-class trend (Faber: SPY/EFA/IEF/GLD) | **1.04** | 0.45 | 0.65 | 1.34 | no (but max DD 7–11%) |
+| **E6 QQQ buy and hold** | 0.36 (6.0%) | 0.92 (15.5%) | 0.66 (15.1%) | 1.50 (32.5%) | **3 of 3** |
+| E7 60% SPY / 40% IEF | 0.40 | 1.03 | 0.65 | 1.40 | no |
+| M4 momentum top 50 (point-in-time) | – | 0.61 | 0.25 | 0.69 | no |
+| M5 6-1 momentum top 20 (point-in-time) | – | 0.67 | 0.29 | 0.46 | no |
+| M6 equal weight, all S&P 500 members | – | 0.78 | 0.67 | 0.98 | no |
+
+- **No timing rule or stock-selection rule beat SPY.** Every momentum variant on
+  point-in-time members, sector rotation and dual momentum fell short.
+- **The only "pass" is not a technical rule: holding QQQ (Nasdaq-100).** Its margin in
+  2019–22 is tiny (0.66 vs 0.65). Choosing the index that happened to win 2011–2026 is itself
+  hindsight, and QQQ fell about 80% in 2000–02, which is outside this data.
+- **The trend rule on asset classes (E5) is the risk reducer.** It had the best 2006–10
+  (Sharpe 1.04 through 2008) and max drawdowns of 7–11% in every period, but much lower
+  returns in 2011–22.
+- **E4 (QQQ when it leads SPY, else SPY)** passed 2 of 3 periods: possible, not proven.
+
 ## Research round 17 — alternatives to the plan (`research/round17.py`, 2026-10-30)
 
 Pre-registered after a −22% October for the list. Same point-in-time S&P 500 data as round 15
