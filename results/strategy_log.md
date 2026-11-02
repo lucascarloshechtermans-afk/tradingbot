@@ -276,3 +276,5 @@ geaccepteerd (MAR 0,12 vs -0,02). Enige holdout-run (1304 aandelen): v4.2 MAR 0,
 ## 30 populaire strategieën (results/popular_strategies.md, branch claude/popular-strategies): uitstap d: per trade beter dan random (Bonferroni): ['C6'], rekening beter dan RND: 0, beter dan SPY: 0; uitstap e: per trade beter dan random (Bonferroni): ['C6'], rekening beter dan RND: 0, beter dan SPY: 0
 
 ## C6-vervolg (results/c6_followup.md): oordeel niet geslaagd
+
+## Donchian 20 op NASDAQ (results/nasdaq_donchian.md, branch claude/xom-donchian)
