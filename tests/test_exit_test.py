@@ -69,3 +69,13 @@ def test_path_signal_exits_at_the_open_after_a_close_above_the_line():
     ind = np.full(5, 101.0)
     # bar 3 closes at 103 > 101 -> out at the open of bar 4 (104)
     assert X.path_signal(o, lo, c, ind, 1, 98.0, 90.0, 20) == (4, 104.0)
+
+
+def test_path_dc_exits_after_a_close_below_the_prior_low_or_at_the_target():
+    o, h, lo, c, _a = _bars([100, 101, 102, 95, 96])
+    low_n = np.full(5, 99.0)
+    # bar 3 closes at 95 < 99 -> out at the open of bar 4 (96)
+    assert X.path_dc(o, h, lo, c, low_n, 1, 101.0, 0.0, 250) == (4, 96.0)
+    o2, h2, lo2, c2, _a2 = _bars([100, 101, 104, 112, 113])
+    # target 111.1 reached on bar 3 (high 112.5): out at max(open 112, 111.1) = 112
+    assert X.path_dc(o2, h2, lo2, c2, low_n, 1, 101.0, 101.0 * 1.10, 250) == (3, 112.0)

@@ -128,6 +128,24 @@ def path_signal(o, lo, c, ind, d, fill, stop, hold):
     return d + hold - 1, c[d + hold - 1]
 
 
+@njit(cache=True)
+def path_dc(o, h, lo, c, low_n, d, fill, tgt, hold):
+    """Donchian exit: out at the next open after a close below the prior n-day low; optional limit target (tgt > 0)."""
+    pend = False
+    for k in range(hold):
+        day = d + k
+        op = fill if k == 0 else o[day]
+        if pend:
+            return day, op
+        if tgt > 0 and h[day] >= tgt:
+            return day, (tgt if k == 0 else max(op, tgt))
+        if c[day] < low_n[day]:
+            pend = True
+        if k == hold - 1:
+            return day, c[day]
+    return d + hold - 1, c[d + hold - 1]
+
+
 def make_trade(ar, s, etype, elevel, anchor, ex, week_last_of):
     o, h, lo, c, a = ar["o"], ar["h"], ar["l"], ar["c"], ar["atr"]
     d, fill = M.entry(o, h, s, etype, elevel)
@@ -135,6 +153,18 @@ def make_trade(ar, s, etype, elevel, anchor, ex, week_last_of):
         return None
     stop = M.std_stop(fill, anchor, a[s])
     buy = (fill + M.TICK2) * (1 + M.COMM)
+    if ex in ("dc", "dc10"):                            # nasdaq_donchian.py: 20-day-low exit, optional +10% target
+        hold = min(250, len(c) - d)
+        if hold < 20:
+            return None
+        if "low20" not in ar:
+            ar["low20"] = pd.Series(lo).rolling(20).min().shift(1).to_numpy()
+        tgt = fill * 1.10 if ex == "dc10" else 0.0
+        xi, px = path_dc(o, h, lo, c, ar["low20"], d, fill, tgt, hold)
+        sell = (px - M.TICK2) * (1 - M.COMM)
+        hit = bool(px >= fill * 1.10 * (1 - 1e-12))
+        return {"entry": ar["idx"][d], "exit": ar["idx"][xi], "buy": buy, "sell": sell, "ret": sell / buy - 1,
+                "hit": hit, "hit10": hit, "bars": int(xi - d + 1), "dates": ar["idx"][d:xi + 1], "closes": c[d:xi + 1]}
     if ex in ("m20", "m5"):                             # c6_followup.py: out after a close above SMA20 / SMA5
         if d + 20 > len(c):
             return None
