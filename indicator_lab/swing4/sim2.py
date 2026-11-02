@@ -28,6 +28,8 @@ class Policy:
     exit_low: bool = True            # close < prior m-day low -> exit at the next open
     # entry
     entry: str = "open"              # "open" | "stop" (buy-stop above the signal high) | "pullback" (limit order)
+                                     #   | "close" (fill at the signal bar's own close: what a live BUY late in the day does)
+    gap_max: float | None = None     # "open" entry only: skip the trade if the open > signal close + gap_max x ATR
     e_buf: float = 0.0               # buy-stop trigger = signal high + e_buf x ATR
     e_days: int = 1                  # sessions a buy-stop / limit order stays valid
     pb: float = 0.5                  # pullback limit = signal close - pb x ATR  (pb_mode "atr")
@@ -180,6 +182,9 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
             fill = None
             if order["kind"] == "open":
                 fill = o[t]
+                if pol.gap_max is not None and o[t] > c[i] + pol.gap_max * atr[i]:
+                    order = None                  # gapped too far above the signal close: no trade
+                    continue
             elif order["kind"] == "stop":
                 lvl = order["level"]
                 fill = o[t] if o[t] >= lvl else (lvl if h[t] >= lvl else None)
@@ -238,6 +243,19 @@ def simulate(a: dict, entry: np.ndarray, pol: Policy = DEFAULT, cost: float = 0.
                 if week_buys.get(wk, 0) >= pol.max_week:
                     continue
                 week_buys[wk] = week_buys.get(wk, 0) + 1
+            if pol.entry == "close":         # fill at this close; the protective stop is live from the next bar
+                rp = c[t] * pol.stop_pct if pol.stop_pct is not None else pol.stop * atr[t]
+                st.update({"in": True, "ep": c[t], "ei": t, "sig": t, "risk_px": rp, "stop": c[t] - rp, "hh": c[t],
+                           "q0": 1 / (c[t] * (1 + slip) * (1 + cost)), "cash": 0.0, "left": 1.0, "pend_all": None,
+                           "pend_frac": 0.0, "phit": [False] * len(parts), "parts_hit": 0, "tight": False,
+                           "ox_done": False, "earn_done": False, "last_px": c[t], "intrabar": True, "at_open": False,
+                           "tgt": c[t] * (1 + pol.tgt_pct) if pol.tgt_pct is not None else
+                           (c[t] + pol.target * rp if pol.target is not None else None)})
+                v = value(t)
+                ret[t] = v - 1
+                st["v_prev"] = v
+                _at_close(t, st, a, pol, exit_sig, earn)
+                continue
             if pol.entry == "open":
                 order = {"kind": "open", "sig": t, "until": t + 1}
             elif pol.entry == "stop":

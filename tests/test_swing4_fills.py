@@ -83,3 +83,18 @@ def test_one_buy_per_two_weeks_per_stock():
     assert [x["sig_i"] for x in tr] == [0, 10]
     _, tr = simulate(a, e, Policy())
     assert [x["sig_i"] for x in tr][:2] == [0, 3]
+
+
+def test_close_entry_fills_at_the_signal_close_and_stop_is_live_next_bar():
+    # signal + fill at the close of bar 0 (100); R = 4 -> stop 96; bar 1 low 95 hits it
+    a = bars([(99, 101, 98, 100), (100, 100, 95, 97), (97, 97, 97, 97)])
+    _, tr = simulate(a, entry_at(3), Policy(entry="close"))
+    assert tr[0]["entry_i"] == 0 and tr[0]["entry"] == 100 and tr[0]["reason"] == "stop"
+    assert abs(tr[0]["ret"] - net(100, 96)) < 1e-12
+
+
+def test_gap_filter_skips_an_open_far_above_the_signal_close():
+    # signal close 100, ATR 1; next open 102 > 100 + 1.5 -> no trade; with gap_max 3 it trades
+    a = bars([(99, 100, 98, 100), (102, 103, 101, 102), (97, 97, 97, 97)])   # bar 2 gaps through the stop: trade closed
+    assert simulate(a, entry_at(3), Policy(gap_max=1.5))[1] == []
+    assert len(simulate(a, entry_at(3), Policy(gap_max=3.0))[1]) == 1
