@@ -1,0 +1,127 @@
+//@version=6
+// Bollinger mean reversion (C6 of results/popular_strategies.md). DAILY chart, long only.
+// BUY (decided at the close): close > SMA200 and close < lower Bollinger band (20, 2). Entry: next open.
+// Stop: entry - 8% (the research used "below the nearest support, at least 1 ATR, at most 8%"; 8% is the cap).
+// Exit (choose): M20 = sell at the next open after the first close above the middle band (SMA20),
+//                M5  = the same with the SMA5, +10% = limit at +10%, 5/10 = half at +5% and the rest at +10%;
+//                every exit: out at the close of day 20 at the latest. Stats in the table: 0.05% + $0.02 per side.
+// Research (liquid US stocks, test 2023-2026, +10% exit): +0.40% per trade, +0.41% better than random entries on the same
+// days (t = 3.5, the only one of 30 strategies that survived the multiple-testing correction); as a 3-position account
+// still below buy & hold of SPY. See results/c6_followup.md for the own-exit and new-data test. Not financial advice.
+indicator("Bollinger mean reversion (C6)", overlay = true, max_labels_count = 500)
+
+bbLen    = input.int(20, "Bollinger length", minval = 5)
+bbMult   = input.float(2.0, "Bollinger stdev", minval = 0.5, step = 0.1)
+trendLen = input.int(200, "Trend SMA", minval = 20)
+exitMode = input.string("M20", "Exit", options = ["M20", "M5", "+10%", "5/10"])
+stopPct  = input.float(8.0, "Stop % below entry", minval = 0.5, step = 0.5)
+maxDays  = input.int(20, "Max days in trade", minval = 1)
+minPrice = input.float(5.0, "Min price $")
+minDV    = input.float(20.0, "Min 50-day dollar volume ($M)")
+fromY    = input.int(2015, "Stats from year", minval = 1990)
+showTbl  = input.bool(true, "Show stats table")
+
+basis  = ta.sma(close, bbLen)
+dev    = bbMult * ta.stdev(close, bbLen)
+lower  = basis - dev
+s200   = ta.sma(close, trendLen)
+s5     = ta.sma(close, 5)
+dv     = ta.sma(close * volume, 50)
+signal = close > s200 and close < lower and close > minPrice and dv > minDV * 1e6
+
+var bool  inPos = false
+var float fill = na
+var float stop = na
+var bool  half = false
+var bool  pend = false
+var int   k = 0
+var float got = 0.0
+var float left = 1.0
+var int   nT = 0
+var int   nW = 0
+var float sumW = 0.0
+var float sumL = 0.0
+var float sumR = 0.0
+
+sellNet(p) => (p - 0.02) * 0.9995
+
+done = false
+if not inPos and signal[1] and open > 0
+    inPos := true
+    fill := open
+    stop := open * (1 - stopPct / 100)
+    half := false
+    pend := false
+    k := 0
+    got := 0.0
+    left := 1.0
+    label.new(bar_index, low, "BUY", style = label.style_label_up, color = color.green, textcolor = color.white, size = size.small)
+else if inPos
+    k += 1
+
+if inPos
+    op = k == 0 ? fill : open
+    if pend
+        got += left * sellNet(op)
+        done := true
+    else if low <= stop
+        got += left * sellNet(k == 0 ? stop : math.min(op, stop))
+        done := true
+    else
+        if exitMode == "5/10" and not half and high >= fill * 1.05
+            got += 0.5 * sellNet(k == 0 ? fill * 1.05 : math.max(op, fill * 1.05))
+            left := 0.5
+            half := true
+        if (exitMode == "+10%" or exitMode == "5/10") and high >= fill * 1.10
+            got += left * sellNet(k == 0 ? fill * 1.10 : math.max(op, fill * 1.10))
+            done := true
+        if not done
+            if exitMode == "M20" and close > basis
+                pend := true
+            if exitMode == "M5" and close > s5
+                pend := true
+            if k == maxDays - 1
+                got += left * sellNet(close)
+                done := true
+
+if done
+    ret = got / ((fill + 0.02) * 1.0005) - 1
+    if year >= fromY
+        nT += 1
+        sumR += ret
+        if ret > 0
+            nW += 1
+            sumW += ret
+        else
+            sumL -= ret
+    label.new(bar_index, high, (ret >= 0 ? "+" : "") + str.tostring(ret * 100, "#.0") + "%", style = label.style_label_down,
+         color = ret > 0 ? color.teal : color.maroon, textcolor = color.white, size = size.small)
+    inPos := false
+
+plot(basis, "Middle band (SMA20)", color.new(color.orange, 30))
+plot(lower, "Lower band", color.new(color.blue, 30))
+plot(s200, "SMA200", color.new(color.gray, 30))
+plot(inPos and not done ? stop : na, "Stop", color.red, 2, plot.style_linebr)
+plotshape(signal, "Signal", shape.triangleup, location.belowbar, color.lime, size = size.small)
+
+// Pine Screener / data window columns
+plot(signal ? 1 : 0, "Signaal", display = display.data_window)
+plot((close / lower - 1) * 100, "Afstand onderband %", display = display.data_window)
+plot(inPos and not done ? 1 : 0, "In positie", display = display.data_window)
+
+alertcondition(signal, "Bollinger MR signal", "{{ticker}}: close below the lower Bollinger band above the SMA200, buy at the next open")
+alertcondition(done, "Bollinger MR exit", "{{ticker}}: exit of the Bollinger mean-reversion trade")
+
+var table tb = table.new(position.bottom_right, 2, 5, bgcolor = color.new(color.black, 20), border_width = 1)
+if showTbl and barstate.islast
+    pf = sumL > 0 ? sumW / sumL : na
+    table.cell(tb, 0, 0, "Bollinger MR, exit " + exitMode, text_color = color.white)
+    table.cell(tb, 1, 0, "vanaf " + str.tostring(fromY), text_color = color.white)
+    table.cell(tb, 0, 1, "Trades", text_color = color.white)
+    table.cell(tb, 1, 1, str.tostring(nT), text_color = color.white)
+    table.cell(tb, 0, 2, "Winrate", text_color = color.white)
+    table.cell(tb, 1, 2, nT > 0 ? str.tostring(100.0 * nW / nT, "#") + "%" : "-", text_color = color.white)
+    table.cell(tb, 0, 3, "Profit factor", text_color = color.white)
+    table.cell(tb, 1, 3, na(pf) ? "-" : str.tostring(pf, "#.00"), text_color = color.white)
+    table.cell(tb, 0, 4, "Gem. per trade (netto)", text_color = color.white)
+    table.cell(tb, 1, 4, nT > 0 ? str.tostring(100 * sumR / nT, "#.00") + "%" : "-", text_color = color.white)

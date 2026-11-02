@@ -121,3 +121,10 @@ reactiedag van de cijfers: gap >= 5%, volume >= 3x, slot boven de open, SPY bove
 Instap op de volgende open; stop onder de laag van de signaaldag; exits A-EMA20 / A-3ATR / B met tijdsexit (standaard
 40 dagen). De tabel rekent per aandeel met de kosten van het onderzoek (0,05% + $0,02 per kant). Verdict van het
 onderzoek: **niet goedgekeurd** (test 2023-2026 PF 1,03); gebruik hem als watchlist of voor papier-traden.
+
+## Bollinger mean reversion (`bollinger_mr.pine`)
+Strategie C6 uit `results/popular_strategies.md` (dagbars, alleen long): kopen op de open na een slot onder de
+onderste Bollinger-band (20, 2) terwijl het aandeel boven zijn SMA200 staat. Uitstap naar keuze: M20 (uit na een slot
+boven de middenband), M5 (boven de SMA5), +10%, of de helft op +5% en de rest op +10%; stop 8%, max 20 dagen. Tabel met
+trades, winrate, profit factor en gemiddelde per trade (kosten 0,05% + $0,02 per kant). Onderzoek: de enige van 30
+strategieën die per trade aantoonbaar beter was dan willekeurige aandelen; als rekening wel onder SPY. Compile-gecontroleerd.
