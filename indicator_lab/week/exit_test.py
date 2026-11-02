@@ -110,6 +110,24 @@ def path_half(o, h, lo, c, d, fill, stop, t1, t2, hold):
     return d + hold - 1, c[d + hold - 1], pi, pp
 
 
+@njit(cache=True)
+def path_signal(o, lo, c, ind, d, fill, stop, hold):
+    """Out at the next open after the first close above `ind` (stop first on a bar; max `hold` bars, then the close)."""
+    pend = False
+    for k in range(hold):
+        day = d + k
+        op = fill if k == 0 else o[day]
+        if pend:
+            return day, op
+        if lo[day] <= stop:
+            return day, (stop if k == 0 else min(op, stop))
+        if c[day] > ind[day]:
+            pend = True
+        if k == hold - 1:
+            return day, c[day]
+    return d + hold - 1, c[d + hold - 1]
+
+
 def make_trade(ar, s, etype, elevel, anchor, ex, week_last_of):
     o, h, lo, c, a = ar["o"], ar["h"], ar["l"], ar["c"], ar["atr"]
     d, fill = M.entry(o, h, s, etype, elevel)
@@ -117,6 +135,17 @@ def make_trade(ar, s, etype, elevel, anchor, ex, week_last_of):
         return None
     stop = M.std_stop(fill, anchor, a[s])
     buy = (fill + M.TICK2) * (1 + M.COMM)
+    if ex in ("m20", "m5"):                             # c6_followup.py: out after a close above SMA20 / SMA5
+        if d + 20 > len(c):
+            return None
+        n_ = 20 if ex == "m20" else 5
+        if f"sma{n_}" not in ar:
+            ar[f"sma{n_}"] = pd.Series(c).rolling(n_).mean().to_numpy()
+        xi, px = path_signal(o, lo, c, ar[f"sma{n_}"], d, fill, stop, 20)
+        sell = (px - M.TICK2) * (1 - M.COMM)
+        return {"entry": ar["idx"][d], "exit": ar["idx"][xi], "buy": buy, "sell": sell, "ret": sell / buy - 1,
+                "hit": bool(px >= fill * 1.10 * (1 - 1e-12)), "hit10": bool(px >= fill * 1.10 * (1 - 1e-12)),
+                "bars": int(xi - d + 1), "dates": ar["idx"][d:xi + 1], "closes": c[d:xi + 1]}
     if ex == "e":                                       # popular.py: half at +5%, the rest at +10%, max 20 days
         if d + 20 > len(c):
             return None

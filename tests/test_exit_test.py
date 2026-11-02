@@ -43,7 +43,7 @@ def test_simulate_keeps_at_most_three_positions():
 
 
 def test_path_half_sells_half_at_5_and_rest_at_10():
-    o, h, lo, c, a = _bars([100, 100, 104, 106, 111])
+    o, h, lo, c, _a = _bars([100, 100, 104, 106, 111])
     # bar 3: high 106.5 >= 105 -> half at max(open 106, 105) = 106; bar 4: high 111.5 >= 110 -> rest at 111 (gap)
     xi, px, pi, pp = X.path_half(o, h, lo, c, 1, 100.0, 92.0, 105.0, 110.0, 20)
     assert (xi, px, pi, pp) == (4, 111.0, 3, 106.0)
@@ -62,3 +62,10 @@ def test_simulate_books_the_half_exit():
     assert tr["hit"] and not tr["hit10"]
     # 1/3 of the account in the trade: final equity = 1 + (1/3) x the trade's blended net return
     assert abs(eq.iloc[-1] - (1 + tr["ret"] / 3)) < 1e-9
+
+
+def test_path_signal_exits_at_the_open_after_a_close_above_the_line():
+    o, _h, lo, c, _a = _bars([100, 98, 99, 103, 104])
+    ind = np.full(5, 101.0)
+    # bar 3 closes at 103 > 101 -> out at the open of bar 4 (104)
+    assert X.path_signal(o, lo, c, ind, 1, 98.0, 90.0, 20) == (4, 104.0)
