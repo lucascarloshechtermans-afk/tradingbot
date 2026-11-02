@@ -128,3 +128,9 @@ onderste Bollinger-band (20, 2) terwijl het aandeel boven zijn SMA200 staat. Uit
 boven de middenband), M5 (boven de SMA5), +10%, of de helft op +5% en de rest op +10%; stop 8%, max 20 dagen. Tabel met
 trades, winrate, profit factor en gemiddelde per trade (kosten 0,05% + $0,02 per kant). Onderzoek: de enige van 30
 strategieën die per trade aantoonbaar beter was dan willekeurige aandelen; als rekening wel onder SPY. Compile-gecontroleerd.
+
+## Swing v4.1 LIVE (`swing_v4_1_live.pine`)
+Kopie van `swing_v4_1.pine` met één extra functie: met "Live BUY" (standaard aan) verschijnt de BUY al tijdens de
+candle, met een alert ("once per bar"), zonder op het slot te wachten. Regels, model en geschiedenis zijn gelijk aan
+v4.1; op gesloten candles zijn de signalen identiek. Een live BUY kan nog verdwijnen als de candle zwak sluit
+(repaint), en kopen tijdens de candle is niet getest (v4.1 is getest met kopen op de volgende open).
