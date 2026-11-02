@@ -134,3 +134,10 @@ Kopie van `swing_v4_1.pine` met één extra functie: met "Live BUY" (standaard a
 candle, met een alert ("once per bar"), zonder op het slot te wachten. Regels, model en geschiedenis zijn gelijk aan
 v4.1; op gesloten candles zijn de signalen identiek. Een live BUY kan nog verdwijnen als de candle zwak sluit
 (repaint), en kopen tijdens de candle is niet getest (v4.1 is getest met kopen op de volgende open).
+
+## Swing v4.2 (`swing_v4_2.pine`)
+v4.1 LIVE + uitvoerbaarheid en eerlijke statistiek; signalen op daggrafieken identiek aan v4.1 (zelfde GEN-blokken,
+zelfde f_machine; alleen op niet-daggrafieken geen signalen meer). Live BUY pas laat in de candle (standaard 90%),
+alerts "bevestigd / NIET bevestigd", stop-alert meteen, "zet stop-order op X" na elk slot, positiegrootte in EUR,
+kosten standaard 0,5%/kant, benchmarks met dividend, plan-curve en systeem-drawdown in de tabel, model-leeftijd,
+Nederlandse teksten. Onderzoek: `indicator_lab/reports/v42_phase1.md` (verslaat SPY niet na realistische kosten).

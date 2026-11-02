@@ -1,4 +1,22 @@
 //@version=5
+// Swing v4.2 = v4.1 LIVE + uitvoerbaarheid en eerlijke statistiek. SIGNALEN OP DAGGRAFIEKEN ONGEWIJZIGD (default inputs).
+// Wat is er veranderd t.o.v. v4.1:
+//  - live BUY alleen laat in de sessie (input "Live BUY vanaf", standaard 90% van de candle): eerder op de dag zijn
+//    volume (rvol), slot-positie (ibs) en range nog onvolledig, dus het model en de regels kloppen dan niet.
+//  - alerts: "BUY bevestigd op slot" / "BUY van vandaag NIET bevestigd"; stop geraakt = meteen (tijdens de candle);
+//    20-daagse-laag-exit op het slot; na elk slot in een trade "zet stop-order op X" (aan/uit).
+//  - positiegrootte in de munt van je rekening (standaard EUR, omgerekend met request.currency_rate).
+//  - kosten standaard 0,5% per kant (Belgische beurstaks 0,35% + makelaar + wisselkoers).
+//  - benchmarks met dividend (total return) voor SPY en het aandeel; de modelfeatures blijven op prijsdata.
+//  - benchmark op niet-US-grafieken met dezelfde SPY-dag-logica als de features (geen look-ahead).
+//  - geen signalen op andere tijdframes dan dag (de regels en het model zijn alleen op dagbars getest).
+//  - tabel: plan-curve (aandeel in trade, SPY als SPY > SMA200, anders cash) vs SPY total return, max drawdown van
+//    het systeem, leeftijd van het model, waarschuwing bij < 30 trades, "geen volumedata"; alle teksten in het Nederlands.
+// Eerlijke conclusie van het onderzoek (indicator_lab/reports/v42_phase1.md): op schone data (84 S&P 500-aandelen van
+// ~2015) en met 0,5% kosten per kant is de voorsprong weg (PF 1,08, 0,3% per jaar) en verslaat geen enkele variant
+// SPY kopen en houden; het kwaliteitsmodel voegt niets toe (AUC ~0,5) - "Gebruik kwaliteitsmodel" uitzetten geeft
+// even goede resultaten. Wat wel helpt is de marktregel (kleinere dalingen). Gebruik dit als watchlist, niet als systeem.
+// max_labels_count = 500: oudere BUY/SELL-labels verdwijnen van de grafiek als er meer dan 500 zijn.
 // Swing buy/sell indicator v4.1 = v4 with the phase-1 audit fixes, SIGNALS UNCHANGED on US charts:
 //  - the table no longer calls the chart statistics "OOS": only the model coefficients are walk-forward; the rules,
 //    the threshold and the regime rule were chosen on this same 2015-2024 history (in-sample).
@@ -22,7 +40,7 @@
 // Signals on history use the walk-forward (out-of-sample) fit of each bar's year; see the MODEL region.
 // BUY = signal at this close, enter next open. SELL = close below prior m-day low (exit next open)
 // or trailing stop touched (exit at stop). Daily chart. Not financial advice.
-indicator("Swing v4.2 – v4.1 + extra filters (see header)", overlay = true, max_labels_count = 500)
+indicator("Swing v4.2 – breakout + marktregel + ATR-trail (NL)", overlay = true, max_labels_count = 500)
 
 // <<GEN:TRAIN>>
 // The quality model was trained on breakouts with exactly these rules (v3_model.json "params"); the inputs
@@ -37,12 +55,6 @@ TRAIN_TXT   = "model getraind op n=20/m=20/trail=4/ibs=0.7/SMA200"
 // predictions on its own 3633 training breakouts (keep 0.75). minQual defaults to it (in %).
 FINAL_THR   = 0.393009
 // <</GEN:TRAIN>>
-
-// v4.2 round (indicator_lab/swing7/reports): R1 (SPY > SMA200) and R3 (no earnings within 5 sessions) failed on the
-// development data; R2 (1y ATR% <= 5) passed there but FAILED the single holdout (MAR 0.08 vs 0.11 for v4.1).
-// So both filters stay OFF: with the defaults this script gives exactly the v4.1 signals. Use v4.1.
-R1_DEF = false
-R2_DEF = false
 
 n         = input.int(TRAIN_N, "Breakout lookback (days)", minval = 2)
 m         = input.int(TRAIN_M, "Exit lookback (days)", minval = 2)
@@ -60,16 +72,19 @@ showTable = input.bool(true, "Show info table")
 fullTable = input.bool(false, "Full table (all rows); off = compact")
 tblSize   = input.string("small", "Table text size", options = ["tiny", "small", "normal"])
 showPx    = input.bool(true, "Show the price under BUY / SELL")
+liveBuy   = input.bool(true, "Live BUY: toon en alert de BUY al tijdens de candle (kan nog verdwijnen)")
+liveFrom  = input.float(0.90, "Live BUY vanaf (deel van de candle, 0-1)", minval = 0, maxval = 1, step = 0.05,
+     tooltip = "Een live BUY verschijnt pas als dit deel van de candle voorbij is (0,90 = laatste 10%). Eerder op de dag zijn volume, slot-positie en range onvolledig.")
+stopAlerts = input.bool(true, "Alert na elk slot: zet stop-order op X")
+acctCur   = input.string("EUR", "Munt van je rekening", options = ["EUR", "USD", "GBP", "CHF"], group = "Position size")
 acctSize  = input.float(10000, "Account size (for position size)", minval = 0, group = "Position size")
 riskPct   = input.float(1.0, "Risk per trade (% of account)", minval = 0.05, step = 0.25, group = "Position size")
 maxPosPct = input.float(10.0, "Max position (% of account; ~10 positions)", minval = 1, maxval = 100, group = "Position size")
 statsFrom = input.time(timestamp("2015-01-01"), "Count trades from (window of the backtest and the benchmarks)", group = "Chart statistics")
-costPct   = input.float(0.1, "Cost per side % (commission + slippage)", minval = 0, step = 0.05, group = "Chart statistics")
+costPct   = input.float(0.5, "Kosten per kant % (beurstaks + makelaar + FX)", minval = 0, step = 0.05, group = "Chart statistics",
+     tooltip = "Belgische belegger: beurstaks (TOB) 0,35% per transactie op aandelen (max EUR 1.600) + makelaarsloon + wisselkoerskost op USD; samen ongeveer 0,5% per kant.")
 showIS    = input.bool(false, "Also show the in-sample statistics (final fit; optimistic)", group = "Chart statistics")
 debugFeat = input.bool(false, "Debug: show the raw model features in the Data Window", group = "Debug")
-useR1     = input.bool(R1_DEF, "R1: only BUY when SPY > its SMA200", group = "v4.2 filters")
-useR2     = input.bool(R2_DEF, "R2: only BUY when the 1-year mean ATR% <= max", group = "v4.2 filters")
-maxAtr1y  = input.float(5.0, "R2: max 1-year mean ATR%", minval = 0.5, step = 0.5, group = "v4.2 filters")
 
 // <<GEN:HELPERS>>
 // Python (meta.feature_frame, pandas) is the reference for every model feature; pine_parity.py checks it.
@@ -209,10 +224,8 @@ REGIME_MAX = 0.0300
 // <</GEN:REGIME>>
 regimeOk  = not useRegime or (not na(spyRoc63) and spyRoc63 <= REGIME_MAX)
 // with the model on, rules other than the training rules select trades the model never saw: warn (step R3)
-// research E30/E56: v3's edge per trade grows with a stock's typical volatility (1-year mean ATR%); v4.2 R2 caps it
-atr1y = ta.sma(atr / close * 100, 252)
-r1Ok  = not useR1 or spyUp == 1.0
-r2Ok  = not useR2 or (not na(atr1y) and atr1y <= maxAtr1y)
+// v4.2: no signals on other timeframes than daily (rules and model were only tested on daily bars)
+tfOk      = timeframe.isdaily
 paramsOff = useModel and (n != TRAIN_N or m != TRAIN_M or trailMult != TRAIN_TRAIL or ibsMin != TRAIN_IBS or trendLen != TRAIN_TREND)
 
 // ---- signal state machine + per-chart trade statistics (same fills as the research engine) ----
@@ -322,49 +335,90 @@ f_machine(bool entryOk) =>
         entryBar := bar_index + 1
     [state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD, exitPx, eqSys]
 
-[state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD, sellPx, eqSys] = f_machine(qualityOk and earnOk and regimeOk and r1Ok and r2Ok)
-[stIs, stopIs, tpIs, hoIs, hsIs, bsIs, ssIs, exIs, ebIs, nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs, sbIs, sddIs, wddIs, pxIs, eqIs] = f_machine(qualityOkIs and earnOk and regimeOk and r1Ok and r2Ok)
+[state, stop, tp, halfOff, halfSig, buySig, sellSig, exited, entryBar, nTr, nWin, sumWin, sumLoss, sumRet, sumBars, sumDD, worstDD, sellPx, eqSys] = f_machine(qualityOk and earnOk and regimeOk and tfOk)
+[stIs, stopIs, tpIs, hoIs, hsIs, bsIs, ssIs, exIs, ebIs, nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs, sbIs, sddIs, wddIs, pxIs, eqIs] = f_machine(qualityOkIs and earnOk and regimeOk and tfOk)
 // SELL kind: a stop (initial or trailing) fills inside the bar or at a gapped open (sellPx); a close below the prior
 // m-day low only SIGNALS here and fills at the NEXT open (sellPx = na)
 sellStop = sellSig and not na(sellPx)
-sellTxt  = sellStop ? "stop, filled " + str.tostring(sellPx, format.mintick) : "close " + str.tostring(close, format.mintick) + " < " + str.tostring(m) + "d low: exit next open"
+sellTxt  = sellStop ? "stop geraakt, uitgevoerd op " + str.tostring(sellPx, format.mintick) : "slot " + str.tostring(close, format.mintick) + " < " + str.tostring(m) + "-daagse laag: verkopen op de volgende open"
 
 // ---- benchmarks over exactly the backtest window (first bar on or after statsFrom .. this bar), price returns ----
-spyClose = request.security(spySym, "D", close)
+// v4.2: total return (dividends) for the benchmarks only; the model features stay on price data. SPY uses the same
+// SPY-day logic as the features (outside New York the previous SPY day), so the benchmark has no look-ahead.
+[spyTR0, spyTR1] = request.security(ticker.modify(spySym, session.regular, adjustment.dividends), "D", [close, close[1]])
+spyClose = spyLag0 ? spyTR0 : spyTR1
+stockTR  = request.security(ticker.modify(syminfo.tickerid, session.regular, adjustment.dividends), timeframe.period, close)
 var float c0 = na
 var float spy0 = na
 var int   bar0 = na
+var int   time0 = na
 if time >= statsFrom and na(c0)
-    c0 := close
+    time0 := time
+    c0 := stockTR
     spy0 := spyClose
     bar0 := bar_index
-bhRet    = close / c0 - 1
+bhRet    = stockTR / c0 - 1
 spyRet   = spyClose / spy0 - 1
 winBars  = na(bar0) ? na : bar_index - bar0 + 1
 openBars = (state == 2 or state == 3) ? bar_index - entryBar : 0
 exposure = na(winBars) ? na : (sumBars + openBars) / winBars
 
+// v4.2: max drawdown of the system equity (closed trades, 100% per trade)
+var float eqPeak = 1.0
+var float eqDD = 0.0
+eqPeak := math.max(eqPeak, eqSys)
+eqDD := math.min(eqDD, eqSys / eqPeak - 1)
+
+// v4.2: equity of the real plan (approximation): in a trade = the stock (total return), flat and SPY > SMA200 = SPY,
+// else cash at 0; costs on every entry and exit; compared with buy & hold SPY (total return) over the same window
+var float eqPlan = 1.0
+var float planPeak = 1.0
+var float planDD = 0.0
+var float spyPeak = na
+var float spyDD = 0.0
+if not na(c0) and not na(stockTR[1]) and not na(spyClose[1])
+    inMkt = state[1] == 1 or state[1] == 2 or state[1] == 3
+    r = inMkt ? stockTR / stockTR[1] - 1 : spyUp[1] == 1.0 ? spyClose / spyClose[1] - 1 : 0.0
+    eqPlan *= 1 + r
+    if state[1] == 1 or sellSig
+        eqPlan *= 1 - costPct / 100
+    planPeak := math.max(planPeak, eqPlan)
+    planDD := math.min(planDD, eqPlan / planPeak - 1)
+    spyPeak := na(spyPeak) ? spyClose : math.max(spyPeak, spyClose)
+    spyDD := math.min(spyDD, spyClose / spyPeak - 1)
+yrsWin = na(time0) ? na : (time - time0) / (365.25 * 86400000.0)
+planCagr = na(yrsWin) or yrsWin <= 0 ? na : math.pow(eqPlan, 1 / yrsWin) - 1
+spyCagr  = na(yrsWin) or yrsWin <= 0 ? na : math.pow(spyClose / spy0, 1 / yrsWin) - 1
+
 plot(trendMa, "Trend SMA", color = color.new(color.gray, 40))
 plot(state == 2 or state == 3 ? stop : na, "Trailing stop", color = color.red, style = plot.style_linebr)
 // confirmed at the close vs provisional while the daily bar is still forming (can still disappear)
-plotshape(buySig and barstate.isconfirmed and not showPx, "BUY", shape.labelup, location.belowbar, color.green, text = "BUY", textcolor = color.white)
+plotshape(buySig and barstate.isconfirmed and not showPx, "KOOP", shape.labelup, location.belowbar, color.green, text = "KOOP", textcolor = color.white)
 // BUY / SELL with the price underneath (confirmed bars only). BUY: the signal close (the fill is the next open).
 // SELL: the fill price when a stop was hit (inside the bar or a gapped open); "next open" for an m-day-low exit.
 if showPx and barstate.isconfirmed and buySig
-    label.new(bar_index, low, "BUY\n" + str.tostring(close, format.mintick), yloc = yloc.belowbar, style = label.style_label_up, color = color.green, textcolor = color.white, size = size.small)
+    label.new(bar_index, low, "KOOP\n" + str.tostring(close, format.mintick), yloc = yloc.belowbar, style = label.style_label_up, color = color.green, textcolor = color.white, size = size.small)
+// live BUY: drawn on the forming candle with the current price; Pine redraws it on every tick and removes it if the
+// condition is gone, and it becomes the normal BUY label when the candle closes with the signal intact
+// v4.2: a live BUY only late in the session (sessFrac >= liveFrom): earlier, volume (rvol), ibs and the range are not
+// complete yet. On historical bars sessFrac = 1.
+sessFrac = barstate.isrealtime ? (timenow - time) / (time_close - time) : 1.0
+liveOk   = liveBuy and sessFrac >= liveFrom
+if showPx and liveOk and not barstate.isconfirmed and buySig
+    label.new(bar_index, low, "KOOP live\n" + str.tostring(close, format.mintick), yloc = yloc.belowbar, style = label.style_label_up, color = color.new(color.green, 30), textcolor = color.white, size = size.small)
 if showPx and barstate.isconfirmed and sellSig
-    label.new(bar_index, high, sellStop ? "SELL stop\n" + str.tostring(sellPx, format.mintick) : "SELL\nnext open", yloc = yloc.abovebar, style = label.style_label_down, color = color.red, textcolor = color.white, size = size.small)
-plotshape(buySig and not barstate.isconfirmed, "BUY? (bar not closed)", shape.labelup, location.belowbar, color.new(color.green, 60), text = "BUY?", textcolor = color.white)
+    label.new(bar_index, high, sellStop ? "VERKOOP stop\n" + str.tostring(sellPx, format.mintick) : "VERKOOP\nvolgende open", yloc = yloc.abovebar, style = label.style_label_down, color = color.red, textcolor = color.white, size = size.small)
+plotshape(buySig and not barstate.isconfirmed and not (liveOk and showPx), "KOOP? (candle niet gesloten)", shape.labelup, location.belowbar, color.new(color.green, 60), text = "KOOP?", textcolor = color.white)
 plot(tpMult > 0 and (state == 2 or state == 3) and not halfOff ? tp : na, "Half-profit target", color = color.teal, style = plot.style_linebr)
-plotshape(halfSig, "½ PROFIT", shape.diamond, location.abovebar, color.teal, size = size.tiny, text = "½")
-plotshape(sellSig and barstate.isconfirmed and not showPx, "SELL", shape.labeldown, location.abovebar, color.red, text = "SELL", textcolor = color.white)
-plotshape(sellSig and not barstate.isconfirmed, "SELL? (bar not closed)", shape.labeldown, location.abovebar, color.new(color.red, 60), text = "SELL?", textcolor = color.white)
+plotshape(halfSig, "½ WINST", shape.diamond, location.abovebar, color.teal, size = size.tiny, text = "½")
+plotshape(sellSig and barstate.isconfirmed and not showPx, "VERKOOP", shape.labeldown, location.abovebar, color.red, text = "VERKOOP", textcolor = color.white)
+plotshape(sellSig and not barstate.isconfirmed, "VERKOOP? (candle niet gesloten)", shape.labeldown, location.abovebar, color.new(color.red, 60), text = "VERKOOP?", textcolor = color.white)
 // breakouts the v4 regime rule blocked (the model would have taken them)
 plotshape(state == 0 and isCand and qualityOk and not regimeOk and not sellSig and not exited,
-     "Blocked by regime (SPY strong)", shape.triangleup, location.belowbar, color.new(color.gray, 20), size = size.tiny)
+     "Geblokkeerd door marktregel (SPY te sterk)", shape.triangleup, location.belowbar, color.new(color.gray, 20), size = size.tiny)
 // breakouts the model rejected, for context
 plotshape(useModel and state == 0 and isCand and not qualityOk and not na(quality) and not sellSig and not exited,
-     "Rejected breakout", shape.xcross, location.belowbar, color.new(color.orange, 30), size = size.tiny)
+     "Uitbraak afgewezen door model", shape.xcross, location.belowbar, color.new(color.orange, 30), size = size.tiny)
 plot(quality, "Breakout quality (0-1)", display = display.data_window)
 // for TradingView's Pine Screener: filter a whole watchlist on "Status" = 1 (new BUY) or -1 (SELL)
 statusCode = buySig ? 1 : sellSig ? -1 : (state == 2 or state == 3) ? 2 : 0
@@ -398,86 +452,118 @@ plot(debugFeat ? score : na, "f score (logit)", display = display.data_window)
 stopDist = trailMult * atr
 estStop  = close - stopDist
 riskPerSh = close - estStop
-sizeSh   = riskPerSh > 0 ? math.floor(math.min(acctSize * riskPct / 100 / riskPerSh, acctSize * maxPosPct / 100 / close)) : 0
+// v4.2: the account is in acctCur; convert it to the chart's currency before sizing
+fx       = request.currency_rate(acctCur, syminfo.currency, ignore_invalid_currency = true)
+acctLoc  = acctSize * nz(fx, 1.0)
+sizeSh   = riskPerSh > 0 ? math.floor(math.min(acctLoc * riskPct / 100 / riskPerSh, acctLoc * maxPosPct / 100 / close)) : 0
 
+// research E30/E56: v3's edge per trade grows with a stock's typical volatility (1-year mean ATR%)
+atr1y = ta.sma(atr / close * 100, 252)
 
 // chart statistics text; "OOS" = every trade was selected by a model fitted only on trades that closed before
 // that bar's year (walk-forward). The in-sample row uses the final fit, which has seen these years: optimistic.
 f_statTxt(int k, int w, float sw, float sl, float sr) =>
     pfx = sl > 0 ? sw / sl : na
-    k == 0 ? "no closed trades" : str.tostring(k) + " trades | win " + str.tostring(100.0 * w / k, "#") + "% | PF " + (na(pfx) ? "∞" : str.tostring(pfx, "#.##")) + " | avg " + str.tostring(100 * sr / k, "#.#") + "%"
+    k == 0 ? "geen gesloten trades" : str.tostring(k) + " trades | winst " + str.tostring(100.0 * w / k, "#") + "% | PF " + (na(pfx) ? "∞" : str.tostring(pfx, "#.##")) + " | gem. " + str.tostring(100 * sr / k, "#.#") + "%"
 
-var table info = table.new(position.top_right, 2, 20, bgcolor = color.new(color.black, 80), frame_color = color.new(color.gray, 60), frame_width = 1, border_width = 0)
+var table info = table.new(position.top_right, 2, 24, bgcolor = color.new(color.black, 80), frame_color = color.new(color.gray, 60), frame_width = 1, border_width = 0)
 tSize = tblSize == "tiny" ? size.tiny : tblSize == "small" ? size.small : size.normal
 f_row(int r, string k, string v, color vc, color bg) =>
     table.cell(info, 0, r, k, text_color = color.white, text_size = tSize, text_halign = text.align_left)
     table.cell(info, 1, r, v, text_color = vc, bgcolor = bg, text_size = tSize, text_halign = text.align_left)
 if showTable and barstate.islast
-    table.clear(info, 0, 0, 1, 19)
+    table.clear(info, 0, 0, 1, 20)
     inTrade = state == 2 or state == 3
-    statusTxt = state == 1 ? "BUY (fill next open)" : state == 3 ? "SELL (exit next open)" : inTrade ? "LONG" : sellSig ? "SOLD" : "flat"
+    statusTxt = state == 1 ? "KOOP (vul op volgende open)" : state == 3 ? "VERKOOP (volgende open)" : inTrade ? "IN POSITIE" : sellSig ? "VERKOCHT" : "geen positie"
     statusCol = state == 1 or inTrade ? color.green : sellSig ? color.red : color.gray
-    // quality is na while any model feature is missing: usually too little history (the longest feature needs ~200
-    // bars, the full 52-week window 252), otherwise a data gap (Debug input shows which feature is na)
+    noVol   = na(volume) or volume == 0
     qualNa  = useModel and na(quality)
-    qualTxt = qualNa ? (bar_index + 1 < 252 ? "te weinig historie (" + str.tostring(bar_index + 1) + "/252)" : "feature missing") : isCand ? str.tostring(quality * 100, "#") + "% " + (qualityOk ? "ok" : "too low") : "no breakout"
+    qualTxt = qualNa ? (noVol ? "geen volumedata" : bar_index + 1 < 252 ? "te weinig historie (" + str.tostring(bar_index + 1) + "/252)" : "feature ontbreekt") : isCand ? str.tostring(quality * 100, "#") + "% " + (qualityOk ? "ok" : "te laag") : "geen uitbraak"
     pfAll   = sumLoss > 0 ? sumWin / sumLoss : na
+    ageM    = (timenow - TRAIN_END) / (30.44 * 86400000.0)
     r = 0
     f_row(r, "Swing v4.2", statusTxt, color.white, color.new(statusCol, 40))
     r += 1
-    f_row(r, "Quality", qualTxt, qualNa ? color.yellow : not isCand ? color.gray : qualityOk ? color.lime : color.orange, na)
+    if liveBuy
+        f_row(r, "Live KOOP", "vanaf " + str.tostring(liveFrom * 100, "#") + "% van de candle (kan verdwijnen)", color.yellow, na)
+        r += 1
+    f_row(r, "Kwaliteit", qualTxt, qualNa ? color.yellow : not isCand ? color.gray : qualityOk ? color.lime : color.orange, na)
     r += 1
-    f_row(r, "Regime", na(spyRoc63) ? "n/a" : "SPY 63d " + str.tostring(spyRoc63 * 100, "#.#") + "% " + (regimeOk ? "ok" : "blocked"), regimeOk ? color.lime : color.orange, na)
+    f_row(r, "Marktregel", na(spyRoc63) ? "n.v.t." : "SPY 63d " + str.tostring(spyRoc63 * 100, "#.#") + "% " + (regimeOk ? "ok" : "geblokkeerd"), regimeOk ? color.lime : color.orange, na)
     r += 1
     if inTrade
         f_row(r, "Stop", str.tostring(stop, format.mintick) + " (" + str.tostring((close - stop) / close * 100, "#.#") + "%)", color.white, na)
         r += 1
-    // not out-of-sample: only the model coefficients are walk-forward; the rules were chosen on this history
-    f_row(r, "Backtest " + str.format_time(statsFrom, "yyyy") + "+", nTr == 0 ? "no trades" : str.tostring(nTr) + " tr | " + str.tostring(100.0 * nWin / nTr, "#") + "% | PF " + (na(pfAll) ? "∞" : str.tostring(pfAll, "#.#")), color.white, na)
+    f_row(r, "Backtest " + str.format_time(statsFrom, "yyyy") + "+", nTr == 0 ? "geen trades" : str.tostring(nTr) + " tr | " + str.tostring(100.0 * nWin / nTr, "#") + "% | PF " + (na(pfAll) ? "∞" : str.tostring(pfAll, "#.#")) + " | kosten " + str.tostring(costPct, "#.##") + "%", color.white, na)
     r += 1
-    f_row(r, "vs B&H (prijs)", na(c0) ? "n/a" : "sys " + str.tostring(100 * (eqSys - 1), "#") + "% | aandeel " + str.tostring(100 * bhRet, "#") + "% | SPY " + str.tostring(100 * spyRet, "#") + "%", eqSys - 1 >= bhRet ? color.lime : color.orange, na)
+    if nTr < 30
+        f_row(r, "⚠ Statistiek", "te weinig trades (" + str.tostring(nTr) + " < 30): onbetrouwbaar", color.black, color.yellow)
+        r += 1
+    f_row(r, "Plan vs SPY (total return)", na(planCagr) ? "n.v.t." : "plan " + str.tostring(planCagr * 100, "#.#") + "%/jr, DD " + str.tostring(planDD * 100, "#") + "% | SPY " + str.tostring(spyCagr * 100, "#.#") + "%/jr, DD " + str.tostring(spyDD * 100, "#") + "%", planCagr >= spyCagr ? color.lime : color.orange, na)
     r += 1
-    f_row(r, "In trade", na(exposure) ? "n/a" : str.tostring(100 * exposure, "#") + "% of bars (100%/trade)", color.white, na)
+    f_row(r, "Systeem vs aandeel", na(c0) ? "n.v.t." : "sys " + str.tostring(100 * (eqSys - 1), "#") + "% (DD " + str.tostring(eqDD * 100, "#") + "%) | aandeel " + str.tostring(100 * bhRet, "#") + "% | SPY " + str.tostring(100 * spyRet, "#") + "%", eqSys - 1 >= bhRet ? color.lime : color.orange, na)
+    r += 1
+    f_row(r, "In positie", na(exposure) ? "n.v.t." : str.tostring(100 * exposure, "#") + "% van de candles", color.white, na)
+    r += 1
+    f_row(r, "Model", "fit tot " + str.format_time(TRAIN_END, "yyyy-MM-dd") + " (" + str.tostring(ageM, "#") + " mnd oud)", ageM > 12 ? color.yellow : color.white, na)
     r += 1
     if paramsOff
-        f_row(r, "⚠ Settings", TRAIN_TXT, color.black, color.yellow)
+        f_row(r, "⚠ Instellingen", TRAIN_TXT, color.black, color.yellow)
         r += 1
     if not timeframe.isdaily
-        f_row(r, "Chart", "use a DAILY chart!", color.black, color.yellow)
+        f_row(r, "Grafiek", "gebruik een DAGgrafiek: geen signalen op dit tijdframe", color.black, color.yellow)
         r += 1
     if fullTable
-        f_row(r, "Note", "model walk-forward; rules + regime chosen on 2015-24 = in-sample; price returns, no dividends", color.gray, na)
+        f_row(r, "Let op", "model walk-forward; regels + marktregel gekozen op 2015-24 = in-sample; plan-curve is een benadering", color.gray, na)
         r += 1
         f_row(r, "Backtest detail", f_statTxt(nTr, nWin, sumWin, sumLoss, sumRet), color.white, na)
         r += 1
-        f_row(r, "Per trade", nTr == 0 ? "-" : "DD worst " + str.tostring(100 * worstDD, "#.#") + "% avg " + str.tostring(100 * sumDD / nTr, "#.#") + "% | hold " + str.tostring(sumBars / nTr, "#") + " bars", color.white, na)
+        f_row(r, "Per trade", nTr == 0 ? "-" : "DD slechtste " + str.tostring(100 * worstDD, "#.#") + "% gem. " + str.tostring(100 * sumDD / nTr, "#.#") + "% | " + str.tostring(sumBars / nTr, "#") + " candles", color.white, na)
         r += 1
-        f_row(r, "Bars in trade", inTrade ? str.tostring(bar_index - entryBar + 1) : "-", color.white, na)
+        f_row(r, "Candles in trade", inTrade ? str.tostring(bar_index - entryBar + 1) : "-", color.white, na)
         r += 1
-        f_row(r, "Size (geschat)", str.tostring(sizeSh) + " sh | stop ~" + str.tostring(estStop, format.mintick) + " = fill − " + str.tostring(stopDist, format.mintick), color.white, na)
+        f_row(r, "Grootte (geschat)", str.tostring(sizeSh) + " st. | rekening " + str.tostring(acctSize, "#") + " " + acctCur + " = " + str.tostring(acctLoc, "#") + " " + syminfo.currency + " | stop ~" + str.tostring(estStop, format.mintick), color.white, na)
         r += 1
-        f_row(r, "Next earnings", na(daysToEarn) ? "n/a" : str.tostring(math.round(daysToEarn)) + " days", earnSoon ? color.yellow : color.white, na)
+        f_row(r, "Volgende cijfers", na(daysToEarn) ? "n.v.t." : "over " + str.tostring(math.round(daysToEarn)) + " dagen", earnSoon ? color.yellow : color.white, na)
         r += 1
-        f_row(r, "Trend SMA" + str.tostring(trendLen), close > trendMa ? "up" : "down", close > trendMa ? color.lime : color.red, na)
+        f_row(r, "Trend SMA" + str.tostring(trendLen), close > trendMa ? "omhoog" : "omlaag", close > trendMa ? color.lime : color.red, na)
         r += 1
-        // v3.1 portfolio rule (research E48): keep idle cash in SPY while SPY > its 200-day SMA, else in cash
-        f_row(r, "Idle cash → SPY", spyUp == 1.0 ? "yes (SPY > SMA200)" : "no, hold cash", spyUp == 1.0 ? color.lime : color.orange, na)
+        f_row(r, "Vrij geld → SPY", spyUp == 1.0 ? "ja (SPY > SMA200)" : "nee, cash", spyUp == 1.0 ? color.lime : color.orange, na)
         r += 1
-        f_row(r, "Volatility 1y", na(atr1y) ? "n/a" : str.tostring(atr1y, "#.#") + "% " + (atr1y >= 2.5 ? "good fit" : atr1y >= 1.5 ? "ok fit" : "weak fit"), na(atr1y) ? color.gray : atr1y >= 2.5 ? color.lime : atr1y >= 1.5 ? color.white : color.orange, na)
+        f_row(r, "Volatiliteit 1j", na(atr1y) ? "n.v.t." : str.tostring(atr1y, "#.#") + "%", color.white, na)
         r += 1
         if showIS
-            f_row(r, "In-sample", f_statTxt(nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs) + " (optimistic)", color.gray, na)
+            f_row(r, "In-sample", f_statTxt(nTrIs, nWinIs, sumWinIs, sumLossIs, sumRetIs) + " (optimistisch)", color.gray, na)
             r += 1
 
 // earnings warning on a fresh BUY (research E38: entries in the week before earnings were weaker)
-plotshape(buySig and earnSoon, "BUY near earnings", shape.circle, location.belowbar, color.yellow, size = size.tiny)
+plotshape(buySig and earnSoon, "KOOP vlak voor cijfers", shape.circle, location.belowbar, color.yellow, size = size.tiny)
 
-if buySig
-    alert("Swing v4.2 BUY " + syminfo.ticker + " @ " + str.tostring(close, format.mintick) + " | stop after fill: fill - " + str.tostring(stopDist, format.mintick) + " (geschat ~" + str.tostring(estStop, format.mintick) + ")" + " | quality " + str.tostring(quality * 100, "#") + "% | size " + str.tostring(sizeSh) + " sh (geschat)" + (earnSoon ? " | WARNING: earnings in " + str.tostring(math.round(daysToEarn)) + " days" : ""), alert.freq_once_per_bar_close)
-if sellSig
-    alert("Swing v4.2 SELL " + syminfo.ticker + ": " + sellTxt, alert.freq_once_per_bar_close)
+buyMsg = "Swing v4.2 KOOP " + syminfo.ticker + " @ " + str.tostring(close, format.mintick) + " | stop na vulling: vulprijs - " + str.tostring(stopDist, format.mintick) + " (~" + str.tostring(estStop, format.mintick) + ") | kwaliteit " + str.tostring(quality * 100, "#") + "% | " + str.tostring(sizeSh) + " stuks (" + acctCur + ")" + (earnSoon ? " | LET OP: cijfers over " + str.tostring(math.round(daysToEarn)) + " dagen" : "")
+// live BUY late in the candle (once), then at the close: confirmed or NOT confirmed. varip keeps the flag across ticks.
+varip int liveBar = -1
+liveNow = buySig and liveOk and not barstate.isconfirmed and barstate.isrealtime
+if liveNow and liveBar != bar_index
+    alert("LIVE (candle nog niet gesloten) " + buyMsg, alert.freq_once_per_bar)
+    liveBar := bar_index
+liveFired  = liveBar == bar_index
+notConfirm = barstate.isconfirmed and liveFired and not buySig
+if barstate.isconfirmed and buySig
+    alert((liveFired ? "KOOP bevestigd op slot: " : "") + buyMsg, alert.freq_once_per_bar_close)
+if notConfirm
+    alert("KOOP van vandaag NIET bevestigd: " + syminfo.ticker + " sloot zonder signaal - niet kopen / positie heroverwegen", alert.freq_once_per_bar_close)
+// stop hit: alert at once (during the candle) with the fill price; the 20-day-low exit only at the close
+if sellSig and sellStop
+    alert("Swing v4.2 VERKOOP " + syminfo.ticker + ": " + sellTxt, alert.freq_once_per_bar)
+if sellSig and not sellStop and barstate.isconfirmed
+    alert("Swing v4.2 VERKOOP " + syminfo.ticker + ": " + sellTxt, alert.freq_once_per_bar_close)
+// after every closed candle in a trade: the new trailing stop for tomorrow (to move the GTC stop order at the broker)
+if stopAlerts and barstate.isconfirmed and state == 2
+    alert("Swing v4.2 " + syminfo.ticker + ": zet stop-order op " + str.tostring(stop, format.mintick) + " (trailing stop voor de volgende sessie)", alert.freq_once_per_bar_close)
 
-alertcondition(buySig, "Swing v4.2 BUY", "Swing v4.2 BUY on {{ticker}} at {{close}} (fills next open)")
-alertcondition(halfSig, "Swing v4.2 HALF PROFIT", "Swing v4.2: take half profit on {{ticker}}")
-alertcondition(sellSig and sellStop, "Swing v4.2 SELL (stop hit)", "Swing v4.2 SELL on {{ticker}}: stop hit today")
-alertcondition(sellSig and not sellStop, "Swing v4.2 SELL (exit next open)", "Swing v4.2 SELL on {{ticker}}: close {{close}} below the 20-day low, exit at the next open")
+alertcondition(buySig, "Swing v4.2 KOOP", "Swing v4.2 KOOP op {{ticker}} op {{close}} (vulling volgende open)")
+alertcondition(liveNow, "Swing v4.2 KOOP live (laat in de candle)", "Swing v4.2 LIVE KOOP op {{ticker}} op {{close}} (candle nog niet gesloten: kan verdwijnen)")
+alertcondition(notConfirm, "Swing v4.2 KOOP niet bevestigd", "Swing v4.2: KOOP van vandaag op {{ticker}} NIET bevestigd op het slot")
+alertcondition(halfSig, "Swing v4.2 HALVE WINST", "Swing v4.2: neem de helft winst op {{ticker}}")
+alertcondition(sellSig and sellStop, "Swing v4.2 VERKOOP (stop geraakt)", "Swing v4.2 VERKOOP op {{ticker}}: stop geraakt")
+alertcondition(sellSig and not sellStop, "Swing v4.2 VERKOOP (volgende open)", "Swing v4.2 VERKOOP op {{ticker}}: slot {{close}} onder de 20-daagse laag, verkopen op de volgende open")

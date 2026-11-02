@@ -29,8 +29,8 @@ import sys
 PINE_DIR = os.path.join(os.path.dirname(__file__), "pine")
 FILES = ["swing_v3_quality_model.pine", "swing_v3_strategy.pine", "swing_v3_watchlist_dashboard.pine",
          "swing_v4.pine", "swing_v4_strategy.pine", "swing_v4_watchlist_dashboard.pine",
-         "swing_v4_1.pine", "swing_v4_1_strategy.pine"]
-V41_FILES = {"swing_v4_1.pine", "swing_v4_1_strategy.pine"}   # FEATURES with the SPY-holiday fix (FEATURES_V41)
+         "swing_v4_1.pine", "swing_v4_1_strategy.pine", "swing_v4_1_live.pine", "swing_v4_2.pine"]
+V41_FILES = {"swing_v4_1.pine", "swing_v4_1_strategy.pine", "swing_v4_1_live.pine", "swing_v4_2.pine"}   # FEATURES with the SPY-holiday fix (FEATURES_V41)
 SPEC = os.path.join(os.path.dirname(__file__), "swing4", "final_spec.json")
 FINAL = os.path.join(PINE_DIR, "v3_model.json")
 YEARLY = os.path.join(PINE_DIR, "v3_model_yearly.json")
