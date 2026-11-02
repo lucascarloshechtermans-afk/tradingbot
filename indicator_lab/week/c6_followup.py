@@ -78,13 +78,13 @@ def load_band():
 
 
 def trades(job):
-    """Per trade (one open trade per stock) for one exit; part = 'all' | 'test'; 5 random same-day trades per signal."""
+    """Per trade (one open trade per stock) for one exit; part = 'all' | 'train' | 'test'; 5 random same-day trades per signal."""
     ex, part = job
     arrs, pool, wl = _G["arrs"], _G["rnd"], _G["wl"]
     rng = np.random.default_rng(5)
     real, rand, clus, busy = [], [], {}, {}
     for day in sorted(_G["cand"]):
-        if part == "test" and day <= TRAIN_END:
+        if (part == "test" and day <= TRAIN_END) or (part == "train" and day > TRAIN_END):
             continue
         p = pool.get(day, [])
         rr, qq = clus.setdefault(_G["wk"].get(day), ([], []))
