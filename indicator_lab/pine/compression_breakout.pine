@@ -1,0 +1,98 @@
+//@version=6
+// Volatility compression breakout (results/vcb.md, indicator_lab/week/vcb.py). DAILY chart, long only.
+// BUY (at the close): the day before, the Bollinger band width (4 x stdev20 / SMA20) was in the quietest 20% of the last
+// 252 days, and today the close breaks above the highest high of the previous 20 days. Optional trend filter
+// (close > SMA200 and SMA50 > SMA200). Entry: next open.
+// Exit (choose): "20d laag" = sell at the next open after a close below the lowest low of the previous 20 days;
+// "+10%" = limit at +10%, otherwise the 20d-low rule. Stats in the table: costs per side as set (default 0.5%).
+// Research (1496 NASDAQ stocks, 2015-2026): compression + breakout + trend +0.93% (2015-22) / +1.93% (2023-26) per trade,
+// PF 1.17 / 1.29, but not provably better than random entries; as a 10-position account no variant beat SPY or QQQ.
+// Watchlist / paper trading, not a proven system. Not financial advice.
+indicator("Compressie-breakout", overlay = true, max_labels_count = 500)
+
+pctRank  = input.int(20, "Compressie: bandbreedte in de rustigste x% van het jaar", minval = 1, maxval = 50)
+brkLen   = input.int(20, "Uitbraak boven het hoogste hoog van x dagen", minval = 5)
+useTrend = input.bool(true, "Trendfilter: slot > SMA200 en SMA50 > SMA200")
+exitMode = input.string("20d laag", "Uitstap", options = ["20d laag", "+10%"])
+costPct  = input.float(0.5, "Kosten per kant %", minval = 0, step = 0.05, tooltip = "Belgische belegger: beurstaks 0,35% + makelaar + wisselkoers, samen ~0,5% per kant.")
+fromY    = input.int(2015, "Statistiek vanaf jaar", minval = 1990)
+showTbl  = input.bool(true, "Toon tabel")
+
+bbw    = 4 * ta.stdev(close, 20) / ta.sma(close, 20)
+q      = ta.percentile_linear_interpolation(bbw, 252, pctRank)
+comp   = bbw[1] <= q[1]
+hiN    = ta.highest(high, brkLen)[1]
+loN    = ta.lowest(low, 20)[1]
+s50    = ta.sma(close, 50)
+s200   = ta.sma(close, 200)
+trend  = close > s200 and s50 > s200
+signal = comp and close > hiN and (not useTrend or trend) and timeframe.isdaily
+
+var bool  inPos = false
+var bool  pend = false
+var float fill = na
+var int   nT = 0
+var int   nW = 0
+var float sumW = 0.0
+var float sumL = 0.0
+var float sumR = 0.0
+k = costPct / 100
+done = false
+float px = na
+newEntry = not inPos and signal[1]
+if newEntry
+    inPos := true
+    pend := false
+    fill := open
+    label.new(bar_index, low, "KOOP\n" + str.tostring(open, format.mintick), yloc = yloc.belowbar, style = label.style_label_up, color = color.green, textcolor = color.white, size = size.small)
+// same order as the backtest (exit_test.path_dc): a pending 20d-low exit fills at the open, then the +10% limit
+// (a gap above fills at the open), then a close below the 20d low makes the exit pending for the next open
+if inPos and not newEntry and pend
+    px := open
+    done := true
+if inPos and not done and exitMode == "+10%" and high >= fill * 1.10
+    px := newEntry ? fill * 1.10 : math.max(open, fill * 1.10)
+    done := true
+if inPos and not done and close < loN
+    pend := true
+if done
+    ret = px * (1 - k) / (fill * (1 + k)) - 1
+    if year >= fromY
+        nT += 1
+        sumR += ret
+        if ret > 0
+            nW += 1
+            sumW += ret
+        else
+            sumL -= ret
+    label.new(bar_index, high, (ret >= 0 ? "+" : "") + str.tostring(ret * 100, "#.0") + "%", yloc = yloc.abovebar, style = label.style_label_down,
+         color = ret > 0 ? color.teal : color.maroon, textcolor = color.white, size = size.small)
+    inPos := false
+    pend := false
+
+plot(hiN, "20d hoog", color.new(color.green, 60))
+plot(loN, "20d laag", color.new(color.red, 60))
+bgcolor(comp ? color.new(color.blue, 90) : na, title = "Compressie")
+plotshape(signal, "Signaal", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plot(signal ? 1 : 0, "Signaal", display = display.data_window)
+plot(comp ? 1 : 0, "Compressie", display = display.data_window)
+plot(inPos ? 1 : 0, "In positie", display = display.data_window)
+
+alertcondition(signal, "Compressie-breakout KOOP", "{{ticker}}: compressie-breakout, koop op de volgende open")
+alertcondition(inPos and close < loN, "Compressie-breakout VERKOOP", "{{ticker}}: slot onder de 20-daagse laag, verkoop op de volgende open")
+
+var table tb = table.new(position.bottom_right, 2, 6, bgcolor = color.new(color.black, 20), border_width = 1)
+if showTbl and barstate.islast
+    pf = sumL > 0 ? sumW / sumL : na
+    table.cell(tb, 0, 0, "Compressie-breakout", text_color = color.white)
+    table.cell(tb, 1, 0, "uitstap " + exitMode + (useTrend ? " + trend" : ""), text_color = color.white)
+    table.cell(tb, 0, 1, "Trades vanaf " + str.tostring(fromY), text_color = color.white)
+    table.cell(tb, 1, 1, str.tostring(nT) + (nT < 30 ? " (te weinig: onbetrouwbaar)" : ""), text_color = nT < 30 ? color.yellow : color.white)
+    table.cell(tb, 0, 2, "Winrate", text_color = color.white)
+    table.cell(tb, 1, 2, nT > 0 ? str.tostring(100.0 * nW / nT, "#") + "%" : "-", text_color = color.white)
+    table.cell(tb, 0, 3, "Profit factor", text_color = color.white)
+    table.cell(tb, 1, 3, na(pf) ? "-" : str.tostring(pf, "#.00"), text_color = color.white)
+    table.cell(tb, 0, 4, "Gem. per trade (netto)", text_color = color.white)
+    table.cell(tb, 1, 4, nT > 0 ? str.tostring(100 * sumR / nT, "#.00") + "%" : "-", text_color = color.white)
+    table.cell(tb, 0, 5, "Status", text_color = color.white)
+    table.cell(tb, 1, 5, inPos ? "in positie" : comp ? "compressie (wacht op uitbraak)" : "geen compressie", text_color = color.white)
