@@ -278,3 +278,5 @@ geaccepteerd (MAR 0,12 vs -0,02). Enige holdout-run (1304 aandelen): v4.2 MAR 0,
 ## C6-vervolg (results/c6_followup.md): oordeel niet geslaagd
 
 ## Donchian 20 op NASDAQ (results/nasdaq_donchian.md, branch claude/xom-donchian)
+
+## Donchian-filters NASDAQ (results/donchian_filters.md): gehouden filters ['F1', 'F3', 'F5']
