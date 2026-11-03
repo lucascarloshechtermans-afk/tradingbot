@@ -17,6 +17,7 @@ same expiration (or 18% if none).
 from __future__ import annotations
 
 import sys
+import time
 from math import exp, log, pi, sqrt
 
 import numpy as np
@@ -32,13 +33,21 @@ def _gamma(s, k, t, iv):
     return exp(-0.5 * d1 * d1) / sqrt(2 * pi) / (s * iv * sqrt(t))
 
 
-def chain(sym: str, days: int) -> tuple[float, pd.DataFrame]:
+def chain(sym: str, days: int, tries: int = 3, wait: float = 20) -> tuple[float, pd.DataFrame]:
     import yfinance as yf
     tk = yf.Ticker(sym)
     spot = float(tk.history(period="5d")["Close"].iloc[-1])
     now = pd.Timestamp.now(tz="America/New_York").tz_localize(None)
     rows = []
-    for e in tk.options:
+    exps = ()
+    for _ in range(tries):                     # Yahoo answers HTTP 429 (rate limit) with an empty expiration list
+        exps = tk.options
+        if exps:
+            break
+        time.sleep(wait)
+    if not exps:
+        raise SystemExit("Yahoo geeft nu geen optieketen (geblokkeerd met HTTP 429 of geen data). Probeer het over een paar minuten opnieuw.")
+    for e in exps:
         exp_ts = pd.Timestamp(e) + pd.Timedelta(hours=16)
         t = (exp_ts - now).total_seconds() / (365.25 * 86400)
         if t <= 0 or t > days / 365.25:
