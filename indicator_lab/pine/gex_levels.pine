@@ -3,8 +3,8 @@
 // Pine has no access to option data (open interest / gamma per strike), so the levels are typed in here.
 // Compute them each day with:  python -m indicator_lab.gex_levels   (free Yahoo option chain; run during US market
 // hours, 15:45-22:00 Belgian time) or copy them from your GEX provider.
-//   CALL WALL  = strike with the most call gamma: usually ABOVE the price, often acts as resistance.
-//   PUT WALL   = strike with the most put gamma: usually BELOW the price, often acts as support.
+//   CALL WALL  = strike ABOVE the price with the most call gamma: ceiling, price tends to bounce down from it.
+//   PUT WALL   = strike BELOW the price with the most put gamma: floor, price tends to bounce up from it.
 //   ZERO GAMMA = above it dealers dampen moves (calmer market), below it they amplify them (wilder market).
 // The levels are for the symbol they were computed on (SPY levels on a SPY chart; SPX levels x ~1 on ES/SPX).
 // Not tested as a trading rule (no free history of option open interest). Not financial advice.

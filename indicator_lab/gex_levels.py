@@ -6,7 +6,8 @@
 Method (the usual dealer-gamma convention: dealers are long the calls and short the puts that customers trade):
   gamma per contract from Black-Scholes with Yahoo's implied volatility, r = 4%;
   GEX per strike = gamma x open interest x 100 x spot^2 x 1%, calls positive, puts negative (dollars per 1% move).
-  CALL WALL = strike with the largest call GEX, PUT WALL = strike with the largest put GEX (absolute),
+  CALL WALL = strike ABOVE the price with the largest call GEX (ceiling price tends to bounce down from),
+  PUT WALL = strike BELOW the price with the largest put GEX, absolute (floor price tends to bounce up from),
   ZERO GAMMA = the spot level where the total GEX changes sign (recomputed on a grid of hypothetical spot prices),
   LEVELS = the other strikes with the largest |net GEX|.
 Limits: Yahoo's open interest is from the previous session and its IVs can be stale for illiquid strikes; this is an
@@ -83,7 +84,9 @@ def levels(sym="SPY", days=45, n_levels=6, data=None):
         if col not in by:
             by[col] = 0.0
     net = by["call"] + by["put"]
-    cw, pw = float(by["call"].idxmax()), float(by["put"].idxmin())
+    above, below = by[by.index > spot], by[by.index < spot]   # call wall above the price (ceiling), put wall below (floor)
+    cw = float(above["call"].idxmax()) if len(above) else float("nan")
+    pw = float(below["put"].idxmin()) if len(below) else float("nan")
     grid = np.linspace(spot * 0.94, spot * 1.06, 121)
     tot = np.array([gex_at(d, s).sum() for s in grid])
     sign = np.sign(tot)
