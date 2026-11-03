@@ -1,0 +1,55 @@
+//@version=6
+// GEX LEVELS - draws gamma-exposure levels (call wall, put wall, zero gamma and the other large gamma strikes).
+// Pine has no access to option data (open interest / gamma per strike), so the levels are typed in here.
+// Compute them each day with:  python -m indicator_lab.gex_levels   (free Yahoo option chain; run during US market
+// hours, 15:45-22:00 Belgian time) or copy them from your GEX provider.
+//   CALL WALL  = strike with the most call gamma: usually ABOVE the price, often acts as resistance.
+//   PUT WALL   = strike with the most put gamma: usually BELOW the price, often acts as support.
+//   ZERO GAMMA = above it dealers dampen moves (calmer market), below it they amplify them (wilder market).
+// The levels are for the symbol they were computed on (SPY levels on a SPY chart; SPX levels x ~1 on ES/SPX).
+// Not tested as a trading rule (no free history of option open interest). Not financial advice.
+indicator("GEX levels", overlay = true, max_lines_count = 50, max_labels_count = 50)
+
+callWall  = input.float(0.0, "Call wall (0 = uit)", step = 0.5)
+putWall   = input.float(0.0, "Put wall (0 = uit)", step = 0.5)
+zeroGamma = input.float(0.0, "Zero gamma (0 = uit)", step = 0.5)
+others    = input.string("", "Andere GEX-levels (komma's, bv. 745,750,760)")
+zonePct   = input.float(0.05, "Breedte van de zone rond de walls (%)", minval = 0, step = 0.01)
+showLbl   = input.bool(true, "Toon labels")
+
+cCall  = color.new(color.lime, 0)
+cPut   = color.new(color.red, 0)
+cZero  = color.new(color.yellow, 0)
+cOther = color.new(color.orange, 30)
+
+drawLevel(float lvl, color col, string txt, int w, bool zone) =>
+    if lvl > 0
+        line.new(bar_index - 1, lvl, bar_index, lvl, extend = extend.both, color = col, width = w)
+        if zone and zonePct > 0
+            d = lvl * zonePct / 100
+            box.new(bar_index - 300, lvl + d, bar_index + 20, lvl - d, border_color = color.new(col, 100), bgcolor = color.new(col, 85))
+        if showLbl
+            label.new(bar_index + 5, lvl, txt + " " + str.tostring(lvl, "#.##"), style = label.style_label_left,
+                 color = color.new(col, 20), textcolor = color.black, size = size.small)
+
+if barstate.islast
+    for l in line.all
+        line.delete(l)
+    for l in label.all
+        label.delete(l)
+    for b in box.all
+        box.delete(b)
+    drawLevel(callWall, cCall, "CALL WALL", 3, true)
+    drawLevel(putWall, cPut, "PUT WALL", 3, true)
+    drawLevel(zeroGamma, cZero, "ZERO GAMMA", 2, false)
+    if str.length(others) > 0
+        for p in str.split(others, ",")
+            v = str.tonumber(str.trim(p))
+            if not na(v)
+                drawLevel(v, cOther, "GEX", 1, false)
+
+// regime: price above or below zero gamma (only when zero gamma is filled in)
+bgcolor(zeroGamma > 0 ? (close > zeroGamma ? color.new(color.green, 95) : color.new(color.red, 95)) : na, title = "Boven/onder zero gamma")
+alertcondition(callWall > 0 and ta.cross(close, callWall), "Koers kruist call wall", "{{ticker}} kruist de call wall")
+alertcondition(putWall > 0 and ta.cross(close, putWall), "Koers kruist put wall", "{{ticker}} kruist de put wall")
+alertcondition(zeroGamma > 0 and ta.cross(close, zeroGamma), "Koers kruist zero gamma", "{{ticker}} kruist zero gamma")
