@@ -250,12 +250,14 @@ def multi_signal(
     freq: str = "W",
     psych: float | None = None,
     min_confluence: int = 2,
+    trapped_delta_ratio: float = 0.30,
     **absorption_kwargs,
 ) -> pd.DataFrame:
     """Absorption bars scored by confluence (lookahead-free):
     +1 absorption, +1 inside an HVN/POC of a completed period, +1 bar contains a
     round number, +1 retest of a same-direction passive zone, +1 trapped
-    aggressors (delta pushed against the close). `signal` is +1/-1 when the
+    aggressors (|delta| >= `trapped_delta_ratio` of volume, pushing against the
+    close — stronger than the delta needed to call absorption at all). `signal` is +1/-1 when the
     score reaches `min_confluence`, 0 otherwise."""
     ab = absorption(df, delta=delta, **absorption_kwargs)
     _, zone_ev = passive_zones(df, ab)
@@ -266,8 +268,8 @@ def multi_signal(
     is_abs = d != 0
     trapped = pd.Series(False, index=df.index)
     if delta is not None:
-        dd = delta.reindex(df.index).astype(float)
-        trapped = ((d == 1) & (dd < 0)) | ((d == -1) & (dd > 0))
+        ratio = delta.reindex(df.index).astype(float) / df["volume"].replace(0, np.nan)
+        trapped = ((d == 1) & (ratio <= -trapped_delta_ratio)) | ((d == -1) & (ratio >= trapped_delta_ratio))
 
     score = (
         is_abs.astype(int)
