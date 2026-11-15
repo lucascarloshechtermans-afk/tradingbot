@@ -133,6 +133,14 @@ float barDelta = buyV - sellV
 float sumBuy = math.sum(buyV, pressLen)
 float sumSell = math.sum(sellV, pressLen)
 float buyPress = sumBuy + sumSell > 0 ? sumBuy / (sumBuy + sumSell) * 100 : 50.0
+// Buy share per bar, kept in an array (newest last) so profile building can read
+// any past bar reliably instead of history-referencing a series inside a function.
+float bShareBar = buyV + sellV > 0 ? buyV / (buyV + sellV) : 0.5
+var array<float> shareHist = array.new<float>()
+shareHist.push(bShareBar)
+if shareHist.size() > 90000
+    shareHist.shift()
+plot(bShareBar * 100, "Bar buy %", color = color.gray, display = display.data_window)
 
 // ═══════════════════════════════ Profile functions ═══════════════════════════════
 // Volume-by-price of the n bars starting `off` bars back. Each bar's volume is
@@ -151,8 +159,8 @@ buildProfile(int off, int n, int nRows, float sig) =>
             float h = high[i]
             float l = low[i]
             float v = nz(volume[i])
-            float vt = nz(buyV[i]) + nz(sellV[i])
-            float bshare = vt > 0 ? nz(buyV[i]) / vt : 0.5
+            int si = shareHist.size() - 1 - i
+            float bshare = si >= 0 ? shareHist.get(si) : 0.5
             float r = h - l
             if r <= 0
                 int k = math.max(0, math.min(nRows - 1, int((h - pLo) / step)))
