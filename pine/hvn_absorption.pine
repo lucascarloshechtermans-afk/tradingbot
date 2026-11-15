@@ -16,14 +16,15 @@ pMode      = input.string("Auto", "Profile period", options = ["Auto", "Timefram
 pTf        = input.timeframe("D", "Period timeframe (mode Timeframe)", group = grpP)
 pBars      = input.int(100, "Period length (mode Bars)", minval = 10, maxval = 4999, group = grpP)
 maxPeriods = input.int(5, "Completed periods to show", minval = 1, maxval = 40, group = grpP)
-rows       = input.int(50, "Price rows per profile", minval = 10, maxval = 150, group = grpP)
-sigma      = input.float(1.5, "Smoothing (rows, Gaussian)", minval = 0, step = 0.5, group = grpP, tooltip = "Clusters neighbouring busy rows into one node. 0 = raw profile.")
-thrPct     = input.float(70, "HVN threshold (percentile)", minval = 0, maxval = 99, group = grpP)
+rows       = input.int(120, "Price rows per profile", minval = 10, maxval = 300, group = grpP)
+thinBands  = input.bool(true, "Thin bands (peak price only)", group = grpP, tooltip = "On: each HVN is drawn as a thin band at its peak price. Off: the full HVN zone.")
+sigma      = input.float(2.0, "Smoothing (rows, Gaussian)", minval = 0, step = 0.5, group = grpP, tooltip = "Clusters neighbouring busy rows into one node. 0 = raw profile.")
+thrPct     = input.float(60, "HVN threshold (percentile)", minval = 0, maxval = 99, group = grpP)
 zoneRatio  = input.float(80, "Zone width (% of peak volume)", minval = 50, maxval = 99, group = grpP)
-minSep     = input.int(3, "Min rows between nodes", minval = 1, group = grpP)
-maxNodes   = input.int(6, "Max HVNs per period", minval = 1, maxval = 10, group = grpP)
+minSep     = input.int(5, "Min rows between nodes", minval = 1, group = grpP)
+maxNodes   = input.int(8, "Max HVNs per period", minval = 1, maxval = 15, group = grpP)
 extendLvls = input.bool(true, "Extend HVN/POC until retested", group = grpP)
-showDev    = input.bool(true, "Show developing period", group = grpP)
+showDev    = input.bool(false, "Show developing period", group = grpP)
 showComp   = input.bool(false, "Composite profile histogram", group = grpP)
 compLb     = input.int(300, "Composite lookback (bars)", minval = 20, maxval = 4999, group = grpP)
 histWidth  = input.int(40, "Histogram width (bars)", minval = 5, maxval = 150, group = grpP)
@@ -59,6 +60,8 @@ psyHalf    = input.bool(true, "Show half levels", group = grpL)
 grpS = "Signals & alerts"
 showTable  = input.bool(false, "Dashboard", group = grpS)
 colorBars  = input.bool(false, "Color absorption bars", group = grpS)
+showStars  = input.bool(false, "Show multi-signal ★ labels", group = grpS)
+showStall  = input.bool(false, "Show small absorption triangles", group = grpS)
 alHvn      = input.bool(true, "Alert: HVN / POC retest", group = grpS)
 alAbs      = input.bool(true, "Alert: absorption", group = grpS)
 alConf     = input.bool(true, "Alert: multi-signal confluence", group = grpS)
@@ -315,8 +318,8 @@ if newPeriod and bar_index > pStart
                 int k = pk.get(j)
                 bool isPoc = pSm.get(k) == pocV
                 float price = pLo + (k + 0.5) * pStep
-                float zLo = pLo + plo.get(j) * pStep
-                float zHi = pLo + (phi.get(j) + 1) * pStep
+                float zLo = thinBands ? pLo + k * pStep : pLo + plo.get(j) * pStep
+                float zHi = thinBands ? pLo + (k + 1) * pStep : pLo + (phi.get(j) + 1) * pStep
                 float zv = 0.0
                 float zb = 0.0
                 for r = plo.get(j) to phi.get(j)
@@ -326,7 +329,7 @@ if newPeriod and bar_index > pStart
                 bool buyDom = bp >= 50
                 color c = buyDom ? cHvn : cHvnS
                 box bx = box.new(bar_index - n, zHi, bar_index - 1, zLo, border_color = isPoc ? color.new(cPoc, 30) : na, bgcolor = color.new(c, 72))
-                label lb = label.new(bar_index - 1, (zHi + zLo) / 2, str.tostring(zv, format.volume) + " | " + str.tostring(math.max(bp, 100 - bp), "#") + "%", style = label.style_label_right, color = color.new(color.black, 100), textcolor = buyDom ? cBuy : cSell, size = size.small)
+                label lb = label.new(bar_index - 1, (zHi + zLo) / 2, (zv >= 1000 ? str.tostring(math.round(zv / 1000)) : str.tostring(math.round(zv))) + " | " + str.tostring(math.max(bp, 100 - bp), "#") + "%", style = label.style_label_right, color = color.new(color.black, 100), textcolor = buyDom ? cBuy : cSell, size = size.small)
                 nodes.push(Node.new(bx, lb, zLo, zHi, price, isPoc, true, false, pId, zv, bp))
                 if isPoc
                     lastPoc := price
@@ -461,7 +464,7 @@ if absDir != 0
         confTxt += " + trapped aggressors"
 bool multiBull = absDir == 1 and conf >= 2
 bool multiBear = absDir == -1 and conf >= 2
-if (multiBull or multiBear) and not (showLvlAbs and lvlDir != 0)
+if showStars and (multiBull or multiBear) and not (showLvlAbs and lvlDir != 0)
     label.new(bar_index, multiBull ? low : high, "★" + str.tostring(conf), style = multiBull ? label.style_label_up : label.style_label_down, color = multiBull ? cBuy : cSell, textcolor = color.white, size = size.small, tooltip = confTxt)
 
 var string lastSig = "-"
@@ -473,11 +476,11 @@ else if hvnRetest
     lastSig := (pocRetest ? "POC" : "HVN") + " retest " + str.tostring(retestPrice, format.mintick)
 
 // ═══════════════════════════════ Plots ═══════════════════════════════
-plotshape(bullAbs and not heavy and not multiBull, "Bullish absorption", shape.triangleup, location.belowbar, cBuy, size = size.tiny)
-plotshape(bearAbs and not heavy and not multiBear, "Bearish absorption", shape.triangledown, location.abovebar, cSell, size = size.tiny)
-plotshape(bullAbs and heavy and not multiBull, "Heavy bullish absorption", shape.labelup, location.belowbar, cBuy, text = "ABS", textcolor = color.white, size = size.small)
-plotshape(bearAbs and heavy and not multiBear, "Heavy bearish absorption", shape.labeldown, location.abovebar, cSell, text = "ABS", textcolor = color.white, size = size.small)
-plotshape(hvnRetest ? retestPrice : na, "HVN/POC retest", shape.diamond, location.absolute, pocRetest ? cPoc : cHvn, size = size.tiny)
+plotshape(showStall and bullAbs and not heavy and not multiBull, "Bullish absorption", shape.triangleup, location.belowbar, cBuy, size = size.tiny)
+plotshape(showStall and bearAbs and not heavy and not multiBear, "Bearish absorption", shape.triangledown, location.abovebar, cSell, size = size.tiny)
+plotshape(showStall and bullAbs and heavy and not multiBull, "Heavy bullish absorption", shape.labelup, location.belowbar, cBuy, text = "ABS", textcolor = color.white, size = size.small)
+plotshape(showStall and bearAbs and heavy and not multiBear, "Heavy bearish absorption", shape.labeldown, location.abovebar, cSell, text = "ABS", textcolor = color.white, size = size.small)
+plotshape(showStall and hvnRetest ? retestPrice : na, "HVN/POC retest", shape.diamond, location.absolute, pocRetest ? cPoc : cHvn, size = size.tiny)
 barcolor(colorBars and bullAbs ? cBuy : colorBars and bearAbs ? cSell : na)
 
 // ═══════════════════════════════ Last-bar drawings ═══════════════════════════════
