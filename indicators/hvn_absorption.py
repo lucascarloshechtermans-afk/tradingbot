@@ -56,6 +56,7 @@ class VolumeProfile:
     poc: float                  # price of the busiest smoothed bin
     value_area_low: float
     value_area_high: float
+    buy: np.ndarray | None = None  # raw buy-side volume per bin, when buy_volume was given
 
     @property
     def bin_centers(self) -> np.ndarray:
@@ -102,8 +103,12 @@ def volume_profile(
     bins: int = 60,
     smoothing: float = 1.5,
     value_area_pct: float = 0.70,
+    buy_volume: pd.Series | None = None,
 ) -> VolumeProfile:
     """Volume-by-price over the given bars.
+
+    Pass `buy_volume` (per bar, e.g. (volume + delta) / 2) to also get the
+    buy-side volume per bin, from which each HVN's buyer/seller dominance follows.
 
     Each bar's volume is spread over the bins its [low, high] range overlaps, in
     proportion to the overlap. A zero-range bar puts all its volume in one bin.
@@ -135,6 +140,10 @@ def volume_profile(
         bin_of = np.clip(np.searchsorted(edges, h[flat_idx], side="right") - 1, 0, bins - 1)
         per_bar[flat_idx, bin_of] = 1.0
     raw = (per_bar * v[:, None]).sum(axis=0)
+    buy_raw = None
+    if buy_volume is not None:
+        b = np.nan_to_num(buy_volume.to_numpy(dtype=float)[ok])
+        buy_raw = (per_bar * b[:, None]).sum(axis=0)
 
     smooth = _gaussian_smooth(raw, smoothing)
     centers = (edges[:-1] + edges[1:]) / 2
@@ -147,6 +156,7 @@ def volume_profile(
         poc=float(centers[poc_idx]),
         value_area_low=float(edges[va_lo]),
         value_area_high=float(edges[va_hi + 1]),
+        buy=buy_raw,
     )
 
 
@@ -164,6 +174,23 @@ class HVN:
     is_poc: bool
     lookbacks: list[int] = field(default_factory=list)  # which profile windows found it
     touches: int = 0             # bars that traded back into the zone after it formed
+    zone_volume: float = 0.0     # raw volume traded inside the zone
+    buy_pct: float | None = None  # % of zone volume on the buy side (None without buy data)
+
+    @property
+    def dominant_side(self) -> str | None:
+        """'buy' / 'sell' — which side traded more at this node."""
+        if self.buy_pct is None:
+            return None
+        return "buy" if self.buy_pct >= 50 else "sell"
+
+    @property
+    def label(self) -> str:
+        """Chart label: zone volume (k) | dominant side share, e.g. '51 | 54%'."""
+        vol = f"{self.zone_volume / 1000:.0f}"
+        if self.buy_pct is None:
+            return vol
+        return f"{vol} | {max(self.buy_pct, 100 - self.buy_pct):.0f}%"
 
     def contains(self, price: float) -> bool:
         return self.zone_low <= price <= self.zone_high
@@ -216,6 +243,9 @@ def find_hvns(
             volume=float(s[i]),
             strength=float(s[i] / poc_vol * 100),
             is_poc=bool(s[i] == poc_vol),
+            zone_volume=float(profile.volume[lo:hi + 1].sum()),
+            buy_pct=(float(profile.buy[lo:hi + 1].sum() / profile.volume[lo:hi + 1].sum() * 100)
+                     if profile.buy is not None and profile.volume[lo:hi + 1].sum() > 0 else None),
         ))
     nodes.sort(key=lambda nd: nd.price)
     return nodes
@@ -373,3 +403,63 @@ def absorption_at_hvn(
     out["at_hvn"] = hit_price.notna()
     out["hvn_price"] = hit_price
     return out
+
+
+def level_absorption(
+    df: pd.DataFrame,
+    nodes: list[HVN],
+    delta: pd.Series | None = None,
+    rvol_window: int = 20,
+    min_rvol: float = 2.0,
+    heavy_rvol: float = 3.0,
+    min_wick: float = 0.5,
+    min_delta_ratio: float = 0.10,
+) -> pd.DataFrame:
+    """Absorption AT an HVN: price pushes into a node on heavy volume and is thrown
+    back out of it within the same bar.
+
+    bearish (-1): opened below the node, traded up into it (high >= zone_low), closed
+        back below it, with an upper wick >= `min_wick` of the range — the buyers
+        who drove price into the node were absorbed by passive sellers there.
+    bullish (+1): the mirror image — price drops into a node from above and is
+        rejected back up out of it, with a lower wick >= `min_wick` of the range.
+
+    With `delta`, the push must also be aggressive: delta/volume >= `min_delta_ratio`
+    toward the node (buying into it for bearish, selling into it for bullish).
+
+    `nodes` must come from data BEFORE the bars being tested (no lookahead).
+    Columns: direction, heavy, level (node price), absorbed_volume (aggressor
+    volume: buy side for bearish, sell side for bullish; whole bar without delta), rvol.
+    """
+    o, h, low_, c, v = (df[k].astype(float) for k in ("open", "high", "low", "close", "volume"))
+    rvol = relative_volume(v, rvol_window)
+    rng = (h - low_).replace(0, np.nan)
+    upper = ((h - np.maximum(o, c)) / rng).fillna(0.0)
+    lower = ((np.minimum(o, c) - low_) / rng).fillna(0.0)
+    if delta is not None:
+        d = delta.reindex(df.index).astype(float).fillna(0.0)
+        ratio = d / v.replace(0, np.nan)
+        buy_push, sell_push = ratio >= min_delta_ratio, ratio <= -min_delta_ratio
+        buy_vol, sell_vol = (v + d) / 2, (v - d) / 2
+    else:
+        buy_push = sell_push = pd.Series(True, index=df.index)
+        buy_vol = sell_vol = v
+
+    direction = pd.Series(0, index=df.index, dtype=int)
+    level = pd.Series(np.nan, index=df.index)
+    heavy_enough = rvol >= min_rvol
+    for nd in sorted(nodes, key=lambda x: x.strength):  # strongest node wins
+        bear = (o < nd.zone_low) & (h >= nd.zone_low) & (c < nd.zone_low) & (upper >= min_wick) & buy_push
+        bull = (o > nd.zone_high) & (low_ <= nd.zone_high) & (c > nd.zone_high) & (lower >= min_wick) & sell_push
+        bear, bull = bear & heavy_enough, bull & heavy_enough
+        direction[bear] = -1
+        direction[bull] = 1
+        level[bear | bull] = nd.price
+    absorbed = pd.Series(np.where(direction == -1, buy_vol, np.where(direction == 1, sell_vol, 0.0)), index=df.index)
+    return pd.DataFrame({
+        "direction": direction,
+        "heavy": (direction != 0) & (rvol >= heavy_rvol),
+        "level": level,
+        "absorbed_volume": absorbed,
+        "rvol": rvol,
+    }, index=df.index)

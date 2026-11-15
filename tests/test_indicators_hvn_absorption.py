@@ -146,3 +146,49 @@ def test_absorption_at_hvn_flags_bars_inside_a_node():
     assert out["at_hvn"].iloc[-1]  # last bars sit in the 120 cluster
     assert abs(out["hvn_price"].iloc[-1] - 120) < 1.5
     assert not out["at_hvn"].iloc[64]  # mid-transit, in the volume gap
+
+
+# ------------------------------------------------- dominance + level absorption ---
+
+def test_hvn_buy_pct_and_label_from_buy_volume():
+    df = _two_cluster_history()
+    buy = df["volume"] * 0.6  # 60% of everything traded on the buy side
+    prof = volume_profile(df["high"], df["low"], df["volume"], buy_volume=buy)
+    nodes = find_hvns(prof)
+    assert nodes and all(abs(nd.buy_pct - 60) < 1e-6 for nd in nodes)
+    assert all(nd.dominant_side == "buy" for nd in nodes)
+    nd = nodes[0]
+    assert nd.label == f"{nd.zone_volume / 1000:.0f} | 60%"
+
+
+def _level_setup(o, h, lo, c, v):
+    from indicators.hvn_absorption import HVN
+    df = _bars(100 + np.sin(np.arange(30) / 3), spread=1.0)
+    for col, val in zip(("open", "high", "low", "close", "volume"), (o, h, lo, c, v)):
+        df.iloc[-1, df.columns.get_loc(col)] = val
+    node = HVN(price=105.0, zone_low=104.5, zone_high=105.5, volume=1.0, strength=80.0, is_poc=False)
+    return df, node
+
+
+def test_level_absorption_bearish_rejection_at_hvn():
+    from indicators.hvn_absorption import level_absorption
+    df, node = _level_setup(102.0, 106.0, 101.8, 102.6, 4_000_000)   # spike into 104.5-105.5, closes far below
+    out = level_absorption(df, [node]).iloc[-1]
+    assert out["direction"] == -1 and out["heavy"] and out["level"] == 105.0
+
+
+def test_level_absorption_needs_close_back_outside_the_node():
+    from indicators.hvn_absorption import level_absorption
+    df, node = _level_setup(102.0, 106.0, 101.8, 105.8, 4_000_000)   # broke through and held -> no absorption
+    assert level_absorption(df, [node]).iloc[-1]["direction"] == 0
+
+
+def test_level_absorption_delta_must_push_into_the_level():
+    from indicators.hvn_absorption import level_absorption
+    df, node = _level_setup(102.0, 106.0, 101.8, 102.6, 4_000_000)
+    delta = pd.Series(0.0, index=df.index)
+    delta.iloc[-1] = -1_000_000   # sellers, not buyers, were aggressive -> not buyers absorbed
+    assert level_absorption(df, [node], delta=delta).iloc[-1]["direction"] == 0
+    delta.iloc[-1] = 1_000_000
+    out = level_absorption(df, [node], delta=delta).iloc[-1]
+    assert out["direction"] == -1 and out["absorbed_volume"] == pytest.approx(2_500_000)
