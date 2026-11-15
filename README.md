@@ -740,12 +740,54 @@ regression tests that directly exercise these guarantees (e.g.
 `test_signal_fn_never_receives_future_bars`,
 `test_entry_executes_at_next_bar_open_not_signal_bar_close`).
 
+## HVN Profile + Absorption indicator
+
+`indicators/hvn_absorption.py` (Python, used by the bot) and
+`pine/hvn_absorption.pine` (TradingView, Pine Script v6, for the chart) implement
+the same two tools:
+
+- **HVN Profile** — volume-by-price over several lookbacks (default 50/100/200
+  bars in Python, 100/300 in Pine), Gaussian-smoothed so adjacent busy rows
+  cluster into one node. High Volume Nodes are the local peaks of the smoothed
+  profile above the 70th percentile; each has a price zone, a strength relative
+  to the POC, and a touch count. Nodes found by more than one lookback merge into
+  one confluence level (`HVN.lookbacks`; `xN` on the chart, solid line).
+  `hvn_touch()` / the Pine `alert()` fire when price trades into a node.
+- **Absorption** — high effort, little result: relative volume >= 1.5x while the
+  bar's net move |close-open| stays <= 0.5 ATR. Bullish when sellers were the
+  aggressor but the bar closed high (negative delta, or without delta: close in
+  the top 40% of the bar); bearish is the mirror. *Heavy* = relative volume >= 2.5x.
+  `absorption_at_hvn()` adds whether the bar sat inside an HVN zone.
+
+**Data caveat:** real absorption is read from a footprint (bid/ask volume per
+price). From OHLCV it is approximated by effort-vs-result plus wick shape; pass a
+`delta` series (buy minus sell volume per bar) to `absorption()` for the
+order-flow version. The Pine script approximates delta from lower-timeframe
+candles (`Delta timeframe`, must be <= the chart timeframe) and falls back to the
+wick rule where no intrabar data exists. The profile spreads each bar's volume
+evenly over its high-low range. On daily bars, monthly/quarterly options
+expiration days can show up as absorption (high volume, small move).
+`absorption_at_hvn(df)` with default nodes builds them from all of `df`; for a
+backtest, compute nodes per bar from prior history only.
+
+```python
+from indicators.hvn_absorption import hvn_profile, absorption_at_hvn
+nodes = hvn_profile(df)                 # df: open/high/low/close/volume
+signals = absorption_at_hvn(df, nodes)  # rvol, body_atr, clv, direction, heavy, at_hvn, ...
+```
+
+TradingView: Pine Editor -> paste `pine/hvn_absorption.pine` -> Add to chart. For
+alerts, create an alert on "Any alert() function call" (HVN touch, absorption at
+HVN) or pick one of the four absorption alert conditions.
+
 ## Project structure
 
 ```
 config/          Config schema, presets, and the example YAML
 data/            DataProvider interface, yfinance implementation, disk cache, universe filters
-indicators/      Trend, momentum, volatility, volume, trend-strength (ADX), VWAP
+indicators/      Trend, momentum, volatility, volume, trend-strength (ADX), VWAP,
+                 HVN profile + absorption (hvn_absorption.py)
+pine/            TradingView Pine Script versions of indicators
 price_action/    S/R levels + confluence, price-action setups, candlestick patterns,
                  BOS/CHOCH + liquidity sweeps (structure.py), Fibonacci (fibonacci.py)
 market_regime/   SPY/QQQ/IWM/VIX-based regime classification
