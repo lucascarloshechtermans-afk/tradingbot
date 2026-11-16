@@ -114,7 +114,8 @@ def rma(x, n):
     return out
 
 
-def run_twin(b5: pd.DataFrame, buy: np.ndarray, sell: np.ndarray, has_delta: np.ndarray, session_key: np.ndarray):
+def run_twin(b5: pd.DataFrame, buy: np.ndarray, sell: np.ndarray, has_delta: np.ndarray, session_key: np.ndarray,
+             max_per_day: int = 1, day_key: np.ndarray | None = None):
     """b5: 5m OHLCV (chart bars, chronological). buy/sell: per-bar buy/sell volume (intrabar or CLV).
     session_key: period id per bar (Pine timeframe.change("D")).
     Returns dict with per-bar arrays and event lists."""
@@ -134,6 +135,8 @@ def run_twin(b5: pd.DataFrame, buy: np.ndarray, sell: np.ndarray, has_delta: np.
     day_nodes = {}          # snapshot of kept nodes per bar-day (constant within a period)
     signals, entries, retests = [], [], []
     pend = None             # (dir, bar, close, ext, node)
+    day_key = session_key if day_key is None else day_key
+    ent_today = {}          # Pine: entToday, reset on timeframe.change("D")
     rng = h - l
     up_w = np.where(rng > 0, (h - np.maximum(o, c)) / np.where(rng > 0, rng, 1) * 100, 0.0)
     dn_w = np.where(rng > 0, (np.minimum(o, c) - l) / np.where(rng > 0, rng, 1) * 100, 0.0)
@@ -180,7 +183,8 @@ def run_twin(b5: pd.DataFrame, buy: np.ndarray, sell: np.ndarray, has_delta: np.
         # Pine: confirmed entries block (after the absorption block)
         if pend is not None and t == pend[1] + 1:
             d, _, pc, ext, nd0 = pend
-            if (c[t] - pc) * d > 0:
+            if (c[t] - pc) * d > 0 and (max_per_day == 0 or ent_today.get(day_key[t], 0) < max_per_day):
+                ent_today[day_key[t]] = ent_today.get(day_key[t], 0) + 1
                 ent = c[t]
                 sl = ext - c[t] * STOP_BUF_PCT / 100 if d == 1 else ext + c[t] * STOP_BUF_PCT / 100
                 risk = abs(ent - sl); best = None

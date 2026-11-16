@@ -72,3 +72,17 @@ MISLUKT / NIET UITGEVOERD
   geleverd (compare_pine_export.py + Pine-optie "Off (CLV fallback)" + data-window-plots).
 - 1-2 jaar 1m-historie: niet haalbaar zonder werkende Twelve Data REST-sleutel.
 - Echte 0DTE-optieprijzen: geen databron.
+
+16:20  NIEUWE VRAAG gebruiker: "elke dag 1 signaal, alleen zeer sterke". Vooraf vastgelegd (vóór test):
+       sterkte-score = gemiddelde percentiel-rang van (rvol, wiek%, levelvolume / max levelvolume in
+       dezelfde periode), gelijk gewogen. "Sterk" = bovenste derde (gepoold, per dataset). Test: sterk vs
+       rest op (b) P(+1 ATR eerst) en op netto R (S0), dag-geclusterd 95%. Plus: hoeveel dagen hebben
+       minstens 1 sterk signaal. Geen andere varianten.
+16:25  UITKOMST sterkte-test: sterk (bovenste derde) vs rest: P(+1 ATR eerst) 61,2% vs 57,7%
+       (+3,5 pp [-9,0; +16,1]); netto R (S0) -0,077 (n=29) vs +0,257 (n=63) (-0,33 [-0,84; +0,17]).
+       Spearman score~uitkomst -0,03, score~R -0,11. SPY: sterk signaal op 5 van 59 sessies.
+       -> GEEN sterkte-filter gebouwd (zou niet-bestaande kwaliteit suggereren).
+16:27  Gebouwd: "Max entries per day" (standaard 1, eerste bevestigde instap van de dag) in Pine en
+       tweeling (run_twin max_per_day=1 standaard; studie-resultaten hierboven waren ONBEPERKT).
+       Effect S60: 99 -> 81 instappen (SPY 15 -> 12). Compile-check van het gewijzigde blok: geslaagd.
+       Een gegarandeerd signaal per dag is NIET gebouwd: op SPY is er gemiddeld ~1 per week.

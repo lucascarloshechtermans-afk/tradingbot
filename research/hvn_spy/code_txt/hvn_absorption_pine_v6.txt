@@ -424,6 +424,10 @@ stopMode   = input.string("S0 wick + 0.014%", "Stop type", options = ["S0 wick +
 showTrack  = input.bool(true, "Trade tracker (R after costs)", group = grpE)
 commShare  = input.float(0.005, "Commission per share per side ($)", minval = 0, step = 0.001, group = grpE)
 slipTicks  = input.int(1, "Slippage (ticks) on market fills", minval = 0, group = grpE)
+maxPerDay  = input.int(1, "Max entries per day (0 = unlimited)", minval = 0, group = grpE, tooltip = "Takes the FIRST confirmed entry of the day. A 'strongest of the day' filter is not possible live and a strength score did not predict better outcomes in testing (see research/hvn_spy/99_logboek.txt).")
+var int entToday = 0
+if timeframe.change("D")
+    entToday := 0
 var int pendDir = 0
 var float pendZLo = na
 var float pendZHi = na
@@ -436,7 +440,8 @@ float entPx = na
 float slPx = na
 float tpPx = na
 if pendDir != 0 and bar_index == pendBar + 1
-    if (close - pendClose) * pendDir > 0
+    if (close - pendClose) * pendDir > 0 and (maxPerDay == 0 or entToday < maxPerDay)
+        entToday += 1
         entPx := close
         float s0 = pendDir == 1 ? pendExt - close * stopBufPct / 100 : pendExt + close * stopBufPct / 100
         float s1 = pendDir == 1 ? pendExt - 0.25 * atrV : pendExt + 0.25 * atrV
