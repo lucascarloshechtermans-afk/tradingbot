@@ -394,6 +394,55 @@ if showLvlAbs and lvlDir != 0
     if lvlHeavy
         label.new(bar_index, ay, "LARGE ABSORPTION", style = lvlDir == -1 ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = color.new(color.white, 40), size = size.normal, yloc = lvlDir == -1 ? yloc.abovebar : yloc.belowbar)
 
+// ═══════════════════════════════ Confirmed entries ═══════════════════════════════
+// Absorption at an HVN is only a setup. The entry needs the NEXT bar to close in the
+// trade direction (most failed setups went straight against the trade on that bar).
+// Stop just beyond the absorption wick, target the nearest HVN at >= minRR, else 2R.
+grpE = "Entries (confirmation)"
+showEntry  = input.bool(true, "Show confirmed entries (ENTRY / SL / TP)", group = grpE)
+minRR      = input.float(1.5, "Min reward:risk to next HVN", minval = 0.5, step = 0.1, group = grpE)
+stopBufPct = input.float(0.014, "Stop buffer beyond wick (%)", minval = 0, step = 0.001, group = grpE)
+var int pendDir = 0
+var int pendBar = na
+var float pendClose = na
+var float pendExt = na
+bool entryLong = false
+bool entryShort = false
+float entPx = na
+float slPx = na
+float tpPx = na
+if pendDir != 0 and bar_index == pendBar + 1
+    if (close - pendClose) * pendDir > 0
+        entPx := close
+        slPx := pendDir == 1 ? pendExt - close * stopBufPct / 100 : pendExt + close * stopBufPct / 100
+        float risk = math.abs(entPx - slPx)
+        float best = na
+        for nd in nodes
+            float d = (nd.price - entPx) * pendDir
+            if d >= minRR * risk and (na(best) or d < (best - entPx) * pendDir)
+                best := nd.price
+        tpPx := na(best) ? entPx + 2 * risk * pendDir : best
+        entryLong := pendDir == 1
+        entryShort := pendDir == -1
+    pendDir := 0
+if lvlDir != 0
+    pendDir := lvlDir
+    pendBar := bar_index
+    pendClose := close
+    pendExt := lvlDir == 1 ? low : high
+if showEntry and (entryLong or entryShort)
+    color ec = entryLong ? cBuy : cSell
+    label.new(bar_index, entryLong ? low : high, "ENTRY " + (entryLong ? "LONG" : "SHORT"), style = entryLong ? label.style_label_up : label.style_label_down, color = ec, textcolor = color.white, size = size.small, yloc = entryLong ? yloc.belowbar : yloc.abovebar)
+    line.new(bar_index, entPx, bar_index + 20, entPx, color = color.white, width = 1)
+    line.new(bar_index, slPx, bar_index + 20, slPx, color = cSell, width = 1)
+    line.new(bar_index, tpPx, bar_index + 20, tpPx, color = cBuy, width = 1)
+    label.new(bar_index + 20, slPx, "SL " + str.tostring(slPx, format.mintick), style = label.style_label_left, color = color.new(cSell, 20), textcolor = color.white, size = size.tiny)
+    label.new(bar_index + 20, tpPx, "TP " + str.tostring(tpPx, format.mintick), style = label.style_label_left, color = color.new(cBuy, 20), textcolor = color.white, size = size.tiny)
+alertcondition(entryLong, "ENTRY long (confirmed)", "{{ticker}}: confirmed LONG entry at {{close}}")
+alertcondition(entryShort, "ENTRY short (confirmed)", "{{ticker}}: confirmed SHORT entry at {{close}}")
+if entryLong or entryShort
+    alert(syminfo.ticker + ": ENTRY " + (entryLong ? "LONG" : "SHORT") + " @ " + str.tostring(entPx, format.mintick) + "  SL " + str.tostring(slPx, format.mintick) + "  TP " + str.tostring(tpPx, format.mintick), alert.freq_once_per_bar_close)
+
 // ═══════════════════════════════ Passive limit order zones ═══════════════════════════════
 var array<Zone> zones = array.new<Zone>()
 bool zoneBroken = false
