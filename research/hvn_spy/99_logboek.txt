@@ -1,0 +1,74 @@
+LOGBOEK  -  alles wat getest is, ook wat mislukte (chronologisch, 2026-11-16, tijden UTC)
+
+08:53  Twelve Data REST: elke call HTTP 401 ("apikey parameter is incorrect"); ook met placeholder.
+       -> mislukt. Twelve Data MCP: werkt (plan 800 credits/dag), SPY 1m vanaf 2020-03-24.
+       Bulk via MCP niet haalbaar (data komt in modelcontext, ±70k tokens per 5000 bars).
+       BESLISSING: Yahoo Finance als bulkbron; Twelve Data MCP alleen voor kruiscontrole.
+08:55  Yahoo-download: 1m 2026-10-19..11-13 (20 RTH-sessies) voor SPY QQQ IWM DIA XLK XLF,
+       ES=F 1m 10-19..11-15 (Globex); 5m 60 dagen; ^VIX1D en ^VIX dag (1 jaar). Eerste request
+       gaf "Crumb fetch rate-limited (429)", data kwam wel binnen.
+08:56  Volumecontrole SPY 10 dagen: Twelve Data dag = Yahoo dag (10/10 identiek).
+       Som intraday-bars (1m en 5m) = 81-89% van dagvolume. Interpretatie: slotveiling + extended
+       hours niet in RTH-bars; NIET volledig verifieerbaar. Geen single-venue (dan ±2-3%).
+08:56  Documentatiecheck Pine v6 (officiële docs, via web-fetch):
+       - alert.freq_once_per_bar = eerste call per realtime bar (kan vóór slot afgaan) -> repaint-bug bevestigd.
+       - alert() en alertcondition() gaan alleen af op realtime bars.
+       - barstate.isconfirmed = true op historische bars en de laatste update van een realtime bar.
+       - request.security_lower_tf: timeframe <= chart; max 100K intrabars (niet-pro), 125K/200K hogere plannen.
+       - Geschiedenis binnen een functie is lokaal; bij niet elke bar aanroepen ontstaan gaten,
+         "zelfs als het argument een globale variabele is" (samenvatting van de docs).
+         -> verklaart de eerdere 100%-bug; buildProfile gebruikte ook high[i]/low[i]/volume[i] in een
+            conditioneel aangeroepen functie. FIX: alles via arrays (hiHist/loHist/volHist/shareHist).
+       - NIET verifieerbaar (referentiepagina JS-gerenderd): formule percentile_linear_interpolation,
+         of "D" bij CME de sessie (18:00 ET) of kalenderdag volgt, tekst in label.style_circle.
+         Aanname ES: sessie 18:00-17:00 ET (TradingView-dagbars futures). Python: numpy 'linear' percentiel.
+08:57  PRE-REGISTRATIE gecommit (6a08264). Daarna niets aan regels/drempels veranderd.
+08:59  Python-tweeling hvn_pine_twin.py geschreven (regel voor regel naar Pine v6-standaard).
+       Verschillen met de OUDE Python-modules (indicators/hvn_absorption.py, order_pressure.py), die
+       dus GEEN exacte tweeling waren: andere periodes (kalender i.p.v. Pine-sessie), bins 50-60 i.p.v. 120,
+       drempel 70% i.p.v. 60%, max 6 i.p.v. 8 nodes, geen dunne banden, geen bevestiging, rvol vs. 20 bars
+       zonder [1]-verschuiving in sommige functies, geen zone-state (active/armed) zoals Pine.
+       -> nieuwe tweeling is leidend; oude modules blijven als generieke hulpfuncties.
+09:00  Eerste run faalde: scipy ontbrak (geïnstalleerd). Rook-test SPY: S60 27 signalen / 15 instappen,
+       P 5 signalen / 2 instappen.
+09:01  Bug in eigen studiecode gevonden vóór de echte run: dag-sleutels als tuples gaven foute
+       bootstrap-clustering -> vervangen door "ticker|datum"-strings. $/mnd voor gepoolde OOS stond
+       per ticker gedeeld -> nu totaal bij handelen van alle tickers.
+09:02-09:10  Volledige studie (study.py) gedraaid; uitvoer results_*.txt.
+       STAP 0 consistentie: in hetzelfde venster geeft CLV-logica MEER signalen dan 1m-kleur-logica
+       (SPY 8 vs 5, QQQ 11 vs 4, ES 29 vs 12); alle 1m-signalen zitten ook in CLV (0 alleen-1m).
+       -> historiek zonder intrabar-data (CLV) en live (1m) geven aantoonbaar verschillende signalen.
+09:12  Stap 3 gedraaid (stap3.py) omdat stap 1 de pre-geregistreerde drempel haalde.
+09:14  Pine bijgewerkt: arrays in buildProfile; alerts alleen op gesloten bars (alertcondition met
+       barstate.isconfirmed; alert() met freq_once_per_bar_close); stoptype S0-S3 (standaard S0);
+       SL-label met $ en ATR; trade-tracker (R na kosten) + dashboard; eerlijke labels
+       ("Large GREEN 1m candle", "HIGH VOLUME + REJECTION", tooltip benoemt candle-kleur-proxy);
+       intrabar-optie "Off (CLV fallback)" + data-window-plots voor de pariteitscontrole.
+       Compile-check (TextToQuant validate, Pine v6): geslaagd, 0 diagnostics.
+
+AFWIJKINGEN VAN DE PRE-REGISTRATIE (allemaal vóór het zien van de betreffende uitkomst beslist,
+behalve waar vermeld)
+1. (b2) "200 trekkingen willekeurige richting": met symmetrische +-1 ATR-barrières is de verwachting
+   exact 50% (lang en kort zijn complementair). Getest als verschil met 0,5; geen trekkingen nodig.
+2. (a) Controles gebruiken dezelfde Pine-toestandsmachine (active/armed, 5 periodes) als de echte levels.
+3. S3 bij willekeurige instappen: dichtstbijzijnde HVN-zone aan de stopkant binnen 3 ATR, anders S1.
+4. Stap 4 "beste stop op SPY": S0 en S2 gelijk op 3 decimalen; S2 kwam als maximum uit de code.
+   Irrelevant voor de uitkomst (S2 faalt de OOS-regel). Gezien NA de uitkomst; gemeld.
+5. Optieschatting alleen voor SPY (VIX1D past niet bij QQQ/IWM/... en ES).
+6. Sluiting einde dag (16:00) voor alle trades in stap 1/2 (Pine heeft geen sluiting).
+
+ALLE GETESTE VARIANTEN IN DEZE STUDIE
+- Stap 1: 6 vergelijkingen x 2 datasets (S60, P), plus SPY-only rapportage.
+- Stap 2: 4 stops x 2 datasets x (echt, willekeurig) x 7 tickers.
+- Stap 3: 3 uitstapvarianten (T0/T1/T2) x 2 datasets.
+- Eerder in dit project (zelfde gebruiker, eerdere sessie-onderdelen), meegeteld in N_trials=200:
+  NQ 5m basisregel + 8 gevoeligheidsvarianten; dominantiefilter; ES/YM/RTY cross-market; BTC 10 mnd
+  (3 varianten, echte taker-delta); 4 "verbeteringen" x 5 markten; 108-combinatie walk-forward (1-2
+  signalen/dag); ORB, VWAP-reversie, 200-daags en 20-daags trendvolgen. Geen van de intraday-varianten
+  was out-of-sample winstgevend na kosten.
+
+MISLUKT / NIET UITGEVOERD
+- Bar-voor-bar Pine<->Python-vergelijking: Pine kan in deze omgeving niet draaien. Gereedschap
+  geleverd (compare_pine_export.py + Pine-optie "Off (CLV fallback)" + data-window-plots).
+- 1-2 jaar 1m-historie: niet haalbaar zonder werkende Twelve Data REST-sleutel.
+- Echte 0DTE-optieprijzen: geen databron.

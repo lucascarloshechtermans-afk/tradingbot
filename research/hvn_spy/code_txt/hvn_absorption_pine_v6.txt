@@ -1,0 +1,752 @@
+// HVN Profile & Order Pressure
+// 1) HVN Profile   : rolling per-period volume profiles (smoothed clustering). Every HVN is a band
+//                    labelled 'volume | dominant side %' (blue = buyers, orange = sellers), extended
+//                    until price comes back to it. Absorption AT a level = heavy push into the band
+//                    that is rejected within the bar (bubble with the absorbed volume).
+// 2) Order pressure: large 1m-candle bubbles, passive zones, buy/sell pressure, absorption, round-number
+//                    levels, confluence alerts. Buy/sell volume = 1m CANDLE COLOUR (proxy), not true
+//                    bid/ask aggressor data; without intrabar data it falls back to close location.
+// 3) Confirmed entries with selectable stop (S0-S3) and a paper trade tracker (R after costs).
+// Python twin (bar-for-bar): research/hvn_spy/hvn_pine_twin.py ; parity check: compare_pine_export.py
+//@version=6
+indicator("HVN Profile & Order Pressure", "HVN+PRESSURE", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 5000)
+
+// ═══════════════════════════════ Inputs ═══════════════════════════════
+grpP = "HVN Profile"
+pMode      = input.string("Auto", "Profile period", options = ["Auto", "Timeframe", "Bars"], group = grpP, tooltip = "Auto: chart up to 15m -> daily profiles, up to 4h -> weekly, daily -> monthly, weekly and up -> yearly.")
+pTf        = input.timeframe("D", "Period timeframe (mode Timeframe)", group = grpP)
+pBars      = input.int(100, "Period length (mode Bars)", minval = 10, maxval = 4999, group = grpP)
+maxPeriods = input.int(5, "Completed periods to show", minval = 1, maxval = 40, group = grpP)
+rows       = input.int(120, "Price rows per profile", minval = 10, maxval = 300, group = grpP)
+thinBands  = input.bool(true, "Thin bands (peak price only)", group = grpP, tooltip = "On: each HVN is drawn as a thin band at its peak price. Off: the full HVN zone.")
+sigma      = input.float(2.0, "Smoothing (rows, Gaussian)", minval = 0, step = 0.5, group = grpP, tooltip = "Clusters neighbouring busy rows into one node. 0 = raw profile.")
+thrPct     = input.float(60, "HVN threshold (percentile)", minval = 0, maxval = 99, group = grpP)
+zoneRatio  = input.float(80, "Zone width (% of peak volume)", minval = 50, maxval = 99, group = grpP)
+minSep     = input.int(5, "Min rows between nodes", minval = 1, group = grpP)
+maxNodes   = input.int(8, "Max HVNs per period", minval = 1, maxval = 15, group = grpP)
+extendLvls = input.bool(true, "Extend HVN/POC until retested", group = grpP)
+showDev    = input.bool(false, "Show developing period", group = grpP)
+showComp   = input.bool(false, "Composite profile histogram", group = grpP)
+compLb     = input.int(300, "Composite lookback (bars)", minval = 20, maxval = 4999, group = grpP)
+histWidth  = input.int(40, "Histogram width (bars)", minval = 5, maxval = 150, group = grpP)
+
+grpO = "Order pressure"
+ltfMode    = input.string("Auto", "Intrabar timeframe", options = ["Auto", "Manual", "Off (CLV fallback)"], group = grpO, tooltip = "Auto: chart up to 1m -> chart tf, up to 15m -> 1m, up to 4h -> 5m, daily -> 60m, higher -> 240m.")
+ltfMan     = input.timeframe("1", "Manual intrabar timeframe", group = grpO)
+showAgg    = input.bool(false, "Large 1m-candle bubbles (no real aggressor data)", group = grpO)
+aggMult    = input.float(2.5, "Large 1m candle: volume >= x average", minval = 1, step = 0.1, group = grpO)
+maxBubbles = input.int(2, "Max bubbles per bar", minval = 1, maxval = 5, group = grpO)
+pressLen   = input.int(20, "Pressure window (bars)", minval = 2, group = grpO)
+
+grpA = "Absorption & passive zones"
+rvolLen    = input.int(20, "Relative volume length", minval = 2, group = grpA)
+minRvol    = input.float(1.5, "Min relative volume", minval = 1, step = 0.1, group = grpA)
+heavyRvol  = input.float(2.5, "Heavy absorption relative volume", minval = 1, step = 0.1, group = grpA)
+atrLen     = input.int(14, "ATR length", minval = 1, group = grpA)
+maxBodyAtr = input.float(0.5, "Max net move |close-open| (x ATR)", minval = 0.05, step = 0.05, group = grpA, tooltip = "High effort, little result: lots of volume but the bar made little net progress.")
+minDelta   = input.float(10, "Min |delta| (% of volume)", minval = 0, step = 1, group = grpA)
+showZones  = input.bool(false, "Passive limit order zones", group = grpA)
+maxZones   = input.int(20, "Max active zones", minval = 1, maxval = 100, group = grpA)
+showLvlAbs = input.bool(true, "Absorption at HVN (rejection) bubbles", group = grpA, tooltip = "Price pushes into an HVN on heavy volume and closes back out of it with a long wick. Buy/sell side is a 1m candle-colour proxy, not true aggressor data.")
+lvlRvol    = input.float(2.0, "Level absorption: min relative volume", minval = 1, step = 0.1, group = grpA)
+lvlWick    = input.float(50, "Level absorption: min wick (% of range)", minval = 10, maxval = 95, group = grpA)
+minZoneAtr = input.float(0.15, "Min zone height (x ATR)", minval = 0.01, step = 0.05, group = grpA)
+
+grpL = "Psychological levels"
+showPsy    = input.bool(false, "Show psychological levels", group = grpL)
+psyStepIn  = input.float(0, "Level step (0 = auto)", minval = 0, group = grpL, tooltip = "Auto = 10^(digits-1): 754 -> 10, 6000 -> 100, 1.08 -> 0.1")
+psyCount   = input.int(3, "Levels above/below price", minval = 1, maxval = 10, group = grpL)
+psyHalf    = input.bool(true, "Show half levels", group = grpL)
+
+grpS = "Signals & alerts"
+showTable  = input.bool(false, "Dashboard", group = grpS)
+colorBars  = input.bool(false, "Color absorption bars", group = grpS)
+showStars  = input.bool(false, "Show multi-signal ★ labels", group = grpS)
+showStall  = input.bool(false, "Show small absorption triangles", group = grpS)
+alHvn      = input.bool(true, "Alert: HVN / POC retest", group = grpS)
+alAbs      = input.bool(true, "Alert: absorption", group = grpS)
+alConf     = input.bool(true, "Alert: multi-signal confluence", group = grpS)
+alZone     = input.bool(true, "Alert: passive zone broken", group = grpS)
+alAgg      = input.bool(false, "Alert: large 1m candles", group = grpS)
+
+grpC = "Colors"
+cHvn   = input.color(#2962FF, "HVN (buyers dominant)", group = grpC)
+cHvnS  = input.color(#FF9100, "HVN (sellers dominant)", group = grpC)
+cPoc   = input.color(#FFB300, "POC border", group = grpC)
+cHist  = input.color(color.new(#787B86, 70), "Histogram", group = grpC)
+cBuy   = input.color(#00C853, "Buyers / bullish", group = grpC)
+cSell  = input.color(#FF1744, "Sellers / bearish", group = grpC)
+cPsy   = input.color(color.new(#B2B5BE, 30), "Psychological levels", group = grpC)
+
+// ═══════════════════════════════ Types ═══════════════════════════════
+type Node
+    box   bx
+    label lb
+    float lo
+    float hi
+    float price
+    bool  isPoc
+    bool  active
+    bool  armed
+    int   period
+    float vol
+    float buyPct
+    float fullLo
+    float fullHi
+
+type Zone
+    box   bx
+    float top
+    float bot
+    int   dir
+    bool  active
+    bool  armed
+
+// ═══════════════════════════════ Timeframes ═══════════════════════════════
+int tfSec = timeframe.in_seconds()
+string autoPeriod = tfSec <= 900 ? "D" : tfSec <= 14400 ? "W" : tfSec <= 86400 ? "M" : "12M"
+string periodTf = pMode == "Timeframe" ? pTf : autoPeriod
+string autoLtf = tfSec <= 60 ? timeframe.period : tfSec <= 900 ? "1" : tfSec <= 14400 ? "5" : tfSec <= 86400 ? "60" : "240"
+string ltf = ltfMode == "Manual" ? ltfMan : autoLtf  // 'Off' still requests (Pine needs a valid tf) but ignores the data
+
+// ═══════════════════════════════ Intrabar order flow ═══════════════════════════════
+[ibO, ibC, ibH, ibL, ibV] = request.security_lower_tf(syminfo.tickerid, ltf, [open, close, high, low, volume])
+int nIb = ltfMode == "Off (CLV fallback)" ? 0 : ibV.size()
+
+float buyV = 0.0
+float sellV = 0.0
+if nIb > 0
+    for i = 0 to nIb - 1
+        float v = nz(ibV.get(i))
+        float c = ibC.get(i)
+        float o = ibO.get(i)
+        if c > o
+            buyV += v
+        else if c < o
+            sellV += v
+        else
+            buyV += v / 2
+            sellV += v / 2
+else
+    // no intrabar data: split the bar's volume by close location
+    float r0 = high - low
+    float cl0 = r0 > 0 ? (close - low) / r0 : 0.5
+    buyV := nz(volume) * cl0
+    sellV := nz(volume) * (1 - cl0)
+bool hasDelta = nIb > 0 and buyV + sellV > 0
+float dRatioL = hasDelta ? (buyV - sellV) / (buyV + sellV) * 100 : 0.0
+float barDelta = buyV - sellV
+float sumBuy = math.sum(buyV, pressLen)
+float sumSell = math.sum(sellV, pressLen)
+float buyPress = sumBuy + sumSell > 0 ? sumBuy / (sumBuy + sumSell) * 100 : 50.0
+// Buy share per bar, kept in an array (newest last) so profile building can read
+// any past bar reliably instead of history-referencing a series inside a function.
+float bShareBar = buyV + sellV > 0 ? buyV / (buyV + sellV) : 0.5
+var array<float> shareHist = array.new<float>()
+var array<float> hiHist = array.new<float>()
+var array<float> loHist = array.new<float>()
+var array<float> volHist = array.new<float>()
+shareHist.push(bShareBar)
+hiHist.push(high)
+loHist.push(low)
+volHist.push(nz(volume))
+if shareHist.size() > 90000
+    shareHist.shift()
+    hiHist.shift()
+    loHist.shift()
+    volHist.shift()
+plot(bShareBar * 100, "Bar buy %", color = color.gray, display = display.data_window)
+
+// ═══════════════════════════════ Profile functions ═══════════════════════════════
+// Volume-by-price of the n bars starting `off` bars back. Each bar's volume is
+// spread over the rows its high-low range overlaps, then Gaussian-smoothed.
+buildProfile(int off, int n, int nRows, float sig) =>
+    int last = hiHist.size() - 1
+    float pHi = hiHist.get(last - off)
+    float pLo = loHist.get(last - off)
+    for i = off to off + n - 1
+        pHi := math.max(pHi, hiHist.get(last - i))
+        pLo := math.min(pLo, loHist.get(last - i))
+    float step = (pHi - pLo) / nRows
+    array<float> raw = array.new<float>(nRows, 0.0)
+    array<float> rbuy = array.new<float>(nRows, 0.0)
+    if step > 0
+        for i = off to off + n - 1
+            float h = hiHist.get(last - i)
+            float l = loHist.get(last - i)
+            float v = volHist.get(last - i)
+            float bshare = shareHist.get(last - i)
+            float r = h - l
+            if r <= 0
+                int k = math.max(0, math.min(nRows - 1, int((h - pLo) / step)))
+                raw.set(k, raw.get(k) + v)
+                rbuy.set(k, rbuy.get(k) + v * bshare)
+            else
+                int k0 = math.max(0, math.min(nRows - 1, int((l - pLo) / step)))
+                int k1 = math.max(k0, math.min(nRows - 1, int((h - pLo) / step)))
+                for k = k0 to k1
+                    float bLo = pLo + k * step
+                    float ov = math.min(h, bLo + step) - math.max(l, bLo)
+                    if ov > 0
+                        raw.set(k, raw.get(k) + v * ov / r)
+                        rbuy.set(k, rbuy.get(k) + v * bshare * ov / r)
+    array<float> sm = array.new<float>(nRows, 0.0)
+    int rad = sig > 0 ? math.max(1, int(math.round(3 * sig))) : 0
+    for k = 0 to nRows - 1
+        if rad == 0
+            sm.set(k, raw.get(k))
+        else
+            float acc = 0.0
+            float wsum = 0.0
+            for j = -rad to rad
+                float w = math.exp(-0.5 * math.pow(j / sig, 2))
+                wsum += w
+                int kk = k + j
+                if kk >= 0 and kk < nRows
+                    acc += w * raw.get(kk)
+            sm.set(k, acc / wsum)
+    [pLo, step, sm, raw, rbuy]
+
+// HVN detection: local peaks above the percentile threshold, biggest first,
+// at least `minSep` rows apart. Returns [peak rows, zone low rows, zone high rows].
+nodesOf(array<float> sm, int maxN) =>
+    int n = sm.size()
+    float cutoff = sm.percentile_linear_interpolation(thrPct)
+    float pocV = sm.max()
+    array<int> peaks = array.new<int>()
+    if pocV > 0
+        for k = 0 to n - 1
+            float v = sm.get(k)
+            float left = k > 0 ? sm.get(k - 1) : -1.0
+            float right = k < n - 1 ? sm.get(k + 1) : -1.0
+            if v >= left and v > right and v >= cutoff
+                peaks.push(k)
+    array<int> chosen = array.new<int>()
+    array<int> zl = array.new<int>()
+    array<int> zh = array.new<int>()
+    while peaks.size() > 0 and chosen.size() < maxN
+        int best = 0
+        for p = 0 to peaks.size() - 1
+            if sm.get(peaks.get(p)) > sm.get(peaks.get(best))
+                best := p
+        int k = peaks.remove(best)
+        bool farEnough = true
+        for c in chosen
+            if math.abs(k - c) < minSep
+                farEnough := false
+        if farEnough
+            float pk = sm.get(k)
+            int lo = k
+            int hi = k
+            while lo > 0 and sm.get(lo - 1) >= pk * zoneRatio / 100 and sm.get(lo - 1) <= sm.get(lo)
+                lo -= 1
+            while hi < n - 1 and sm.get(hi + 1) >= pk * zoneRatio / 100 and sm.get(hi + 1) <= sm.get(hi)
+                hi += 1
+            chosen.push(k)
+            zl.push(lo)
+            zh.push(hi)
+    [chosen, zl, zh]
+
+float atrV = ta.atr(atrLen)
+float avgVol = ta.sma(volume, rvolLen)[1]
+float rvol = avgVol > 0 ? volume / avgVol : na
+float bodyAtr = atrV > 0 ? math.abs(close - open) / atrV : na
+
+// Aggressive market orders: intrabar candles with outsized volume (vs. the running
+// average intrabar volume of previous bars). Bubble at that intrabar's price.
+var float ibAvg = na
+float bigBuyV = 0.0
+float bigSellV = 0.0
+float bigMax = 0.0
+if nIb > 0 and not na(ibAvg) and ibAvg > 0
+    array<int> used = array.new<int>()
+    for b = 1 to maxBubbles
+        int best = -1
+        float bestV = 0.0
+        for i = 0 to nIb - 1
+            float v = nz(ibV.get(i))
+            if v >= aggMult * ibAvg and v > bestV and ibC.get(i) != ibO.get(i) and not used.includes(i)
+                best := i
+                bestV := v
+        if best >= 0
+            used.push(best)
+            bool up = ibC.get(best) > ibO.get(best)
+            float ratio = bestV / ibAvg
+            if up
+                bigBuyV += bestV
+            else
+                bigSellV += bestV
+            bigMax := math.max(bigMax, ratio)
+            if showAgg
+                string sz = ratio >= aggMult * 3 ? size.large : ratio >= aggMult * 2 ? size.normal : ratio >= aggMult * 1.4 ? size.small : size.tiny
+                label.new(bar_index, (ibH.get(best) + ibL.get(best)) / 2, "", style = label.style_circle, color = color.new(up ? cBuy : cSell, 25), size = sz, tooltip = (up ? "Large GREEN 1m candle " : "Large RED 1m candle ") + str.tostring(ratio, "#.#") + "x avg 1m volume (" + str.tostring(bestV, format.volume) + ")")
+else if nIb == 0 and rvol >= aggMult and bodyAtr >= 0.8
+    // bar-level fallback when no intrabar data exists
+    bool up = close > open
+    if up
+        bigBuyV := volume
+    else
+        bigSellV := volume
+    bigMax := rvol
+    if showAgg
+        label.new(bar_index, hl2, "", style = label.style_circle, color = color.new(up ? cBuy : cSell, 25), size = size.small, tooltip = (up ? "Large GREEN bar " : "Large RED bar ") + str.tostring(rvol, "#.#") + "x avg volume")
+if nIb > 0 and buyV + sellV > 0
+    float ibMean = (buyV + sellV) / nIb
+    ibAvg := na(ibAvg) ? ibMean : ibAvg + (ibMean - ibAvg) * 2.0 / 51.0
+
+// ═══════════════════════════════ Absorption ═══════════════════════════════
+float rng = high - low
+float clv = rng > 0 ? (close - low) / rng : 0.5
+float dRatio = hasDelta ? barDelta / (buyV + sellV) * 100 : 0.0
+bool effort = rvol >= minRvol
+bool smallRes = bodyAtr <= maxBodyAtr
+// Bullish: sellers were the aggressors (or price was pushed into a lower wick) but the bar closed high.
+bool bullDir = hasDelta ? (dRatio <= -minDelta and clv >= 0.5) : clv >= 0.6
+bool bearDir = hasDelta ? (dRatio >= minDelta and clv <= 0.5) : clv <= 0.4
+bool bullAbs = effort and smallRes and bullDir
+bool bearAbs = effort and smallRes and bearDir
+bool heavy = rvol >= heavyRvol
+
+// ═══════════════════════════════ Rolling period profiles ═══════════════════════════════
+var int pStart = 0
+var int pId = 0
+var array<Node> nodes = array.new<Node>()
+var float lastPoc = na
+bool tfChange = timeframe.change(periodTf)
+bool newPeriod = pMode == "Bars" ? bar_index % pBars == 0 : tfChange
+
+if newPeriod and bar_index > pStart
+    int n = math.min(bar_index - pStart, 4999)
+    [pLo, pStep, pSm, pRaw, pBuy] = buildProfile(1, n, rows, sigma)
+    pId += 1
+    if not extendLvls
+        for nd in nodes
+            nd.active := false
+    if pStep > 0
+        [pk, plo, phi] = nodesOf(pSm, maxNodes)
+        float pocV = pSm.max()
+        if pk.size() > 0
+            for j = 0 to pk.size() - 1
+                int k = pk.get(j)
+                bool isPoc = pSm.get(k) == pocV
+                float price = pLo + (k + 0.5) * pStep
+                float zLo = thinBands ? pLo + k * pStep : pLo + plo.get(j) * pStep
+                float zHi = thinBands ? pLo + (k + 1) * pStep : pLo + (phi.get(j) + 1) * pStep
+                float zv = 0.0
+                float zb = 0.0
+                for r = plo.get(j) to phi.get(j)
+                    zv += pRaw.get(r)
+                    zb += pBuy.get(r)
+                float bp = zv > 0 ? zb / zv * 100 : 50.0
+                bool buyDom = bp >= 50
+                color c = buyDom ? cHvn : cHvnS
+                box bx = box.new(bar_index - n, zHi, bar_index - 1, zLo, border_color = isPoc ? color.new(cPoc, 30) : na, bgcolor = color.new(c, 72))
+                label lb = label.new(bar_index - 1, (zHi + zLo) / 2, (zv >= 1000 ? str.tostring(math.round(zv / 1000)) : str.tostring(math.round(zv))) + " | " + str.tostring(math.max(bp, 100 - bp), "#") + "%", style = label.style_label_right, color = color.new(color.black, 100), textcolor = buyDom ? cBuy : cSell, size = size.small)
+                nodes.push(Node.new(bx, lb, zLo, zHi, price, isPoc, true, false, pId, zv, bp, pLo + plo.get(j) * pStep, pLo + (phi.get(j) + 1) * pStep))
+                if isPoc
+                    lastPoc := price
+    if nodes.size() > 0
+        for idx = nodes.size() - 1 to 0
+            Node nd = nodes.get(idx)
+            if nd.period <= pId - maxPeriods
+                nd.bx.delete()
+                nd.lb.delete()
+                nodes.remove(idx)
+    pStart := bar_index
+else if newPeriod
+    pStart := bar_index
+
+// HVN / POC retests, level extension and absorption AT the level
+float rngL = high - low
+float upWick = rngL > 0 ? (high - math.max(open, close)) / rngL * 100 : 0.0
+float dnWick = rngL > 0 ? (math.min(open, close) - low) / rngL * 100 : 0.0
+bool lvlHeavyVol = rvol >= lvlRvol
+bool hvnRetest = false
+bool pocRetest = false
+float retestPrice = na
+bool atNode = false
+int lvlDir = 0
+float lvlPrice = na
+float lvlZLo = na
+float lvlZHi = na
+for nd in nodes
+    bool inside = low <= nd.hi and high >= nd.lo
+    bool live = nd.active or nd.period == pId
+    if inside and live
+        atNode := true
+    if live and lvlHeavyVol
+        // bearish: pushed up into the node, rejected back below it; buyers absorbed
+        if open < nd.lo and high >= nd.lo and close < nd.lo and upWick >= lvlWick and (not hasDelta or dRatioL >= minDelta)
+            lvlDir := -1
+            lvlPrice := nd.price
+            lvlZLo := nd.fullLo
+            lvlZHi := nd.fullHi
+        // bullish: pushed down into the node, rejected back above it; sellers absorbed
+        if open > nd.hi and low <= nd.hi and close > nd.hi and dnWick >= lvlWick and (not hasDelta or dRatioL <= -minDelta)
+            lvlDir := 1
+            lvlPrice := nd.price
+            lvlZLo := nd.fullLo
+            lvlZHi := nd.fullHi
+    if nd.active
+        if inside and nd.armed
+            nd.active := false
+            hvnRetest := true
+            pocRetest := pocRetest or nd.isPoc
+            retestPrice := nd.price
+            nd.bx.set_right(bar_index)
+            nd.lb.set_x(bar_index)
+        else
+            if not inside
+                nd.armed := true
+            if extendLvls
+                nd.bx.set_right(bar_index + 1)
+                nd.lb.set_x(bar_index + 1)
+
+float absorbedVol = lvlDir == -1 ? buyV : lvlDir == 1 ? sellV : 0.0
+bool lvlHeavy = lvlDir != 0 and rvol >= heavyRvol
+if showLvlAbs and lvlDir != 0
+    color ac = lvlDir == -1 ? cBuy : cSell  // colour of the aggressor that got absorbed
+    float ay = lvlDir == -1 ? high : low
+    label.new(bar_index, ay, "", style = label.style_circle, color = color.new(ac, 70), size = lvlHeavy ? size.huge : size.large, tooltip = (lvlHeavy ? "HIGH VOLUME " : "") + "rejection at HVN " + str.tostring(lvlPrice, format.mintick) + ": " + str.tostring(absorbedVol, format.volume) + (lvlDir == -1 ? " volume in green" : " volume in red") + (hasDelta ? " 1m candles (candle-colour proxy, not true bid/ask aggression)" : " part of the bar (close-location estimate)"))
+    label.new(bar_index, ay, str.tostring(absorbedVol, format.volume), style = label.style_none, textcolor = color.white, size = size.small)
+    if lvlHeavy
+        label.new(bar_index, ay, "HIGH VOLUME + REJECTION", style = lvlDir == -1 ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = color.new(color.white, 40), size = size.normal, yloc = lvlDir == -1 ? yloc.abovebar : yloc.belowbar)
+
+// ═══════════════════════════════ Confirmed entries ═══════════════════════════════
+// Absorption at an HVN is only a setup. The entry needs the NEXT bar to close in the
+// trade direction (most failed setups went straight against the trade on that bar).
+// Stop just beyond the absorption wick, target the nearest HVN at >= minRR, else 2R.
+grpE = "Entries (confirmation)"
+showEntry  = input.bool(true, "Show confirmed entries (ENTRY / SL / TP)", group = grpE)
+minRR      = input.float(1.5, "Min reward:risk to next HVN", minval = 0.5, step = 0.1, group = grpE)
+stopBufPct = input.float(0.014, "Stop buffer beyond wick (%) [S0]", minval = 0, step = 0.001, group = grpE)
+stopMode   = input.string("S0 wick + 0.014%", "Stop type", options = ["S0 wick + 0.014%", "S1 wick + 0.25 ATR", "S2 at least 1.0 ATR", "S3 beyond HVN zone + 0.1 ATR"], group = grpE, tooltip = "Target always = nearest HVN at >= minRR x the S0 risk (else 2R), as in the research study.")
+showTrack  = input.bool(true, "Trade tracker (R after costs)", group = grpE)
+commShare  = input.float(0.005, "Commission per share per side ($)", minval = 0, step = 0.001, group = grpE)
+slipTicks  = input.int(1, "Slippage (ticks) on market fills", minval = 0, group = grpE)
+var int pendDir = 0
+var float pendZLo = na
+var float pendZHi = na
+var int pendBar = na
+var float pendClose = na
+var float pendExt = na
+bool entryLong = false
+bool entryShort = false
+float entPx = na
+float slPx = na
+float tpPx = na
+if pendDir != 0 and bar_index == pendBar + 1
+    if (close - pendClose) * pendDir > 0
+        entPx := close
+        float s0 = pendDir == 1 ? pendExt - close * stopBufPct / 100 : pendExt + close * stopBufPct / 100
+        float s1 = pendDir == 1 ? pendExt - 0.25 * atrV : pendExt + 0.25 * atrV
+        float s2 = entPx - pendDir * math.max(math.abs(entPx - s0), atrV)
+        float s3 = pendDir == 1 ? pendZLo - 0.1 * atrV : pendZHi + 0.1 * atrV
+        if na(s3) or (entPx - s3) * pendDir <= 0
+            s3 := s1
+        slPx := str.startswith(stopMode, "S1") ? s1 : str.startswith(stopMode, "S2") ? s2 : str.startswith(stopMode, "S3") ? s3 : s0
+        float risk0 = math.abs(entPx - s0)
+        float best = na
+        for nd in nodes
+            float d = (nd.price - entPx) * pendDir
+            if d >= minRR * risk0 and (na(best) or d < (best - entPx) * pendDir)
+                best := nd.price
+        tpPx := na(best) ? entPx + 2 * risk0 * pendDir : best
+        entryLong := pendDir == 1
+        entryShort := pendDir == -1
+    pendDir := 0
+if lvlDir != 0
+    pendDir := lvlDir
+    pendBar := bar_index
+    pendClose := close
+    pendExt := lvlDir == 1 ? low : high
+    pendZLo := lvlZLo
+    pendZHi := lvlZHi
+if showEntry and (entryLong or entryShort)
+    color ec = entryLong ? cBuy : cSell
+    label.new(bar_index, entryLong ? low : high, "ENTRY " + (entryLong ? "LONG" : "SHORT"), style = entryLong ? label.style_label_up : label.style_label_down, color = ec, textcolor = color.white, size = size.small, yloc = entryLong ? yloc.belowbar : yloc.abovebar)
+    line.new(bar_index, entPx, bar_index + 20, entPx, color = color.white, width = 1)
+    line.new(bar_index, slPx, bar_index + 20, slPx, color = cSell, width = 1)
+    line.new(bar_index, tpPx, bar_index + 20, tpPx, color = cBuy, width = 1)
+    label.new(bar_index + 20, slPx, "SL " + str.tostring(slPx, format.mintick) + "  |  $" + str.tostring(math.abs(entPx - slPx), "#.##") + "  |  " + str.tostring(math.abs(entPx - slPx) / atrV, "#.##") + " ATR", style = label.style_label_left, color = color.new(cSell, 20), textcolor = color.white, size = size.tiny)
+    label.new(bar_index + 20, tpPx, "TP " + str.tostring(tpPx, format.mintick), style = label.style_label_left, color = color.new(cBuy, 20), textcolor = color.white, size = size.tiny)
+alertcondition(barstate.isconfirmed and entryLong, "ENTRY long (confirmed)", "{{ticker}}: confirmed LONG entry at {{close}}")
+alertcondition(barstate.isconfirmed and entryShort, "ENTRY short (confirmed)", "{{ticker}}: confirmed SHORT entry at {{close}}")
+if entryLong or entryShort
+    alert(syminfo.ticker + ": ENTRY " + (entryLong ? "LONG" : "SHORT") + " @ " + str.tostring(entPx, format.mintick) + "  SL " + str.tostring(slPx, format.mintick) + "  TP " + str.tostring(tpPx, format.mintick), alert.freq_once_per_bar_close)
+
+
+// ═══════════════════════════════ Trade tracker (paper, R after costs) ═══════════════════════════════
+// Same rules as the research simulation: entry at the confirmation close + slippage, stop first if
+// stop and target are hit in the same bar, gaps fill at the open, target as limit (no slippage),
+// open trades closed at the close of the bar that ends at/after 16:00 New York. Designed for RTH charts.
+type Trade
+    int   dir
+    float entry
+    float stop
+    float tgt
+    float risk
+    int   bar
+var array<Trade> openTr = array.new<Trade>()
+var int trN = 0
+var int trWin = 0
+var float trSumR = 0.0
+var float trWinR = 0.0
+var float trLossR = 0.0
+var int trLossN = 0
+var int trFastStop = 0
+float tick = syminfo.mintick * slipTicks
+bool eodBar = hour(time_close, "America/New_York") * 60 + minute(time_close, "America/New_York") >= 16 * 60
+if openTr.size() > 0
+    for k = openTr.size() - 1 to 0
+        Trade tt = openTr.get(k)
+        if bar_index > tt.bar
+            float exitFill = na
+            bool stopped = false
+            bool gapStop = tt.dir == 1 ? open <= tt.stop : open >= tt.stop
+            bool gapTgt = tt.dir == 1 ? open >= tt.tgt : open <= tt.tgt
+            bool hitStop = tt.dir == 1 ? low <= tt.stop : high >= tt.stop
+            bool hitTgt = tt.dir == 1 ? high >= tt.tgt : low <= tt.tgt
+            if gapStop
+                exitFill := open - tt.dir * tick
+                stopped := true
+            else if gapTgt
+                exitFill := open
+            else if hitStop
+                exitFill := tt.stop - tt.dir * tick
+                stopped := true
+            else if hitTgt
+                exitFill := tt.tgt
+            else if eodBar
+                exitFill := close
+            if not na(exitFill)
+                float rNet = ((exitFill - (tt.entry + tt.dir * tick)) * tt.dir - 2 * commShare) / tt.risk
+                trN += 1
+                trSumR += rNet
+                if rNet > 0
+                    trWin += 1
+                    trWinR += rNet
+                else
+                    trLossN += 1
+                    trLossR += rNet
+                if stopped and bar_index - tt.bar <= 2
+                    trFastStop += 1
+                openTr.remove(k)
+if entryLong or entryShort
+    openTr.push(Trade.new(entryLong ? 1 : -1, entPx, slPx, tpPx, math.abs(entPx - slPx), bar_index))
+var table trTb = table.new(position.bottom_right, 2, 6, bgcolor = color.new(#131722, 15), border_color = color.new(#787B86, 70), border_width = 1)
+if showTrack and barstate.islast
+    table.cell(trTb, 0, 0, "Trades (closed)", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(trTb, 1, 0, str.tostring(trN), text_color = color.white, text_size = size.small)
+    table.cell(trTb, 0, 1, "Win rate", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(trTb, 1, 1, trN > 0 ? str.tostring(trWin * 100.0 / trN, "#.#") + "%" : "-", text_color = color.white, text_size = size.small)
+    table.cell(trTb, 0, 2, "Avg R after costs", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(trTb, 1, 2, trN > 0 ? str.tostring(trSumR / trN, "#.##") : "-", text_color = trSumR >= 0 ? cBuy : cSell, text_size = size.small)
+    table.cell(trTb, 0, 3, "Avg win / avg loss", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(trTb, 1, 3, trWin > 0 and trLossN > 0 ? str.tostring((trWinR / trWin) / math.abs(trLossR / trLossN), "#.##") : "-", text_color = color.white, text_size = size.small)
+    table.cell(trTb, 0, 4, "% stopped within 2 bars", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(trTb, 1, 4, trN > 0 ? str.tostring(trFastStop * 100.0 / trN, "#.#") + "%" : "-", text_color = color.white, text_size = size.small)
+    table.cell(trTb, 0, 5, "Open trades", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(trTb, 1, 5, str.tostring(openTr.size()), text_color = color.white, text_size = size.small)
+plot(entryLong ? 1 : entryShort ? -1 : 0, "Entry signal", display = display.data_window)
+plot(entPx, "Entry price", display = display.data_window)
+plot(slPx, "Stop price", display = display.data_window)
+plot(tpPx, "Target price", display = display.data_window)
+plot(lvlDir, "Level absorption dir", display = display.data_window)
+
+// ═══════════════════════════════ Passive limit order zones ═══════════════════════════════
+var array<Zone> zones = array.new<Zone>()
+bool zoneBroken = false
+int brokenDir = 0
+bool zoneRetest = false
+int retestDir = 0
+for z in zones
+    if z.active
+        bool inside = low <= z.top and high >= z.bot
+        if (z.dir == 1 and close < z.bot) or (z.dir == -1 and close > z.top)
+            z.active := false
+            zoneBroken := true
+            brokenDir := z.dir
+            if not na(z.bx)
+                z.bx.set_right(bar_index)
+                z.bx.set_bgcolor(color.new(z.dir == 1 ? cBuy : cSell, 93))
+                z.bx.set_border_color(color.new(z.dir == 1 ? cBuy : cSell, 80))
+        else
+            if inside and z.armed
+                zoneRetest := true
+                retestDir := z.dir
+            if not inside
+                z.armed := true
+            if not na(z.bx)
+                z.bx.set_right(bar_index + 1)
+
+if bullAbs or bearAbs
+    float minH = nz(atrV) * minZoneAtr
+    float zTop = bullAbs ? math.min(open, close) : high
+    float zBot = bullAbs ? low : math.max(open, close)
+    if zTop - zBot < minH
+        if bullAbs
+            zTop := zBot + minH
+        else
+            zBot := zTop - minH
+    color zc = bullAbs ? cBuy : cSell
+    box zb = showZones ? box.new(bar_index, zTop, bar_index + 1, zBot, border_color = color.new(zc, 30), bgcolor = color.new(zc, 82), text = heavy ? "HEAVY" : "", text_color = color.new(zc, 20), text_size = size.tiny, text_halign = text.align_right) : na
+    zones.push(Zone.new(zb, zTop, zBot, bullAbs ? 1 : -1, true, false))
+    if zones.size() > maxZones
+        Zone old = zones.shift()
+        if not na(old.bx)
+            old.bx.delete()
+
+// ═══════════════════════════════ Psychological levels ═══════════════════════════════
+float psyStep = psyStepIn > 0 ? psyStepIn : close > 0 ? math.pow(10, math.floor(math.log10(close)) - 1) : 1.0
+bool atPsy = math.floor(high / psyStep) * psyStep >= low
+
+// ═══════════════════════════════ Multi-signal confluence ═══════════════════════════════
+int absDir = lvlDir != 0 ? lvlDir : bullAbs ? 1 : bearAbs ? -1 : 0
+bool absHeavy = lvlDir != 0 ? lvlHeavy : heavy
+int conf = 0
+string confTxt = ""
+if absDir != 0
+    conf := 1
+    confTxt := (absHeavy ? "LARGE " : "") + (absDir == 1 ? "bullish" : "bearish") + " absorption" + (lvlDir != 0 ? " at HVN " + str.tostring(lvlPrice, format.mintick) : "")
+    if atNode or lvlDir != 0
+        conf += 1
+        if lvlDir == 0
+            confTxt += " + HVN/POC"
+    if atPsy
+        conf += 1
+        confTxt += " + psych level"
+    if zoneRetest and retestDir == absDir
+        conf += 1
+        confTxt += " + passive zone retest"
+    if (absDir == 1 and bigSellV > 0) or (absDir == -1 and bigBuyV > 0)
+        conf += 1
+        confTxt += " + large 1m candles against the move"
+bool multiBull = absDir == 1 and conf >= 2
+bool multiBear = absDir == -1 and conf >= 2
+if showStars and (multiBull or multiBear) and not (showLvlAbs and lvlDir != 0)
+    label.new(bar_index, multiBull ? low : high, "★" + str.tostring(conf), style = multiBull ? label.style_label_up : label.style_label_down, color = multiBull ? cBuy : cSell, textcolor = color.white, size = size.small, tooltip = confTxt)
+
+var string lastSig = "-"
+if multiBull or multiBear
+    lastSig := "★" + str.tostring(conf) + " " + confTxt
+else if absDir != 0
+    lastSig := confTxt
+else if hvnRetest
+    lastSig := (pocRetest ? "POC" : "HVN") + " retest " + str.tostring(retestPrice, format.mintick)
+
+// ═══════════════════════════════ Plots ═══════════════════════════════
+plotshape(showStall and bullAbs and not heavy and not multiBull, "Bullish absorption", shape.triangleup, location.belowbar, cBuy, size = size.tiny)
+plotshape(showStall and bearAbs and not heavy and not multiBear, "Bearish absorption", shape.triangledown, location.abovebar, cSell, size = size.tiny)
+plotshape(showStall and bullAbs and heavy and not multiBull, "Heavy bullish absorption", shape.labelup, location.belowbar, cBuy, text = "ABS", textcolor = color.white, size = size.small)
+plotshape(showStall and bearAbs and heavy and not multiBear, "Heavy bearish absorption", shape.labeldown, location.abovebar, cSell, text = "ABS", textcolor = color.white, size = size.small)
+plotshape(showStall and hvnRetest ? retestPrice : na, "HVN/POC retest", shape.diamond, location.absolute, pocRetest ? cPoc : cHvn, size = size.tiny)
+barcolor(colorBars and bullAbs ? cBuy : colorBars and bearAbs ? cSell : na)
+
+// ═══════════════════════════════ Last-bar drawings ═══════════════════════════════
+var array<box> tmpBoxes = array.new<box>()
+var array<line> tmpLines = array.new<line>()
+var array<label> tmpLabels = array.new<label>()
+var float devPoc = na
+
+if barstate.islast
+    for b in tmpBoxes
+        b.delete()
+    for l in tmpLines
+        l.delete()
+    for lb in tmpLabels
+        lb.delete()
+    tmpBoxes.clear()
+    tmpLines.clear()
+    tmpLabels.clear()
+
+    // developing period
+    if showDev
+        int dn = math.min(bar_index - pStart + 1, 4999)
+        [dLo, dStep, dSm, dRaw, dBuy] = buildProfile(0, dn, rows, sigma)
+        if dStep > 0
+            [dk, dlo, dhi] = nodesOf(dSm, maxNodes)
+            float dPocV = dSm.max()
+            if dk.size() > 0
+                for j = 0 to dk.size() - 1
+                    int k = dk.get(j)
+                    bool isPoc = dSm.get(k) == dPocV
+                    float price = dLo + (k + 0.5) * dStep
+                    color c = isPoc ? cPoc : cHvn
+                    tmpBoxes.push(box.new(bar_index - dn + 1, dLo + (dhi.get(j) + 1) * dStep, bar_index + 1, dLo + dlo.get(j) * dStep, border_color = color.new(c, 50), border_style = line.style_dotted, bgcolor = color.new(c, 85)))
+                    if isPoc
+                        devPoc := price
+
+    // composite profile histogram on the right
+    if showComp
+        int cn = math.min(compLb, bar_index + 1)
+        [cLo, cStep, cSm, cRaw, cBuy] = buildProfile(0, cn, rows, sigma)
+        if cStep > 0
+            [ck, clo, chi] = nodesOf(cSm, maxNodes)
+            float hMax = cSm.max()
+            int hx = bar_index + 3
+            for k = 0 to cSm.size() - 1
+                int w = hMax > 0 ? int(math.round(cSm.get(k) / hMax * histWidth)) : 0
+                if w > 0
+                    bool inNode = false
+                    bool isPocRow = cSm.get(k) == hMax
+                    if ck.size() > 0
+                        for j = 0 to ck.size() - 1
+                            if k >= clo.get(j) and k <= chi.get(j)
+                                inNode := true
+                    color hc = isPocRow ? color.new(cPoc, 30) : inNode ? color.new(cHvn, 45) : cHist
+                    tmpBoxes.push(box.new(hx, cLo + (k + 1) * cStep, hx + w, cLo + k * cStep, border_color = na, bgcolor = hc))
+            if ck.size() > 0
+                for j = 0 to ck.size() - 1
+                    int k = ck.get(j)
+                    float price = cLo + (k + 0.5) * cStep
+                    bool isPoc = cSm.get(k) == hMax
+                    tmpLabels.push(label.new(hx + histWidth + 1, price, (isPoc ? "POC " : "HVN ") + str.tostring(price, format.mintick) + " " + str.tostring(cSm.get(k) / hMax * 100, "#") + "%", style = label.style_label_left, color = color.new(isPoc ? cPoc : cHvn, 20), textcolor = color.white, size = size.tiny))
+
+    // psychological levels
+    if showPsy
+        float base = math.round(close / psyStep) * psyStep
+        for j = -psyCount to psyCount
+            float lvl = base + j * psyStep
+            tmpLines.push(line.new(bar_index - 1, lvl, bar_index, lvl, extend = extend.both, color = cPsy, style = line.style_dotted, width = 1))
+            tmpLabels.push(label.new(bar_index + 2, lvl, str.tostring(lvl, format.mintick), style = label.style_none, textcolor = cPsy, size = size.tiny))
+            if psyHalf
+                tmpLines.push(line.new(bar_index - 1, lvl + psyStep / 2, bar_index, lvl + psyStep / 2, extend = extend.both, color = color.new(cPsy, 60), style = line.style_dotted, width = 1))
+
+// ═══════════════════════════════ Dashboard ═══════════════════════════════
+var table tb = table.new(position.top_right, 2, 6, bgcolor = color.new(#131722, 15), border_color = color.new(#787B86, 70), border_width = 1)
+if showTable and barstate.islast
+    color pc = buyPress >= 55 ? cBuy : buyPress <= 45 ? cSell : color.white
+    table.cell(tb, 0, 0, "Buy pressure (" + str.tostring(pressLen) + ")", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 1, 0, str.tostring(buyPress, "#") + "% / " + str.tostring(100 - buyPress, "#") + "%", text_color = pc, text_size = size.small)
+    table.cell(tb, 0, 1, "Bar delta", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 1, 1, hasDelta ? str.tostring(barDelta, format.volume) : "estimated", text_color = barDelta >= 0 ? cBuy : cSell, text_size = size.small)
+    table.cell(tb, 0, 2, "Prev period POC", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 1, 2, na(lastPoc) ? "-" : str.tostring(lastPoc, format.mintick), text_color = cPoc, text_size = size.small)
+    table.cell(tb, 0, 3, "Developing POC", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 1, 3, na(devPoc) ? "-" : str.tostring(devPoc, format.mintick), text_color = cPoc, text_size = size.small)
+    table.cell(tb, 0, 4, "Intrabar data", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 1, 4, nIb > 0 ? ltf + " (" + str.tostring(nIb) + " bars)" : "none - estimated", text_color = color.white, text_size = size.small)
+    table.cell(tb, 0, 5, "Last signal", text_color = color.white, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 1, 5, lastSig, text_color = color.white, text_size = size.small)
+
+// ═══════════════════════════════ Alerts ═══════════════════════════════
+alertcondition(barstate.isconfirmed and bullAbs, "Bullish absorption", "{{ticker}}: bullish absorption at {{close}}")
+alertcondition(barstate.isconfirmed and bearAbs, "Bearish absorption", "{{ticker}}: bearish absorption at {{close}}")
+alertcondition(barstate.isconfirmed and multiBull, "Multi-signal bullish", "{{ticker}}: bullish absorption with confluence at {{close}}")
+alertcondition(barstate.isconfirmed and multiBear, "Multi-signal bearish", "{{ticker}}: bearish absorption with confluence at {{close}}")
+alertcondition(barstate.isconfirmed and lvlDir == 1, "Absorption at HVN (bullish)", "{{ticker}}: sellers absorbed at HVN, bullish rejection at {{close}}")
+alertcondition(barstate.isconfirmed and lvlDir == -1, "Absorption at HVN (bearish)", "{{ticker}}: buyers absorbed at HVN, bearish rejection at {{close}}")
+alertcondition(barstate.isconfirmed and hvnRetest, "HVN / POC retest", "{{ticker}}: HVN/POC retest at {{close}}")
+alertcondition(barstate.isconfirmed and zoneBroken, "Passive zone broken", "{{ticker}}: passive limit order zone broken at {{close}}")
+
+if alHvn and hvnRetest
+    alert(syminfo.ticker + ": " + (pocRetest ? "POC" : "HVN") + " retest @ " + str.tostring(retestPrice, format.mintick), alert.freq_once_per_bar_close)
+if alAbs and absDir != 0 and not (multiBull or multiBear)
+    alert(syminfo.ticker + ": " + confTxt + " @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+if alConf and (multiBull or multiBear)
+    alert(syminfo.ticker + ": MULTI-SIGNAL ★" + str.tostring(conf) + " " + confTxt + " @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+if alZone and zoneBroken
+    alert(syminfo.ticker + ": " + (brokenDir == 1 ? "bullish (buyers)" : "bearish (sellers)") + " passive zone broken @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+if alAgg and bigMax >= aggMult * 2
+    alert(syminfo.ticker + ": large " + (bigBuyV >= bigSellV ? "GREEN" : "RED") + " 1m candle" + " " + str.tostring(bigMax, "#.#") + "x avg", alert.freq_once_per_bar_close)

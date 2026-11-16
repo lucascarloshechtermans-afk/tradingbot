@@ -1,0 +1,10 @@
+Beste stop op SPY (S60) op gem. netto R: S2
+  QQQ: S2 -0.700  vs S0 -0.703  (n=5)
+  IWM: S2 +0.432  vs S0 +0.432  (n=11)
+  DIA: S2 +0.543  vs S0 +0.576  (n=15)
+  XLK: S2 +0.323  vs S0 +0.485  (n=11)
+  XLF: S2 -0.357  vs S0 -0.357  (n=10)
+  ESF: S2 -0.045  vs S0 -0.045  (n=27)
+  beter dan S0 op 1 van 6 OOS-tickers (eis >= 4)
+  DSR S0 alle tickers: per-trade Sharpe=+0.099  P(echte Sharpe>0 na 200 pogingen)=0.025  n=92
+  DSR S2 alle tickers: per-trade Sharpe=+0.088  P(echte Sharpe>0 na 200 pogingen)=0.021  n=92

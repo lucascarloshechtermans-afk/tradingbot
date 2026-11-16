@@ -1,0 +1,20 @@
+
+######## S60 (stop S0) ########
+S60 T0 SPY                         n=  13 win= 46.2% grossR=+0.291 netR=+0.268 [-0.390,+1.090] med=-0.14 W/L=1.81 stop<=2bars= 23.1% maxLossStreak=4 maxDD=$-333 $/mnd=+124 optie%/trade=+54.6  optie% mediaan=-59.1 winst%=38% per-trade=[18.0, 245.0, 196.0, -93.0, -100.0, 592.0, -100.0, -86.0, -59.0, -73.0, 244.0, -11.0, -62.0]
+S60 T0 POOL_OOS                    n=  79 win= 43.0% grossR=+0.182 netR=+0.126 [-0.201,+0.494] med=-0.66 W/L=1.63 stop<=2bars=  7.6% maxLossStreak=8 maxDD=$-828 $/mnd=+355
+S60 T1 SPY                         n=   8 win= 50.0% grossR=+0.224 netR=+0.204 [-0.649,+1.584] med=-0.48 W/L=1.40 stop<=2bars= 37.5% maxLossStreak=2 maxDD=$-202 $/mnd=+58 optie%/trade=+52.0  optie% mediaan=-60.6 winst%=25% per-trade=[-33.0, -93.0, -100.0, 592.0, -59.0, 244.0, -73.0, -62.0]
+S60 T1 POOL_OOS                    n=  39 win= 53.8% grossR=+0.576 netR=+0.512 [+0.001,+1.066] med=+0.12 W/L=1.91 stop<=2bars= 10.3% maxLossStreak=6 maxDD=$-599 $/mnd=+711
+S60 T2 SPY                         n=   8 win= 37.5% grossR=+0.172 netR=+0.151 [-0.654,+1.358] med=-0.61 W/L=2.13 stop<=2bars= 37.5% maxLossStreak=3 maxDD=$-224 $/mnd=+43 optie%/trade=+51.4  optie% mediaan=-60.6 winst%=25% per-trade=[-37.0, -93.0, -100.0, 592.0, -59.0, 244.0, -73.0, -62.0]
+S60 T2 POOL_OOS                    n=  39 win= 46.2% grossR=+0.522 netR=+0.458 [-0.045,+1.025] med=-0.07 W/L=2.65 stop<=2bars= 10.3% maxLossStreak=6 maxDD=$-589 $/mnd=+636
+  DSR S60 T1 alle tickers: Sharpe/trade=+0.279  P(Sharpe>0 | 200 pogingen)=0.158  n=47
+  DSR S60 T2 alle tickers: Sharpe/trade=+0.254  P(Sharpe>0 | 200 pogingen)=0.110  n=47
+
+######## P (stop S0) ########
+P T0 SPY                           n=   1 win=  0.0% grossR=-1.000 netR=-1.035 [-1.035,-1.035] med=-1.03 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-103 $/mnd=-109 optie%/trade=-61.5  optie% mediaan=-61.5 winst%=0% per-trade=[-61.0]
+P T0 POOL_OOS                      n=  15 win= 33.3% grossR=+0.116 netR=+0.080 [-0.836,+1.170] med=-1.02 W/L=2.23 stop<=2bars= 13.3% maxLossStreak=6 maxDD=$-625 $/mnd=+126
+P T1 SPY                           n=   1 win=  0.0% grossR=-1.000 netR=-1.035 [-1.035,-1.035] med=-1.03 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-103 $/mnd=-109 optie%/trade=-61.5  optie% mediaan=-61.5 winst%=0% per-trade=[-61.0]
+P T1 POOL_OOS                      n=   4 win= 50.0% grossR=+1.514 netR=+1.474 [-1.042,+4.247] med=+0.47 W/L=3.83 stop<=2bars= 25.0% maxLossStreak=2 maxDD=$-208 $/mnd=+619
+P T2 SPY                           n=   1 win=  0.0% grossR=-1.000 netR=-1.035 [-1.035,-1.035] med=-1.03 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-103 $/mnd=-109 optie%/trade=-61.5  optie% mediaan=-61.5 winst%=0% per-trade=[-61.0]
+P T2 POOL_OOS                      n=   4 win= 50.0% grossR=+1.514 netR=+1.474 [-1.042,+4.247] med=+0.47 W/L=3.83 stop<=2bars= 25.0% maxLossStreak=2 maxDD=$-208 $/mnd=+619
+  DSR P T1 alle tickers: Sharpe/trade=+0.313  P(Sharpe>0 | 200 pogingen)=0.003  n=5
+  DSR P T2 alle tickers: Sharpe/trade=+0.313  P(Sharpe>0 | 200 pogingen)=0.003  n=5

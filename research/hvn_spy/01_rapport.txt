@@ -1,0 +1,114 @@
+RAPPORT  -  HVN Profile & Absorption op SPY (stop-onderzoek)       2026-11-16
+Pre-registratie: 00_preregistratie.txt (commit 6a08264, 08:57 UTC, vóór alle tests).
+Ruwe uitvoer: results_stap0.txt, results_stap1.txt, results_stap2.txt, results_stap2_diagnose_S0.txt,
+results_stap3.txt, results_stap4.txt. Logboek: 99_logboek.txt.
+
+=====================================================================================
+1. OORDEEL (max. 10 regels)
+=====================================================================================
+- Setup (stap 1): haalt de vooraf vastgelegde drempel nipt, maar is NIET robuust. Gepoold (S60, 153
+  absorpties) gaat de prijs vaker eerst 1 ATR in de signaalrichting: 58,8% vs 50% (+8,8 pp,
+  95% [+0,6; +16,9]). In de 1m-dataset is het teken omgekeerd (-10,0 pp, n=35), het verschil met een
+  gewone HVN-aanraking is niet significant, HVN-levels zelf reageren niet beter dan willekeurige
+  levels, en de bevestigingsregel voegt niets toe (-0,4 pp). Na correctie voor ±200 pogingen blijft er
+  niets over: oordeel "onzeker, waarschijnlijk geen bruikbaar voordeel".
+- Stop (stap 2/4): S0 blijft standaard. Geen variant is beter op de echte signalen; S2 (min. 1 ATR)
+  helpt alleen bij WILLEKEURIGE instappen (+0,135R) = kosten/ruis-effect, geen betere setup.
+  De S0-stop is hier niet te krap: mediaan 2,2 ATR, 20% van de stops binnen 2 bars.
+- Netto winstgevend: NIET AANGETOOND. S0 out-of-sample +0,13R/trade, 95% [-0,21; +0,50], n=79;
+  Deflated Sharpe P(echt > 0) = 0,025. 0DTE-opties: mediane trade -59%, gemiddelde +55% door 4 uitschieters.
+  Eerlijke uitkomst: alleen als context gebruiken; niet als zelfstandig handelssignaal.
+
+=====================================================================================
+2. DIAGNOSE VAN DE HUIDIGE STOP S0 (S60 = 5m, 59 sessies; P = 1m-logica, 20 sessies)
+=====================================================================================
+                               S60 SPY (13)      S60 alle 7 (92)     P alle 7 (16)
+stopafstand $   p25/p50/p75    0,86/2,00/2,23    0,72/1,47/6,09*     0,84/1,87/13,75*
+stopafstand ATR p25/p50/p75    1,16/2,91/3,37    1,60/2,20/3,14      1,25/1,80/2,16
+stop % koers    p25/p50/p75    0,11/0,26/0,29    0,15/0,26/0,39      0,15/0,19/0,26
+% trades op stop               46,2%             47,8%               68,8%
+ waarvan binnen 1/2/5 bars     33/50/83%         11/21/43%           27/27/27%
+MAE (R) p25/p50/p75            -1,28/-0,90/-0,44 -1,18/-0,98/-0,44   -1,07/-1,02/-0,42
+MFE (R) p25/p50/p75            0,18/0,58/1,81    0,29/0,83/1,66      0,12/0,61/1,44
+kosten in R per stop-kwartiel  0,050/0,015/0,012/0,007 (SPY)  0,068/0,067/0,035/0,036 (alle)
+na stop alsnog target geraakt  0% (n=6)          11,4% (n=44)        18,2% (n=11)
+  ... bij willekeurige instap  38,0%             34,1%               38,1%
+(* $-afstanden van ES in punten-equivalent zitten in de bovenste kwartielen.)
+Lezing: de review-aanname "±$0,10 stop" klopt niet. De buffer is $0,10, maar de stop ligt voorbij
+de wiek van een bar met veel volume; de afstand tot de instap is mediaan ±$2 / 2-3 ATR. Gestopte
+echte trades halen het target daarna veel MINDER vaak dan toeval: de stop knipt geen winnaars af.
+Kosten zijn klein (0,01-0,07R). Het probleem van het vorige project (±30% binnen minuten op een te
+krappe stop) is hier niet aanwezig.
+
+=====================================================================================
+3. PRE-REGISTRATIES
+=====================================================================================
+Volledig en ongewijzigd: 00_preregistratie.txt. Afwijkingen tijdens uitvoering staan in
+99_logboek.txt (sectie AFWIJKINGEN); geen enkele drempel of beslisregel is achteraf veranderd.
+
+=====================================================================================
+4. TESTTABELLEN
+=====================================================================================
+4a. STAP 1 (kans op +1 ATR in signaalrichting vóór -1 ATR; dag-geclusterd 95%-interval)
+                                                S60 gepoold           P (1m) gepoold
+(a) HVN-bounce - gespiegelde levels             +3,5 [-2,7; +9,3] pp  +9,3 [-2,3; +20,4] pp
+(a) HVN-bounce - verschoven levels (20x)        +2,7 [-2,5; +7,9]     +6,3 [-3,9; +16,9]
+(b2) absorptie - willekeurige richting (50%)    +8,8 [+0,6; +16,9]    -10,0 [-26,7; +7,6]
+(b1) absorptie - gewone HVN-aanraking (fade)    +7,4 [-1,3; +16,3]    -12,3 [-31,1; +7,5]
+(c) bevestigd - niet bevestigd                  -0,4 [-16,3; +15,7]   +7,9 [-26,6; +43,8]
+(c) bevestigd - willekeurige richting           +1,2 [-9,5; +11,7]    -7,1 [-31,2; +21,4]
+n: S60 absorpties 153, HVN-aanrakingen 827; P absorpties 35, aanrakingen 283.
+SPY alleen (S60): absorptie 55,0% (n=20), HVN-aanraking fade 57,0% (n=135).
+
+4b. STAP 2  -  echte signalen, netto R (na slippage 1 tick + commissie), 1R = $100, S60
+variant  scope        n   win%  bruto   netto [95%]            mediaan W/L  stop<=2b  verlies-  maxDD    $/mnd  optie%
+                                                                                     reeks
+S0       SPY         13   46,2  +0,291  +0,269 [-0,40;+1,08]   -0,14  1,81  23,1%    4         -$333    +124   +56 (med -59)
+S1       SPY         13   46,2  +0,263  +0,240 [-0,41;+1,04]   -0,14  1,74  23,1%    4         -$343    +111   +56
+S2       SPY         13   46,2  +0,291  +0,269 [-0,39;+1,11]   -0,14  1,81  23,1%    4         -$332    +124   +56
+S3       SPY         13   38,5  +0,243  +0,216 [-0,53;+1,02]   -1,01  2,21  23,1%    4         -$333    +100   +51
+S0       OOS gepoold 79   44,3  +0,182  +0,132 [-0,21;+0,50]   -0,59  1,57   7,6%    8         -$828    +372    -
+S1       OOS gepoold 79   45,6  +0,158  +0,110 [-0,22;+0,46]   -0,36  1,45   7,6%    8         -$826    +310    -
+S2       OOS gepoold 79   44,3  +0,153  +0,103 [-0,23;+0,46]   -0,59  1,50   7,6%    8         -$828    +291    -
+S3       OOS gepoold 79   36,7  +0,002  -0,055 [-0,39;+0,30]   -1,02  1,58  10,1%    8         -$1.115  -154    -
+Per ticker (S0 netto): QQQ -0,70 (5) | IWM +0,43 (11) | DIA +0,58 (15) | XLK +0,49 (11) | XLF -0,36 (10) | ES -0,05 (27)
+P-dataset (1m-logica): S0 SPY 1 trade (-1,03R); OOS gepoold 15 trades +0,08R [-0,84;+1,22]. Te klein voor conclusies.
+
+4c. STAP 2  -  willekeurige instappen (zelfde stop/target-regels), S60, OOS gepoold (n=1760)
+S0 -0,274 [-0,40;-0,14]  stop<=2 bars 46,9%  |  S1 -0,246  |  S2 -0,159 [-0,24;-0,09] stop<=2 bars 18,1%  |  S3 -0,226
+
+4d. GEPAARDE VERSCHILLEN Sx - S0 (netto R per signaal, S60)
+                    echte signalen (n=92)          willekeurig (n=2060)
+S1 - S0             -0,023 [-0,068; +0,017]         +0,045 [-0,011; +0,101]
+S2 - S0             -0,025 [-0,073;  0,000]         +0,135 [+0,052; +0,220]
+S3 - S0             -0,168 [-0,301; -0,056]         +0,073 [-0,007; +0,153]
+signalen met target < 1,5R door bredere stop: S1 13%, S2 0%, S3 11% (echt); S2 35% (willekeurig).
+=> Een bredere stop verbetert alleen willekeurige instappen. Dat is een kosten/ruis-effect
+   (minder stops op normale ruis), geen bewijs van een betere setup.
+
+4e. STAP 3 (uitgevoerd omdat stap 1 formeel slaagde)  -  stop S0, S60
+T0 (zoals indicator)  SPY 13  +0,268R   | OOS 79  +0,126R [-0,20;+0,49]
+T1 (09:45-15:00 + 15:50) SPY  8  +0,204R | OOS 39  +0,512R [+0,00;+1,07]   DSR P=0,158
+T2 (T1 + tijdstop 30m <0,5R) SPY 8 +0,151R | OOS 39 +0,458R [-0,05;+1,03]   DSR P=0,110
+Opties SPY (ATM 0DTE, BS, IV = VIX1D vorige dag, T in kalenderminuten/525.600): per trade
+[+18, +245, +196, -93, -100, +592, -100, -86, -59, -73, +244, -11, -62] %  -> mediaan -59%, 38% winst.
+T1/T2 zijn op SPY SLECHTER dan T0 en worden dus volgens de regel niet gekozen; OOS lijkt T1 beter,
+maar na correctie voor meervoudig testen (P=0,16) is dat niet significant -> hypothese voor forward-test.
+
+4f. STAP 4  -  beslisregel
+Beste stop op SPY: S2 (gelijk aan S0 op 3 decimalen). Beter dan S0 op 1 van 6 OOS-tickers (eis >= 4),
+gepoold verschil -0,025 [-0,073; 0,000] (eis > 0). -> S0 blijft de standaard. Optieschatting n.v.t.
+Deflated Sharpe (N=200): S0 per-trade Sharpe +0,099, P(echt > 0) = 0,025; S2 +0,088, P = 0,021.
+
+=====================================================================================
+5. WAT IK NIET KON METEN, EN WELKE DATA DAT WEL ZOU KUNNEN
+=====================================================================================
+- Echte agressie (bid/ask): de indicator en dit onderzoek gebruiken de KLEUR van 1m-candles. Nodig:
+  tick-trades met quote-context (bv. SPY TAQ / Polygon trades+quotes / Databento XNAS.ITCH) of CME
+  MDP3 met aggressor-vlag voor ES.
+- Lengte: 1m-data maar 20 sessies, 5m 59 sessies -> 13 SPY-signalen. Voor een betrouwbaar oordeel
+  zijn ±300+ signalen nodig (1-2 jaar 1m SPY + controles). Twelve Data heeft SPY-1m vanaf 2020-03-24,
+  maar alleen via een werkende REST-sleutel (nu 401) is bulk-download haalbaar.
+- Pine <-> Python gelijkheid: Pine kan hier niet draaien. Code is regel voor regel gespiegeld
+  (hvn_pine_twin.py); de bar-voor-bar controle moet met een TradingView-export (zie compare_pine_export.py).
+- Echte optieprijzen (bid/ask 0DTE): niet beschikbaar; Black-Scholes met VIX1D is een benadering.

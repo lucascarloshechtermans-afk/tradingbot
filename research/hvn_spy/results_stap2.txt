@@ -1,0 +1,170 @@
+
+######## DATASET S60 ########
+S60 real   SPY      S0             n=  13 win= 46.2% grossR=+0.291 netR=+0.269 [-0.398,+1.075] med=-0.14 W/L=1.81 stop<=2bars= 23.1% maxLossStreak=4 maxDD=$-333 $/mnd=+124 optie%/trade=+55.9
+S60 real   SPY      S1             n=  13 win= 46.2% grossR=+0.263 netR=+0.240 [-0.412,+1.036] med=-0.14 W/L=1.74 stop<=2bars= 23.1% maxLossStreak=4 maxDD=$-343 $/mnd=+111 optie%/trade=+55.5
+S60 real   SPY      S2             n=  13 win= 46.2% grossR=+0.291 netR=+0.269 [-0.388,+1.107] med=-0.14 W/L=1.81 stop<=2bars= 23.1% maxLossStreak=4 maxDD=$-332 $/mnd=+124 optie%/trade=+55.8
+S60 real   SPY      S3             n=  13 win= 38.5% grossR=+0.243 netR=+0.216 [-0.528,+1.021] med=-1.01 W/L=2.21 stop<=2bars= 23.1% maxLossStreak=4 maxDD=$-333 $/mnd=+100 optie%/trade=+51.1
+S60 real   QQQ      S0             n=   5 win= 20.0% grossR=-0.687 netR=-0.703 [-1.025,-0.071] med=-1.01 W/L=0.55 stop<=2bars= 20.0% maxLossStreak=3 maxDD=$-352 $/mnd=-125
+S60 real   QQQ      S1             n=   5 win= 20.0% grossR=-0.693 netR=-0.707 [-1.019,-0.087] med=-1.01 W/L=0.52 stop<=2bars= 20.0% maxLossStreak=3 maxDD=$-353 $/mnd=-126
+S60 real   QQQ      S2             n=   5 win= 20.0% grossR=-0.687 netR=-0.700 [-1.018,-0.070] med=-1.01 W/L=0.55 stop<=2bars= 20.0% maxLossStreak=3 maxDD=$-350 $/mnd=-125
+S60 real   QQQ      S3             n=   5 win= 20.0% grossR=-0.672 netR=-0.689 [-1.025,-0.026] med=-1.02 W/L=0.62 stop<=2bars= 20.0% maxLossStreak=3 maxDD=$-345 $/mnd=-123
+S60 real   IWM      S0             n=  11 win= 63.6% grossR=+0.471 netR=+0.432 [-0.433,+1.141] med=+0.97 W/L=1.22 stop<=2bars=  9.1% maxLossStreak=4 maxDD=$-421 $/mnd=+169
+S60 real   IWM      S1             n=  11 win= 63.6% grossR=+0.426 netR=+0.389 [-0.372,+1.074] med=+0.90 W/L=1.15 stop<=2bars=  9.1% maxLossStreak=4 maxDD=$-420 $/mnd=+152
+S60 real   IWM      S2             n=  11 win= 63.6% grossR=+0.471 netR=+0.432 [-0.377,+1.135] med=+0.97 W/L=1.22 stop<=2bars=  9.1% maxLossStreak=4 maxDD=$-421 $/mnd=+169
+S60 real   IWM      S3             n=  11 win= 36.4% grossR=-0.075 netR=-0.126 [-0.827,+0.727] med=-1.03 W/L=1.42 stop<=2bars= 18.2% maxLossStreak=5 maxDD=$-523 $/mnd=-49
+S60 real   DIA      S0             n=  15 win= 60.0% grossR=+0.604 netR=+0.576 [-0.259,+1.675] med=+0.06 W/L=1.60 stop<=2bars=  6.7% maxLossStreak=2 maxDD=$-208 $/mnd=+308
+S60 real   DIA      S1             n=  15 win= 66.7% grossR=+0.619 netR=+0.594 [-0.217,+1.590] med=+0.11 W/L=1.36 stop<=2bars=  6.7% maxLossStreak=2 maxDD=$-207 $/mnd=+317
+S60 real   DIA      S2             n=  15 win= 60.0% grossR=+0.570 netR=+0.543 [-0.299,+1.581] med=+0.06 W/L=1.54 stop<=2bars=  6.7% maxLossStreak=2 maxDD=$-208 $/mnd=+290
+S60 real   DIA      S3             n=  15 win= 53.3% grossR=+0.482 netR=+0.455 [-0.424,+1.464] med=+0.05 W/L=1.70 stop<=2bars= 13.3% maxLossStreak=2 maxDD=$-207 $/mnd=+243
+S60 real   XLK      S0             n=  11 win= 45.5% grossR=+0.520 netR=+0.485 [-0.536,+1.945] med=-0.09 W/L=2.63 stop<=2bars=  0.0% maxLossStreak=3 maxDD=$-257 $/mnd=+190
+S60 real   XLK      S1             n=  11 win= 45.5% grossR=+0.377 netR=+0.345 [-0.507,+1.473] med=-0.09 W/L=2.22 stop<=2bars=  0.0% maxLossStreak=3 maxDD=$-256 $/mnd=+135
+S60 real   XLK      S2             n=  11 win= 45.5% grossR=+0.357 netR=+0.323 [-0.547,+1.497] med=-0.09 W/L=2.15 stop<=2bars=  0.0% maxLossStreak=3 maxDD=$-257 $/mnd=+126
+S60 real   XLK      S3             n=  11 win= 45.5% grossR=+0.479 netR=+0.441 [-0.486,+1.579] med=-0.09 W/L=2.50 stop<=2bars=  0.0% maxLossStreak=3 maxDD=$-232 $/mnd=+173
+S60 real   XLF      S0             n=  10 win= 30.0% grossR=-0.220 netR=-0.357 [-0.834,+0.315] med=-0.48 W/L=0.89 stop<=2bars= 10.0% maxLossStreak=3 maxDD=$-458 $/mnd=-127
+S60 real   XLF      S1             n=  10 win= 30.0% grossR=-0.217 netR=-0.345 [-0.805,+0.351] med=-0.45 W/L=0.89 stop<=2bars= 10.0% maxLossStreak=3 maxDD=$-446 $/mnd=-123
+S60 real   XLF      S2             n=  10 win= 30.0% grossR=-0.220 netR=-0.357 [-0.817,+0.301] med=-0.48 W/L=0.89 stop<=2bars= 10.0% maxLossStreak=3 maxDD=$-458 $/mnd=-127
+S60 real   XLF      S3             n=  10 win= 20.0% grossR=-0.416 netR=-0.599 [-1.068,+0.170] med=-1.16 W/L=1.07 stop<=2bars= 10.0% maxLossStreak=4 maxDD=$-632 $/mnd=-213
+S60 real   ESF      S0             n=  27 win= 37.0% grossR=+0.003 netR=-0.045 [-0.620,+0.569] med=-1.02 W/L=1.59 stop<=2bars=  7.4% maxLossStreak=8 maxDD=$-828 $/mnd=-43
+S60 real   ESF      S1             n=  27 win= 37.0% grossR=+0.000 netR=-0.048 [-0.603,+0.561] med=-1.02 W/L=1.58 stop<=2bars=  7.4% maxLossStreak=8 maxDD=$-826 $/mnd=-46
+S60 real   ESF      S2             n=  27 win= 37.0% grossR=+0.003 netR=-0.045 [-0.577,+0.588] med=-1.02 W/L=1.59 stop<=2bars=  7.4% maxLossStreak=8 maxDD=$-828 $/mnd=-43
+S60 real   ESF      S3             n=  27 win= 33.3% grossR=-0.147 netR=-0.191 [-0.688,+0.359] med=-1.03 W/L=1.45 stop<=2bars=  7.4% maxLossStreak=8 maxDD=$-828 $/mnd=-184
+S60 real   POOL_OOS S0             n=  79 win= 44.3% grossR=+0.182 netR=+0.132 [-0.207,+0.495] med=-0.59 W/L=1.57 stop<=2bars=  7.6% maxLossStreak=8 maxDD=$-828 $/mnd=+372
+S60 real   POOL_OOS S1             n=  79 win= 45.6% grossR=+0.158 netR=+0.110 [-0.215,+0.455] med=-0.36 W/L=1.45 stop<=2bars=  7.6% maxLossStreak=8 maxDD=$-826 $/mnd=+310
+S60 real   POOL_OOS S2             n=  79 win= 44.3% grossR=+0.153 netR=+0.103 [-0.229,+0.461] med=-0.59 W/L=1.50 stop<=2bars=  7.6% maxLossStreak=8 maxDD=$-828 $/mnd=+291
+S60 real   POOL_OOS S3             n=  79 win= 36.7% grossR=+0.002 netR=-0.055 [-0.387,+0.301] med=-1.02 W/L=1.58 stop<=2bars= 10.1% maxLossStreak=8 maxDD=$-1,115 $/mnd=-154
+S60 random SPY      S0             n= 300 win= 26.3% grossR=-0.010 netR=-0.111 [-0.308,+0.091] med=-1.07 W/L=2.42 stop<=2bars= 45.3% maxLossStreak=14 maxDD=$-6,355 $/mnd=-1,189
+S60 random SPY      S1             n= 300 win= 29.7% grossR=-0.001 netR=-0.089 [-0.269,+0.096] med=-1.06 W/L=2.10 stop<=2bars= 40.7% maxLossStreak=14 maxDD=$-5,544 $/mnd=-954
+S60 random SPY      S2             n= 300 win= 41.3% grossR=+0.064 netR=+0.021 [-0.111,+0.160] med=-1.03 W/L=1.47 stop<=2bars= 19.0% maxLossStreak=10 maxDD=$-3,078 $/mnd=+221
+S60 random SPY      S3             n= 300 win= 41.3% grossR=+0.055 netR=-0.012 [-0.185,+0.162] med=-1.03 W/L=1.39 stop<=2bars= 30.0% maxLossStreak=12 maxDD=$-3,983 $/mnd=-125
+S60 random QQQ      S0             n= 200 win= 20.5% grossR=-0.256 netR=-0.345 [-0.540,-0.137] med=-1.06 W/L=2.34 stop<=2bars= 52.5% maxLossStreak=20 maxDD=$-7,559 $/mnd=-2,457
+S60 random QQQ      S1             n= 200 win= 26.0% grossR=-0.147 netR=-0.210 [-0.411,+0.018] med=-1.04 W/L=2.09 stop<=2bars= 39.0% maxLossStreak=15 maxDD=$-4,836 $/mnd=-1,496
+S60 random QQQ      S2             n= 200 win= 34.0% grossR=-0.220 netR=-0.252 [-0.403,-0.101] med=-1.02 W/L=1.22 stop<=2bars= 17.5% maxLossStreak=10 maxDD=$-5,550 $/mnd=-1,795
+S60 random QQQ      S3             n= 200 win= 32.5% grossR=-0.210 netR=-0.269 [-0.431,-0.095] med=-1.03 W/L=1.30 stop<=2bars= 34.0% maxLossStreak=16 maxDD=$-7,170 $/mnd=-1,913
+S60 random IWM      S0             n= 220 win= 25.9% grossR=+0.142 netR=-0.092 [-0.420,+0.247] med=-1.16 W/L=2.58 stop<=2bars= 50.5% maxLossStreak=21 maxDD=$-5,063 $/mnd=-723
+S60 random IWM      S1             n= 220 win= 29.1% grossR=+0.072 netR=-0.099 [-0.363,+0.184] med=-1.12 W/L=2.15 stop<=2bars= 44.1% maxLossStreak=13 maxDD=$-3,601 $/mnd=-774
+S60 random IWM      S2             n= 220 win= 45.9% grossR=+0.151 netR=+0.068 [-0.144,+0.284] med=-1.05 W/L=1.31 stop<=2bars= 14.1% maxLossStreak=6 maxDD=$-1,310 $/mnd=+536
+S60 random IWM      S3             n= 220 win= 34.1% grossR=+0.071 netR=-0.092 [-0.358,+0.199] med=-1.09 W/L=1.70 stop<=2bars= 34.5% maxLossStreak=10 maxDD=$-3,529 $/mnd=-722
+S60 random DIA      S0             n= 300 win= 28.0% grossR=+0.186 netR=+0.032 [-0.226,+0.345] med=-1.10 W/L=2.67 stop<=2bars= 43.0% maxLossStreak=17 maxDD=$-5,738 $/mnd=+339
+S60 random DIA      S1             n= 300 win= 29.3% grossR=+0.038 netR=-0.092 [-0.288,+0.123] med=-1.09 W/L=2.13 stop<=2bars= 40.0% maxLossStreak=16 maxDD=$-7,102 $/mnd=-986
+S60 random DIA      S2             n= 300 win= 40.3% grossR=+0.006 netR=-0.056 [-0.213,+0.110] med=-1.04 W/L=1.35 stop<=2bars= 20.0% maxLossStreak=7 maxDD=$-4,000 $/mnd=-594
+S60 random DIA      S3             n= 300 win= 34.3% grossR=+0.051 netR=-0.069 [-0.292,+0.183] med=-1.06 W/L=1.73 stop<=2bars= 34.3% maxLossStreak=10 maxDD=$-6,080 $/mnd=-739
+S60 random XLK      S0             n= 240 win= 25.0% grossR=+0.338 netR=+0.020 [-0.409,+0.543] med=-1.18 W/L=3.06 stop<=2bars= 47.9% maxLossStreak=15 maxDD=$-5,761 $/mnd=+169
+S60 random XLK      S1             n= 240 win= 30.0% grossR=+0.127 netR=-0.070 [-0.350,+0.244] med=-1.13 W/L=2.14 stop<=2bars= 37.1% maxLossStreak=7 maxDD=$-5,036 $/mnd=-596
+S60 random XLK      S2             n= 240 win= 41.2% grossR=-0.013 netR=-0.109 [-0.269,+0.052] med=-1.07 W/L=1.18 stop<=2bars= 20.0% maxLossStreak=7 maxDD=$-3,034 $/mnd=-935
+S60 random XLK      S3             n= 240 win= 32.9% grossR=+0.000 netR=-0.194 [-0.425,+0.072] med=-1.12 W/L=1.56 stop<=2bars= 37.1% maxLossStreak=9 maxDD=$-6,458 $/mnd=-1,658
+S60 random XLF      S0             n= 220 win= 20.9% grossR=-0.120 netR=-1.339 [-1.628,-1.036] med=-1.91 W/L=1.04 stop<=2bars= 49.1% maxLossStreak=15 maxDD=$-29,915 $/mnd=-10,487
+S60 random XLF      S1             n= 220 win= 25.0% grossR=-0.024 netR=-0.884 [-1.155,-0.568] med=-1.69 W/L=1.17 stop<=2bars= 37.3% maxLossStreak=12 maxDD=$-19,940 $/mnd=-6,923
+S60 random XLF      S2             n= 220 win= 35.9% grossR=-0.092 netR=-0.524 [-0.703,-0.337] med=-1.34 W/L=0.79 stop<=2bars= 14.5% maxLossStreak=11 maxDD=$-12,104 $/mnd=-4,101
+S60 random XLF      S3             n= 220 win= 31.4% grossR=+0.115 netR=-0.633 [-0.959,-0.269] med=-1.34 W/L=1.08 stop<=2bars= 30.9% maxLossStreak=11 maxDD=$-15,943 $/mnd=-4,960
+S60 random ESF      S0             n= 580 win= 25.9% grossR=-0.014 netR=-0.195 [-0.383,+0.000] med=-1.12 W/L=2.27 stop<=2bars= 44.5% maxLossStreak=17 maxDD=$-12,797 $/mnd=-4,016
+S60 random ESF      S1             n= 580 win= 27.2% grossR=-0.068 netR=-0.223 [-0.399,-0.057] med=-1.11 W/L=2.00 stop<=2bars= 40.5% maxLossStreak=16 maxDD=$-14,616 $/mnd=-4,606
+S60 random ESF      S2             n= 580 win= 38.3% grossR=-0.070 netR=-0.149 [-0.322,+0.004] med=-1.06 W/L=1.27 stop<=2bars= 19.3% maxLossStreak=9 maxDD=$-10,118 $/mnd=-3,074
+S60 random ESF      S3             n= 580 win= 36.0% grossR=-0.070 netR=-0.202 [-0.392,-0.034] med=-1.06 W/L=1.31 stop<=2bars= 31.4% maxLossStreak=14 maxDD=$-12,618 $/mnd=-4,174
+S60 random POOL_OOS S0             n=1760 win= 24.9% grossR=+0.047 netR=-0.274 [-0.398,-0.141] med=-1.13 W/L=2.22 stop<=2bars= 46.9% maxLossStreak=21 maxDD=$-49,478 $/mnd=-17,176
+S60 random POOL_OOS S1             n=1760 win= 27.8% grossR=-0.009 netR=-0.246 [-0.348,-0.144] med=-1.10 W/L=1.91 stop<=2bars= 39.8% maxLossStreak=16 maxDD=$-44,884 $/mnd=-15,382
+S60 random POOL_OOS S2             n=1760 win= 39.2% grossR=-0.042 netR=-0.159 [-0.235,-0.086] med=-1.05 W/L=1.20 stop<=2bars= 18.1% maxLossStreak=11 maxDD=$-29,517 $/mnd=-9,963
+S60 random POOL_OOS S3             n=1760 win= 34.1% grossR=-0.015 netR=-0.226 [-0.326,-0.130] med=-1.07 W/L=1.40 stop<=2bars= 33.3% maxLossStreak=16 maxDD=$-40,737 $/mnd=-14,166
+-- gepaarde verschillen Sx - S0 (netto R), dag-geclusterd 95% (S60)
+   real   SPY   S1-S0: n=  13 diff=-0.029 [-0.063,-0.005]  target<1.5R: 15.4%
+   real   SPY   S2-S0: n=  13 diff=+0.000 [+0.000,+0.000]  target<1.5R:  0.0%
+   real   SPY   S3-S0: n=  13 diff=-0.052 [-0.329,+0.111]  target<1.5R:  0.0%
+   real   OOS   S1-S0: n=  79 diff=-0.022 [-0.074,+0.023]  target<1.5R: 12.7%
+   real   OOS   S2-S0: n=  79 diff=-0.029 [-0.082,+0.000]  target<1.5R:  0.0%
+   real   OOS   S3-S0: n=  79 diff=-0.187 [-0.329,-0.060]  target<1.5R: 12.7%
+   real   ALLES S1-S0: n=  92 diff=-0.023 [-0.068,+0.017]  target<1.5R: 13.0%
+   real   ALLES S2-S0: n=  92 diff=-0.025 [-0.073,+0.000]  target<1.5R:  0.0%
+   real   ALLES S3-S0: n=  92 diff=-0.168 [-0.301,-0.056]  target<1.5R: 10.9%
+   random SPY   S1-S0: n= 300 diff=+0.023 [-0.056,+0.116]  target<1.5R:  8.0%
+   random SPY   S2-S0: n= 300 diff=+0.133 [-0.023,+0.293]  target<1.5R: 31.7%
+   random SPY   S3-S0: n= 300 diff=+0.100 [-0.090,+0.290]  target<1.5R: 31.0%
+   random OOS   S1-S0: n=1760 diff=+0.049 [-0.014,+0.115]  target<1.5R: 12.2%
+   random OOS   S2-S0: n=1760 diff=+0.135 [+0.036,+0.227]  target<1.5R: 35.7%
+   random OOS   S3-S0: n=1760 diff=+0.068 [-0.028,+0.159]  target<1.5R: 30.7%
+   random ALLES S1-S0: n=2060 diff=+0.045 [-0.011,+0.101]  target<1.5R: 11.6%
+   random ALLES S2-S0: n=2060 diff=+0.135 [+0.052,+0.220]  target<1.5R: 35.1%
+   random ALLES S3-S0: n=2060 diff=+0.073 [-0.007,+0.153]  target<1.5R: 30.7%
+
+######## DATASET P ########
+P real   SPY      S0               n=   1 win=  0.0% grossR=-1.000 netR=-1.035 [-1.035,-1.035] med=-1.03 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-103 $/mnd=-109 optie%/trade=-61.1
+P real   SPY      S1               n=   1 win=  0.0% grossR=-1.000 netR=-1.032 [-1.032,-1.032] med=-1.03 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-103 $/mnd=-108 optie%/trade=-64.6
+P real   SPY      S2               n=   1 win=  0.0% grossR=-1.000 netR=-1.035 [-1.035,-1.035] med=-1.03 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-103 $/mnd=-109 optie%/trade=-61.1
+P real   SPY      S3               n=   1 win=  0.0% grossR=-1.000 netR=-1.030 [-1.030,-1.030] med=-1.03 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-103 $/mnd=-108 optie%/trade=-67.1
+P real   QQQ      S0               n=   1 win=  0.0% grossR=-1.000 netR=-1.021 [-1.021,-1.021] med=-1.02 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-102 $/mnd=-107
+P real   QQQ      S1               n=   1 win=  0.0% grossR=-1.000 netR=-1.018 [-1.018,-1.018] med=-1.02 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-102 $/mnd=-107
+P real   QQQ      S2               n=   1 win=  0.0% grossR=-1.000 netR=-1.021 [-1.021,-1.021] med=-1.02 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-102 $/mnd=-107
+P real   QQQ      S3               n=   1 win=  0.0% grossR=-1.000 netR=-1.020 [-1.020,-1.020] med=-1.02 W/L= nan stop<=2bars=100.0% maxLossStreak=1 maxDD=$-102 $/mnd=-107
+P real   IWM      S0               n=   1 win=100.0% grossR=+1.546 netR=+1.522 [+1.522,+1.522] med=+1.52 W/L= nan stop<=2bars=  0.0% maxLossStreak=0 maxDD=$0 $/mnd=+160
+P real   IWM      S1               n=   1 win=100.0% grossR=+1.405 netR=+1.383 [+1.383,+1.383] med=+1.38 W/L= nan stop<=2bars=  0.0% maxLossStreak=0 maxDD=$0 $/mnd=+145
+P real   IWM      S2               n=   1 win=100.0% grossR=+1.546 netR=+1.522 [+1.522,+1.522] med=+1.52 W/L= nan stop<=2bars=  0.0% maxLossStreak=0 maxDD=$0 $/mnd=+160
+P real   IWM      S3               n=   1 win=100.0% grossR=+1.686 netR=+1.660 [+1.660,+1.660] med=+1.66 W/L= nan stop<=2bars=  0.0% maxLossStreak=0 maxDD=$0 $/mnd=+174
+P real   DIA      S0               n=   5 win= 40.0% grossR=-0.146 netR=-0.170 [-1.031,+0.808] med=-1.02 W/L=1.09 stop<=2bars=  0.0% maxLossStreak=3 maxDD=$-308 $/mnd=-89
+P real   DIA      S1               n=   5 win= 60.0% grossR=+0.043 netR=+0.021 [-1.026,+0.731] med=+0.11 W/L=0.70 stop<=2bars=  0.0% maxLossStreak=2 maxDD=$-205 $/mnd=+11
+P real   DIA      S2               n=   5 win= 40.0% grossR=-0.146 netR=-0.170 [-1.031,+0.808] med=-1.02 W/L=1.09 stop<=2bars=  0.0% maxLossStreak=3 maxDD=$-308 $/mnd=-89
+P real   DIA      S3               n=   5 win= 40.0% grossR=-0.155 netR=-0.183 [-1.043,+0.786] med=-1.02 W/L=1.06 stop<=2bars= 20.0% maxLossStreak=3 maxDD=$-309 $/mnd=-96
+P real   XLK      S0               n=   1 win=100.0% grossR=+6.056 netR=+6.009 [+6.009,+6.009] med=+6.01 W/L= nan stop<=2bars=  0.0% maxLossStreak=0 maxDD=$0 $/mnd=+631
+P real   XLK      S1               n=   1 win=100.0% grossR=+4.659 netR=+4.623 [+4.623,+4.623] med=+4.62 W/L= nan stop<=2bars=  0.0% maxLossStreak=0 maxDD=$0 $/mnd=+485
+P real   XLK      S2               n=   1 win=100.0% grossR=+4.255 netR=+4.222 [+4.222,+4.222] med=+4.22 W/L= nan stop<=2bars=  0.0% maxLossStreak=0 maxDD=$0 $/mnd=+443
+P real   XLK      S3               n=   1 win=100.0% grossR=+4.001 netR=+3.970 [+3.970,+3.970] med=+3.97 W/L= nan stop<=2bars=  0.0% maxLossStreak=0 maxDD=$0 $/mnd=+417
+P real   XLF      S0               n=0
+P real   XLF      S1               n=0
+P real   XLF      S2               n=0
+P real   XLF      S3               n=0
+P real   ESF      S0               n=   7 win= 14.3% grossR=-0.590 netR=-0.635 [-1.047,+0.375] med=-1.04 W/L=1.73 stop<=2bars= 14.3% maxLossStreak=6 maxDD=$-625 $/mnd=-467
+P real   ESF      S1               n=   7 win= 14.3% grossR=-0.587 netR=-0.630 [-1.044,+0.389] med=-1.04 W/L=1.75 stop<=2bars= 14.3% maxLossStreak=6 maxDD=$-623 $/mnd=-463
+P real   ESF      S2               n=   7 win= 14.3% grossR=-0.590 netR=-0.635 [-1.047,+0.378] med=-1.04 W/L=1.73 stop<=2bars= 14.3% maxLossStreak=6 maxDD=$-625 $/mnd=-467
+P real   ESF      S3               n=   7 win= 14.3% grossR=-0.711 netR=-0.751 [-1.049,-0.033] med=-1.04 W/L=0.95 stop<=2bars= 14.3% maxLossStreak=6 maxDD=$-625 $/mnd=-552
+P real   POOL_OOS S0               n=  15 win= 33.3% grossR=+0.116 netR=+0.081 [-0.839,+1.223] med=-1.02 W/L=2.24 stop<=2bars= 13.3% maxLossStreak=6 maxDD=$-625 $/mnd=+128
+P real   POOL_OOS S1               n=  15 win= 40.0% grossR=+0.078 netR=+0.046 [-0.719,+0.980] med=-1.02 W/L=1.61 stop<=2bars= 13.3% maxLossStreak=6 maxDD=$-623 $/mnd=+72
+P real   POOL_OOS S2               n=  15 win= 33.3% grossR=-0.004 netR=-0.038 [-0.834,+0.827] med=-1.02 W/L=1.89 stop<=2bars= 13.3% maxLossStreak=6 maxDD=$-625 $/mnd=-60
+P real   POOL_OOS S3               n=  15 win= 33.3% grossR=-0.071 netR=-0.104 [-0.840,+0.821] med=-1.02 W/L=1.70 stop<=2bars= 20.0% maxLossStreak=6 maxDD=$-625 $/mnd=-164
+P random SPY      S0               n= 200 win= 26.0% grossR=-0.006 netR=-0.089 [-0.375,+0.218] med=-1.06 W/L=2.53 stop<=2bars= 46.0% maxLossStreak=15 maxDD=$-4,614 $/mnd=-1,866
+P random SPY      S1               n= 200 win= 29.0% grossR=-0.053 netR=-0.118 [-0.368,+0.158] med=-1.04 W/L=2.06 stop<=2bars= 41.5% maxLossStreak=15 maxDD=$-3,949 $/mnd=-2,479
+P random SPY      S2               n= 200 win= 39.0% grossR=-0.046 netR=-0.079 [-0.308,+0.157] med=-1.02 W/L=1.36 stop<=2bars= 22.5% maxLossStreak=11 maxDD=$-3,704 $/mnd=-1,668
+P random SPY      S3               n= 200 win= 36.0% grossR=-0.049 netR=-0.111 [-0.377,+0.191] med=-1.03 W/L=1.49 stop<=2bars= 38.0% maxLossStreak=9 maxDD=$-2,947 $/mnd=-2,339
+P random QQQ      S0               n= 200 win= 23.0% grossR=-0.029 netR=-0.100 [-0.453,+0.318] med=-1.04 W/L=2.95 stop<=2bars= 51.5% maxLossStreak=23 maxDD=$-5,098 $/mnd=-2,098
+P random QQQ      S1               n= 200 win= 33.0% grossR=+0.044 netR=+0.003 [-0.212,+0.237] med=-1.03 W/L=2.04 stop<=2bars= 37.0% maxLossStreak=15 maxDD=$-3,645 $/mnd=+59
+P random QQQ      S2               n= 200 win= 41.0% grossR=-0.011 netR=-0.032 [-0.203,+0.157] med=-1.01 W/L=1.36 stop<=2bars= 17.0% maxLossStreak=9 maxDD=$-2,400 $/mnd=-669
+P random QQQ      S3               n= 200 win= 34.0% grossR=-0.010 netR=-0.049 [-0.259,+0.177] med=-1.02 W/L=1.80 stop<=2bars= 32.0% maxLossStreak=15 maxDD=$-3,497 $/mnd=-1,024
+P random IWM      S0               n= 200 win= 28.5% grossR=+0.229 netR=+0.017 [-0.273,+0.325] med=-1.11 W/L=2.56 stop<=2bars= 45.5% maxLossStreak=13 maxDD=$-2,976 $/mnd=+351
+P random IWM      S1               n= 200 win= 34.0% grossR=+0.182 netR=+0.040 [-0.218,+0.337] med=-1.08 W/L=2.04 stop<=2bars= 37.0% maxLossStreak=9 maxDD=$-2,567 $/mnd=+832
+P random IWM      S2               n= 200 win= 42.0% grossR=+0.083 netR=+0.011 [-0.230,+0.272] med=-1.04 W/L=1.41 stop<=2bars= 17.0% maxLossStreak=6 maxDD=$-1,715 $/mnd=+227
+P random IWM      S3               n= 200 win= 37.0% grossR=+0.215 netR=+0.071 [-0.265,+0.501] med=-1.05 W/L=1.87 stop<=2bars= 33.0% maxLossStreak=7 maxDD=$-1,675 $/mnd=+1,499
+P random DIA      S0               n= 200 win= 24.5% grossR=-0.130 netR=-0.279 [-0.524,-0.059] med=-1.11 W/L=2.12 stop<=2bars= 49.0% maxLossStreak=18 maxDD=$-7,295 $/mnd=-5,857
+P random DIA      S1               n= 200 win= 29.0% grossR=-0.022 netR=-0.136 [-0.373,+0.092] med=-1.08 W/L=2.04 stop<=2bars= 43.0% maxLossStreak=16 maxDD=$-4,238 $/mnd=-2,857
+P random DIA      S2               n= 200 win= 41.0% grossR=+0.039 netR=-0.014 [-0.160,+0.124] med=-1.04 W/L=1.41 stop<=2bars= 18.0% maxLossStreak=8 maxDD=$-1,920 $/mnd=-293
+P random DIA      S3               n= 200 win= 35.0% grossR=+0.055 netR=-0.038 [-0.327,+0.258] med=-1.05 W/L=1.76 stop<=2bars= 34.5% maxLossStreak=10 maxDD=$-3,336 $/mnd=-803
+P random XLK      S0               n= 200 win= 22.5% grossR=+0.320 netR=+0.055 [-0.533,+0.617] med=-1.14 W/L=3.64 stop<=2bars= 52.5% maxLossStreak=17 maxDD=$-6,717 $/mnd=+1,156
+P random XLK      S1               n= 200 win= 31.0% grossR=+0.205 netR=+0.066 [-0.246,+0.354] med=-1.09 W/L=2.41 stop<=2bars= 37.0% maxLossStreak=12 maxDD=$-5,373 $/mnd=+1,393
+P random XLK      S2               n= 200 win= 44.5% grossR=+0.207 netR=+0.141 [-0.106,+0.389] med=-1.04 W/L=1.55 stop<=2bars= 19.0% maxLossStreak=7 maxDD=$-2,461 $/mnd=+2,951
+P random XLK      S3               n= 200 win= 42.5% grossR=+0.282 netR=+0.169 [-0.167,+0.528] med=-1.03 W/L=1.71 stop<=2bars= 29.0% maxLossStreak=7 maxDD=$-2,754 $/mnd=+3,546
+P random XLF      S0               n= 200 win= 25.0% grossR=+0.092 netR=-1.119 [-1.450,-0.704] med=-1.82 W/L=1.11 stop<=2bars= 49.0% maxLossStreak=10 maxDD=$-24,096 $/mnd=-23,491
+P random XLF      S1               n= 200 win= 29.5% grossR=+0.043 netR=-0.781 [-1.052,-0.468] med=-1.61 W/L=1.03 stop<=2bars= 38.5% maxLossStreak=10 maxDD=$-16,944 $/mnd=-16,396
+P random XLF      S2               n= 200 win= 40.0% grossR=+0.019 netR=-0.387 [-0.589,-0.179] med=-1.31 W/L=0.83 stop<=2bars= 16.5% maxLossStreak=8 maxDD=$-8,985 $/mnd=-8,120
+P random XLF      S3               n= 200 win= 33.5% grossR=+0.154 netR=-0.636 [-0.892,-0.361] med=-1.50 W/L=1.01 stop<=2bars= 33.0% maxLossStreak=8 maxDD=$-14,425 $/mnd=-13,353
+P random ESF      S0               n= 200 win= 19.0% grossR=-0.518 netR=-0.671 [-1.032,-0.359] med=-1.11 W/L=1.58 stop<=2bars= 53.0% maxLossStreak=21 maxDD=$-14,355 $/mnd=-14,084
+P random ESF      S1               n= 200 win= 22.0% grossR=-0.508 netR=-0.624 [-0.950,-0.340] med=-1.09 W/L=1.30 stop<=2bars= 45.5% maxLossStreak=15 maxDD=$-13,295 $/mnd=-13,102
+P random ESF      S2               n= 200 win= 32.5% grossR=-0.326 netR=-0.390 [-0.749,-0.130] med=-1.06 W/L=1.11 stop<=2bars= 26.5% maxLossStreak=11 maxDD=$-8,324 $/mnd=-8,191
+P random ESF      S3               n= 200 win= 30.5% grossR=-0.387 netR=-0.492 [-0.824,-0.212] med=-1.06 W/L=0.99 stop<=2bars= 36.0% maxLossStreak=11 maxDD=$-10,848 $/mnd=-10,323
+P random POOL_OOS S0               n=1200 win= 23.8% grossR=-0.006 netR=-0.349 [-0.520,-0.169] med=-1.11 W/L=2.16 stop<=2bars= 50.1% maxLossStreak=23 maxDD=$-44,792 $/mnd=-44,023
+P random POOL_OOS S1               n=1200 win= 29.8% grossR=-0.009 netR=-0.239 [-0.373,-0.111] med=-1.07 W/L=1.73 stop<=2bars= 39.7% maxLossStreak=16 maxDD=$-32,703 $/mnd=-30,071
+P random POOL_OOS S2               n=1200 win= 40.2% grossR=+0.002 netR=-0.112 [-0.214,-0.009] med=-1.03 W/L=1.25 stop<=2bars= 19.0% maxLossStreak=11 maxDD=$-17,031 $/mnd=-14,093
+P random POOL_OOS S3               n=1200 win= 35.4% grossR=+0.052 netR=-0.162 [-0.303,-0.013] med=-1.04 W/L=1.46 stop<=2bars= 32.9% maxLossStreak=15 maxDD=$-23,856 $/mnd=-20,457
+-- gepaarde verschillen Sx - S0 (netto R), dag-geclusterd 95% (P)
+   real   SPY   S1-S0: n=   1 diff=+0.003 [+0.003,+0.003]  target<1.5R:  0.0%
+   real   SPY   S2-S0: n=   1 diff=+0.000 [+0.000,+0.000]  target<1.5R:  0.0%
+   real   SPY   S3-S0: n=   1 diff=+0.005 [+0.005,+0.005]  target<1.5R:  0.0%
+   real   OOS   S1-S0: n=  15 diff=-0.036 [-0.306,+0.205]  target<1.5R:  6.7%
+   real   OOS   S2-S0: n=  15 diff=-0.119 [-0.383,+0.000]  target<1.5R:  0.0%
+   real   OOS   S3-S0: n=  15 diff=-0.185 [-0.524,+0.014]  target<1.5R: 13.3%
+   real   ALLES S1-S0: n=  16 diff=-0.033 [-0.265,+0.188]  target<1.5R:  6.2%
+   real   ALLES S2-S0: n=  16 diff=-0.112 [-0.357,+0.000]  target<1.5R:  0.0%
+   real   ALLES S3-S0: n=  16 diff=-0.174 [-0.475,+0.014]  target<1.5R: 12.5%
+   random SPY   S1-S0: n= 200 diff=-0.057 [-0.145,+0.020]  target<1.5R: 15.0%
+   random SPY   S2-S0: n= 200 diff=-0.019 [-0.161,+0.116]  target<1.5R: 35.5%
+   random SPY   S3-S0: n= 200 diff=-0.051 [-0.265,+0.155]  target<1.5R: 32.5%
+   random OOS   S1-S0: n=1200 diff=+0.136 [+0.039,+0.227]  target<1.5R: 14.1%
+   random OOS   S2-S0: n=1200 diff=+0.263 [+0.140,+0.382]  target<1.5R: 38.2%
+   random OOS   S3-S0: n=1200 diff=+0.212 [+0.079,+0.333]  target<1.5R: 31.0%
+   random ALLES S1-S0: n=1400 diff=+0.108 [+0.023,+0.187]  target<1.5R: 14.2%
+   random ALLES S2-S0: n=1400 diff=+0.222 [+0.104,+0.325]  target<1.5R: 37.8%
+   random ALLES S3-S0: n=1400 diff=+0.175 [+0.060,+0.283]  target<1.5R: 31.2%

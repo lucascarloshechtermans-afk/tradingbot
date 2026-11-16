@@ -1,0 +1,7 @@
+SPY: signalen zelfde venster  1m-kleur=5  CLV-fallback=8  beide=5  alleen-1m=0  alleen-CLV=3
+QQQ: signalen zelfde venster  1m-kleur=4  CLV-fallback=11  beide=4  alleen-1m=0  alleen-CLV=7
+IWM: signalen zelfde venster  1m-kleur=3  CLV-fallback=7  beide=3  alleen-1m=0  alleen-CLV=4
+DIA: signalen zelfde venster  1m-kleur=9  CLV-fallback=11  beide=9  alleen-1m=0  alleen-CLV=2
+XLK: signalen zelfde venster  1m-kleur=3  CLV-fallback=6  beide=3  alleen-1m=0  alleen-CLV=3
+XLF: signalen zelfde venster  1m-kleur=3  CLV-fallback=5  beide=3  alleen-1m=0  alleen-CLV=2
+ESF: signalen zelfde venster  1m-kleur=12  CLV-fallback=29  beide=12  alleen-1m=0  alleen-CLV=17
