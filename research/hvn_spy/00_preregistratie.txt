@@ -1,0 +1,132 @@
+PRE-REGISTRATIE  -  HVN Profile & Absorption op SPY (en controle-tickers)
+Vastgelegd: 2026-11-16, VOOR het draaien van enige test in deze studie.
+Bewijs van tijdstip: git-commit van dit bestand op branch claude/vigilant-mccarthy-3dkn5n.
+Na deze commit worden regels, drempels en beslisregels NIET meer aangepast. Afwijkingen die
+tijdens het werk nodig blijken, komen in 99_logboek.txt met reden, en worden in het rapport
+als afwijking gemarkeerd.
+
+=====================================================================================
+0. DATA (beslissing + reden)
+=====================================================================================
+- Twelve Data: REST-sleutel wordt geweigerd (HTTP 401). Twelve Data via MCP werkt, maar elke
+  call komt in de context van het model (~70k tokens per 5000 bars): bulk-download is niet
+  haalbaar. Twelve Data wordt alleen gebruikt als volume-kruiscontrole.
+- Bulkbron: Yahoo Finance (yfinance).
+    P   = 1m-bars 2026-10-19 .. 2026-11-13 (20 RTH-sessies), 5m opgebouwd uit 1m.
+          Intrabar-logica overal = kleur van de 1m-candle (zoals Pine live op een 5m-chart).
+    S60 = 5m-bars 2026-08-21 .. 2026-11-13 (~59 RTH-sessies), GEEN intrabar-data.
+          Overal dezelfde Pine-fallback: koop/verkoop gesplitst op slotpositie (CLV),
+          delta-voorwaarde bij absorptie vervalt (zoals Pine: "not hasDelta or ...").
+  Primaire analyse = S60 (enige venster met genoeg sessies, één consistente logica).
+  P wordt als tweede analyse gerapporteerd (andere, ook consistente logica; 20 sessies).
+- Volume: Yahoo-dagvolume SPY = Twelve Data-dagvolume (10/10 dagen identiek). Som van de
+  RTH-intradaybars = 81-89% van het dagvolume. Het verschil is waarschijnlijk slotveiling en
+  extended hours; niet volledig te verifiëren met deze data.
+- Tickers: SPY (in-sample). Out-of-sample: QQQ, IWM, DIA, XLK, XLF (zelfde vensters),
+  ES=F (5m 2026-09-08..2026-11-16; 1m 2026-10-19..2026-11-15; CME-sessie 18:00-17:00 ET,
+  levels uit volledige Globex-sessies, signalen alleen 09:35-15:30 ET).
+- VIX1D: Yahoo ^VIX1D dagslot (vorige dag) als IV voor de optieschatting.
+- Random seed: 20261116.
+
+=====================================================================================
+1. INDICATORDEFINITIE (exact de Pine v6-standaard van pine/hvn_absorption.pine)
+=====================================================================================
+- Chart 5m, RTH (ETF's). Periode = dag (Pine "D"). Profiel per afgesloten periode over alle
+  bars van die periode: rows=120, Gauss-smoothing sigma=2.0 rijen (genormaliseerd, nul-padding),
+  HVN = lokale piek (v>=links en v>rechts) >= percentiel 60 van de rijen, gretig op volume,
+  min. 5 rijen uit elkaar, max 8 per periode, laatste 5 periodes bewaard.
+  Dunne banden: zone = alleen de piekrij. Volledige zone (voor stop S3): uitbreiden zolang
+  volume >= 80% van de piek en dalend.
+- Level-status (Pine): active (nog niet herbezocht) / armed (prijs was al eens buiten de zone).
+  "live" = active OF uit de meest recente periode.
+- rvol = volume / SMA(volume,20)[1].
+- Absorptie aan HVN (lvlDir): rvol >= 2.0 en voor een live level:
+  bearish: open < zone_low, high >= zone_low, close < zone_low, bovenwiek >= 50% van de range,
+           en (alleen als intrabar-data) delta% >= +10;
+  bullish: spiegelbeeld. Bij meerdere levels wint het laatste in de array (Pine-volgorde).
+  Heavy: rvol >= 2.5.
+- Bevestiging: volgende 5m-bar sluit voorbij de slot van de signaalbar in de signaalrichting.
+  Instap = slot van de bevestigingsbar.
+- Stop S0 = signaal-wiek -/+ (slot * 0,014%). Target = dichtstbijzijnde HVN (alle bewaarde
+  nodes) op >= 1,5R in de richting, anders 2R.
+
+=====================================================================================
+2. UITVOERING EN KOSTEN (zoals TradingView broker-emulator, conservatief)
+=====================================================================================
+- Instap marktorder op de slot van de bevestigingsbar + 1 tick slippage tegen je.
+- Stop = stop-marktorder: vult op het stopniveau + 1 tick, of op de open bij een gap voorbij
+  de stop (+1 tick). Target = limietorder: vult bij aanraking, geen slippage.
+- Stop en target in dezelfde bar -> stop eerst (conservatief).
+- Resolutie: 1m-bars in P, 5m-bars in S60.
+- Geen uitstap gevonden voor het slot -> uit op de slot van de laatste RTH-bar (afwijking van
+  Pine, die geen sluiting heeft; nodig omdat 0DTE-opties en dagtrades niet overnachten).
+- ETF: tick $0,01; commissie $0,005/aandeel per kant. ES: tick 0,25 pt ($12,50),
+  commissie $2,50/contract per kant (aanname).
+- 1R = $100: positie = $100 / stopafstand (fractioneel toegestaan voor de analyse).
+- Elk signaal is een aparte trade (de indicator kent geen positie); overlap wordt gerapporteerd.
+
+=====================================================================================
+3. STAP 1  -  IS DE SETUP IETS WAARD? (vóór de stop)
+=====================================================================================
+ATR = ta.atr(14) op 5m (RMA). Uitkomsten als "first passage" op de volgende bars tot sessie-einde.
+(a) HVN-reactie. Gebeurtenis = eerste aanraking van een live HVN na "armed" (Pine hvnRetest),
+    09:35-15:30. Naderingskant = teken(vorige slot - level). Uitkomst "bounce" = prijs bereikt
+    level + kant*1 ATR vóór level - kant*1 ATR. Maat: P(bounce) over beslechte gebeurtenissen.
+    Controle A (primair): gespiegelde levels: L' = open_sessie - (L - open_sessie), zelfde
+    afstand tot de koers; overgeslagen als binnen 1 ATR van een echt level.
+    Controle B: echt level verschoven met U[1,3] ATR(5m) * willekeurig teken, 20 trekkingen.
+(b) Absorptie. Instap op slot signaalbar in signaalrichting, vaste stop/target +-1 ATR.
+    Maat: P(+1R eerst). Vergeleken met:
+    b1: alle andere eerste aanrakingen van een HVN, richting = weg van het level (fade);
+    b2: dezelfde momenten, willekeurige richting (200 trekkingen).
+(c) Bevestiging. Binnen de absorpties: bevestigd (instap slot bevestigingsbar) vs.
+    niet-bevestigd (zelfde instapmoment, signaalrichting); en bevestigd vs. willekeurige
+    richting op dat moment.
+Statistiek: verschil t.o.v. referentie, 95%-interval via dag-geclusterde bootstrap (2000x).
+Primair: SPY. Bevestigend: gepoolde OOS-tickers.
+BESLISREGEL STAP 1: de setup "is iets waard" alleen als (b) absorptie - b2 > 0 met 95%-interval
+boven 0 in de gepoolde data (SPY + OOS), en het teken op SPY hetzelfde is.
+Zo niet: rapporteren "niet beter dan toeval"; stap 3 vervalt.
+
+=====================================================================================
+4. STAP 2  -  DE STOP
+=====================================================================================
+Diagnose S0: stopafstand ($, ATR, % koers), % op stop, binnen 1/2/5 bars, MAE/MFE (in R),
+kosten als deel van 1R per stopgrootte-kwartiel, en P(target alsnog geraakt na stop) vs.
+dezelfde maat bij willekeurige instappen.
+Varianten (vast, geen raster):
+  S0 wiek + 0,014% van de koers (huidig)
+  S1 wiek + 0,25 ATR
+  S2 max(wiek-stop, 1,0 ATR vanaf instap)  (de verste)
+  S3 andere kant van de volledige HVN-zone van het level + 0,1 ATR
+1R blijft $100 (kleinere positie bij bredere stop). Target-prijs blijft die van S0;
+gerapporteerd hoeveel signalen daardoor < 1,5R worden (trade gaat wel door).
+Gepaard: zelfde signalen, alleen stop verschilt; verschil Sx - S0 in netto R.
+Willekeurige instappen: per ticker 20x zoveel willekeurige 5m-bars (09:35-15:30), willekeurige
+richting, wiek = die bar, zelfde stop/target-regels. Verbetert een stop ook daar, dan is het
+een kosten/ruis-effect en geen betere setup; dat wordt expliciet gezegd.
+
+=====================================================================================
+5. STAP 3  -  REST VAN DE UITSTAP (alleen als stap 1 slaagt)
+=====================================================================================
+T1: sessiefilter instap 09:45-15:00 + sluiting 15:50 NY.
+T2: T1 + tijdstop: uit na 6 bars (30 min) als MFE < 0,5R.
+Optieschatting per trade: ATM 0DTE (call long / put short-signaal), Black-Scholes,
+sigma = VIX1D vorige dag / 100, T = minuten tot 16:00 / 525.600 (VIX-conventie, kalenderminuten),
+r = 4%, instap mid + $0,01, uitstap mid - $0,01, commissie $0,65/contract per kant.
+Gerapporteerd: optierendement % per trade.
+
+=====================================================================================
+6. STAP 4  -  OUT-OF-SAMPLE BESLISREGEL
+=====================================================================================
+Beste stop op SPY = hoogste gem. netto R (S60). Ongewijzigd getest op QQQ, IWM, DIA, XLK, XLF, ES.
+Nieuwe standaard alleen als: (1) beter dan S0 op de meerderheid (>= 4 van 6) van die tickers,
+(2) gepoold verschil Sx - S0 met dag-geclusterd bootstrap-95%-interval boven 0, en
+(3) geschat optieresultaat (indien berekend) ook beter. Anders blijft S0 standaard.
+
+=====================================================================================
+7. MEERVOUDIG TESTEN
+=====================================================================================
+Deflated Sharpe Ratio (Bailey & Lopez de Prado) voor elk eindresultaat met N_trials = 200
+(alle varianten in deze studie plus ~150 eerder in dit project geteste varianten op NQ/ES/YM/
+RTY/BTC). Rapportage van alle geteste varianten in het logboek, ook mislukte.
