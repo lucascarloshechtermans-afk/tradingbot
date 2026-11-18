@@ -48,8 +48,9 @@ minDelta   = input.float(10, "Min |delta| (% of volume)", minval = 0, step = 1, 
 showZones  = input.bool(false, "Passive limit order zones", group = grpA)
 maxZones   = input.int(20, "Max active zones", minval = 1, maxval = 100, group = grpA)
 showLvlAbs = input.bool(true, "Absorption at HVN (rejection) bubbles", group = grpA, tooltip = "Price pushes into an HVN on heavy volume and closes back out of it with a long wick. Buy/sell side is a 1m candle-colour proxy, not true aggressor data.")
-lvlRvol    = input.float(2.0, "Level absorption: min relative volume", minval = 1, step = 0.1, group = grpA)
-lvlWick    = input.float(50, "Level absorption: min wick (% of range)", minval = 10, maxval = 95, group = grpA)
+freqMode   = input.string("Normal (1.5x vol / 40% wick)", "Signal frequency", options = ["Strict (2.0x vol / 50% wick)", "Normal (1.5x vol / 40% wick)", "Loose (1.2x vol / 30% wick)", "Custom (inputs below)"], group = grpA, tooltip = "SPY, 59 days: Strict ~1 trade/week, Normal ~2/week, Loose ~3/week. Average R was similar and NOT proven profitable for any of them.")
+lvlRvol    = input.float(2.0, "Level absorption: min relative volume (Custom)", minval = 1, step = 0.1, group = grpA)
+lvlWick    = input.float(50, "Level absorption: min wick (% of range) (Custom)", minval = 10, maxval = 95, group = grpA)
 minZoneAtr = input.float(0.15, "Min zone height (x ATR)", minval = 0.01, step = 0.05, group = grpA)
 
 grpL = "Psychological levels"
@@ -360,7 +361,9 @@ else if newPeriod
 float rngL = high - low
 float upWick = rngL > 0 ? (high - math.max(open, close)) / rngL * 100 : 0.0
 float dnWick = rngL > 0 ? (math.min(open, close) - low) / rngL * 100 : 0.0
-bool lvlHeavyVol = rvol >= lvlRvol
+float lvlRvolE = str.startswith(freqMode, "Strict") ? 2.0 : str.startswith(freqMode, "Normal") ? 1.5 : str.startswith(freqMode, "Loose") ? 1.2 : lvlRvol
+float lvlWickE = str.startswith(freqMode, "Strict") ? 50.0 : str.startswith(freqMode, "Normal") ? 40.0 : str.startswith(freqMode, "Loose") ? 30.0 : lvlWick
+bool lvlHeavyVol = rvol >= lvlRvolE
 bool hvnRetest = false
 bool pocRetest = false
 float retestPrice = na
@@ -376,13 +379,13 @@ for nd in nodes
         atNode := true
     if live and lvlHeavyVol
         // bearish: pushed up into the node, rejected back below it; buyers absorbed
-        if open < nd.lo and high >= nd.lo and close < nd.lo and upWick >= lvlWick and (not hasDelta or dRatioL >= minDelta)
+        if open < nd.lo and high >= nd.lo and close < nd.lo and upWick >= lvlWickE and (not hasDelta or dRatioL >= minDelta)
             lvlDir := -1
             lvlPrice := nd.price
             lvlZLo := nd.fullLo
             lvlZHi := nd.fullHi
         // bullish: pushed down into the node, rejected back above it; sellers absorbed
-        if open > nd.hi and low <= nd.hi and close > nd.hi and dnWick >= lvlWick and (not hasDelta or dRatioL <= -minDelta)
+        if open > nd.hi and low <= nd.hi and close > nd.hi and dnWick >= lvlWickE and (not hasDelta or dRatioL <= -minDelta)
             lvlDir := 1
             lvlPrice := nd.price
             lvlZLo := nd.fullLo
@@ -424,7 +427,7 @@ stopMode   = input.string("S0 wick + 0.014%", "Stop type", options = ["S0 wick +
 showTrack  = input.bool(true, "Trade tracker (R after costs)", group = grpE)
 commShare  = input.float(0.005, "Commission per share per side ($)", minval = 0, step = 0.001, group = grpE)
 slipTicks  = input.int(1, "Slippage (ticks) on market fills", minval = 0, group = grpE)
-maxPerDay  = input.int(1, "Max entries per day (0 = unlimited)", minval = 0, group = grpE, tooltip = "Takes the FIRST confirmed entry of the day. A 'strongest of the day' filter is not possible live and a strength score did not predict better outcomes in testing (see research/hvn_spy/99_logboek.txt).")
+maxPerDay  = input.int(2, "Max entries per day (0 = unlimited)", minval = 0, group = grpE, tooltip = "Takes the FIRST confirmed entry of the day. A 'strongest of the day' filter is not possible live and a strength score did not predict better outcomes in testing (see research/hvn_spy/99_logboek.txt).")
 var int entToday = 0
 if timeframe.change("D")
     entToday := 0

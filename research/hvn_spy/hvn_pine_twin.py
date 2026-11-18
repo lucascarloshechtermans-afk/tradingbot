@@ -21,7 +21,8 @@ import numpy as np
 import pandas as pd
 
 ROWS, SIGMA, THR_PCT, ZONE_RATIO, MIN_SEP, MAX_NODES, MAX_PERIODS = 120, 2.0, 60.0, 80.0, 5, 8, 5
-RVOL_LEN, ATR_LEN, LVL_RVOL, HEAVY_RVOL, LVL_WICK, MIN_DELTA = 20, 14, 2.0, 2.5, 50.0, 10.0
+# LVL_RVOL / LVL_WICK = Pine 'Signal frequency' preset; default 'Normal' since 2026-11-18 (was Strict 2.0 / 50)
+RVOL_LEN, ATR_LEN, LVL_RVOL, HEAVY_RVOL, LVL_WICK, MIN_DELTA = 20, 14, 1.5, 2.5, 40.0, 10.0
 MIN_RR, STOP_BUF_PCT = 1.5, 0.014
 
 
@@ -115,7 +116,7 @@ def rma(x, n):
 
 
 def run_twin(b5: pd.DataFrame, buy: np.ndarray, sell: np.ndarray, has_delta: np.ndarray, session_key: np.ndarray,
-             max_per_day: int = 1, day_key: np.ndarray | None = None):
+             max_per_day: int = 2, day_key: np.ndarray | None = None):
     """b5: 5m OHLCV (chart bars, chronological). buy/sell: per-bar buy/sell volume (intrabar or CLV).
     session_key: period id per bar (Pine timeframe.change("D")).
     Returns dict with per-bar arrays and event lists."""

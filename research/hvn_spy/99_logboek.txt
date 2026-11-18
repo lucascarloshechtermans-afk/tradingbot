@@ -86,3 +86,11 @@ MISLUKT / NIET UITGEVOERD
        tweeling (run_twin max_per_day=1 standaard; studie-resultaten hierboven waren ONBEPERKT).
        Effect S60: 99 -> 81 instappen (SPY 15 -> 12). Compile-check van het gewijzigde blok: geslaagd.
        Een gegarandeerd signaal per dag is NIET gebouwd: op SPY is er gemiddeld ~1 per week.
+
+2026-11-18 09:30 ET  Gebruiker: "neem meer trades". Gemeten (S60, 59 dagen, CLV-logica, max 2/dag), in-sample:
+       Strict 2,0x/50%: SPY 0,20/dag +0,13R [-0,62;+1,04] | andere 6: 78 trades +0,15R [-0,18;+0,52]
+       Normal 1,5x/40%: SPY 0,35/dag +0,12R [-0,48;+0,74] | andere 6: 132 trades +0,14R [-0,14;+0,45]
+       Loose 1,2x/30%:  SPY 0,62/dag +0,18R [-0,34;+0,72] | andere 6: 199 trades +0,07R [-0,17;+0,31]
+       BESLISSING: preset "Signal frequency" in Pine, standaard Normal; max entries/dag standaard 2.
+       Twin-defaults aangepast (LVL_RVOL 1,5, LVL_WICK 40, max_per_day 2). Geen variant bewezen winstgevend.
+       Compile-check gewijzigd blok: geslaagd. (17 nov: 0 signalen; 16 nov: 0 signalen.)
