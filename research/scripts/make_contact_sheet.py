@@ -55,16 +55,18 @@ def main():
             im.thumbnail((TILE_W, IMG_H))
             sheet.paste(im, (cx + (TILE_W - im.width) // 2, cy + (IMG_H - im.height) // 2))
         except Exception:  # noqa: BLE001
-            d.text((cx + 100, cy + IMG_H // 2), "geen foto", font=f_name, fill=GREY)
+            d.rectangle([cx, cy, cx + TILE_W, cy + IMG_H], fill=(242, 242, 242))
+            d.text((cx + 105, cy + IMG_H // 2 - 30), "geen foto", font=f_name, fill=GREY)
+            d.text((cx + 40, cy + IMG_H // 2), "geen leverancier gevonden", font=f_txt, fill=GREY)
         d.rectangle([cx, cy, cx + 46, cy + 40], fill=col)
         d.text((cx + 8, cy + 5), f"{r['rank']}", font=f_rank, fill="white")
         ty = cy + IMG_H + 8
         d.text((cx + 8, ty), NL.get(r["product"], r["product"]), font=f_name, fill=INK)
         gm = r["gross_margin_eur"]
-        gm_txt = f"EUR {float(gm):.2f}".replace(".", ",") if gm not in ("ONBEKEND",) else "ONBEKEND"
+        gm_txt = f"EUR {float(gm):.2f}".replace(".", ",") if gm not in ("ONBEKEND",) else "?"
         d.text((cx + 8, ty + 32), f"Score {r['total_score'].replace('.', ',')}  |  verkoop EUR {r['sell_price_eur'].replace('.', ',')}",
                font=f_txt, fill=INK)
-        d.text((cx + 8, ty + 56), f"Marge/order {gm_txt}  |  BE-ROAS {r['break_even_roas'].replace('.', ',')}", font=f_txt, fill=INK)
+        d.text((cx + 8, ty + 56), f"Marge/order {gm_txt}  |  BE-ROAS {r['break_even_roas'].replace('.', ',').replace('ONBEKEND', '?')}", font=f_txt, fill=INK)
         status = "EINDLIJST" if ok else "uit: " + r["not_eligible_because"]
         d.text((cx + 8, ty + 84), status[:40], font=ImageFont.truetype(FB if ok else F, 17), fill=col)
     out = ROOT / "images" / "overzicht.png"
