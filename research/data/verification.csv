@@ -1,0 +1,16 @@
+claim,url,status,evidence_or_note,checked_on
+"Kalodata: ADDWIN fascia ring $1.78M July 2026 at $22.39",https://quicksync.pro/blog/tiktok-shop-trending-products-2026/,BEVESTIGD,"quote: did $1.78 million in July 2026 at $22.39 a unit, per Kalodata",2026-11-20
+"Kalodata: SEESE cordless pressure washer $1.97M July 2026",https://quicksync.pro/blog/tiktok-shop-trending-products-2026/,BEVESTIGD,"quote: did $1.97 million on TikTok Shop in July 2026, per Kalodata",2026-11-20
+"MediaMarkt NL massage ring EUR 74.99",https://www.mediamarkt.nl/nl/product/_italian-design-spiermassage-en-ontspanning-ring-massage-apparaat-163244725.html,ONBEVESTIGD,HTTP 403 at re-check,2026-11-20
+"MediaMarkt BE massage ring EUR 43.99",https://www.mediamarkt.be/en/product/_italian-design-muscle-massage-and-relaxation-ring-massage-device-163244725.html,ONBEVESTIGD,HTTP 403 at re-check,2026-11-20
+"ANWB Pleafs warmtedeken EUR 87.96 (regular 109.95)",https://www.anwb.nl/webwinkel/p/237718/warmtedeken-40x110cm?anwb_color=21531,BEVESTIGD,"Ledenprijs 87,96; Reguliere prijs 109,95; non-members also 87,96",2026-11-20
+"MediaMarkt BE Lanaform Heat Wrap EUR 74.12",https://www.mediamarkt.be/en/product/_lanaform-heat-wrap-portable-heated-poncho-green-164025417.html,ONBEVESTIGD,HTTP 403,2026-11-20
+"Fruugo USB poncho EUR 44.74",https://www.fruugo.ie/usb-electric-heated-throw-blanket-warm-poncho-wrap-blanket-portable-shawl/p-399313565,ONBEVESTIGD,HTTP 403,2026-11-20
+"STT SnuggleHeat self-warming pet bed $64,335/month, sell $39.95",https://www.sellthetrend.com/blog/winning-products,BEVESTIGD,"quote: $64,335 Estimated Monthly Revenue. Buy for $6.52, sell for $39.95",2026-11-20
+"Triple Whale Meta CPA $38.99; Home&Garden ROAS 2.25; Meta median ROAS 1.88",https://www.triplewhale.com/blog/facebook-ads-benchmarks,ONBEVESTIGD,HTTP 403 (figures only seen in search snippets),2026-11-20
+"SuperAds NL e-commerce cost per purchase 43.67",https://www.superads.ai/facebook-ads-costs/cost-per-purchase/e-commerce/netherlands,NIET GEVONDEN,"page shows 'All countries' avg ~$34.34, July 2026 $16.51; 43.67 not on page -> removed as fact",2026-11-20
+"ASInsight sunrise alarm clock top seller 20,000/month, 135 products",https://www.asinsight.com/report/US/sunrise-alarm-clock,BEVESTIGD,"quote: estimated 20,000 monthly sales ... 135 tracked products (July 2026)",2026-11-20
+"Chewy Mora Pets self-warming bed 4.6 / 227 / $23.59",https://www.chewy.com/best/heated-cat-beds_s112296,GECORRIGEERD,"page: 4.6 stars, 237 ratings, $18.56 (Small) -> raw_signals updated",2026-11-20
+"CPSC recall Gobi Heat rechargeable hand warmers 1 Oct 2026",https://www.cpsc.gov/node/67453,ONBEVESTIGD,HTTP 403,2026-11-20
+"AliExpress cost data (own fetch)",data/aliexpress_search*.json,REPRODUCEERBAAR,"raw JSON stored; re-run scripts/aliexpress_search.py (prices change daily)",2026-11-20
+"Amazon.de/.fr/.nl bestseller ranks + card prices (own fetch)",data/amazon_lists.json,REPRODUCEERBAAR,"raw JSON stored; ranks change hourly",2026-11-20
