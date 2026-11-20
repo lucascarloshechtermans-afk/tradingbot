@@ -24,7 +24,7 @@ Alle getallen zijn terug te voeren op `data/raw_signals.csv` (bron, URL en datum
 
 ![Overzicht van alle 15 producten](images/overzicht.png)
 
-*Foto's: hoofdfoto van de beste AliExpress-leverancierslisting (bron per foto in `data/images.csv`). Handafdruk-gipsset: eBay.de-listing, want er is geen AliExpress-leverancier gevonden. Deze foto's zijn alleen voor intern onderzoek. Voor je eigen winkel en advertenties heb je toestemming van de leverancier of eigen foto's nodig.*
+*Foto's: hoofdfoto van de beste AliExpress-leverancierslisting (bron per foto in `data/images.csv`). Handafdruk-gipsset: geen foto, want er is geen leverancier gevonden (AliExpress gaf alleen babysets; eBay, Fruugo, Walmart en Desertcart blokkeerden). Deze foto's zijn alleen voor intern onderzoek. Voor je eigen winkel en advertenties heb je toestemming van de leverancier of eigen foto's nodig.*
 
 Totaalscore 0–10, gewichten in DECISIONS.md. "Eindlijst" = voldoet aan alle harde regels.
 
@@ -242,6 +242,7 @@ Ter vergelijking (**ONBEVESTIGD**, de bron gaf 403 bij herverificatie): in zoekr
 
 | Bestand | Inhoud |
 |---|---|
+| `REPORT.pdf` / `REPORT.html` | dit rapport met alle foto's erin (gemaakt met `scripts/build_report_pdf.py`) |
 | `products_scored.csv` | alle 15 shortlistproducten met scores, onderbouwing per score, marges en leverancierslink |
 | `data/raw_signals.csv` | 308 ruwe signalen (product, bron, url, metric, waarde, datum) |
 | `data/filter_results.csv` | oordeel per kandidaat in fase 2 met reden |
