@@ -116,7 +116,7 @@ def rma(x, n):
 
 
 def run_twin(b5: pd.DataFrame, buy: np.ndarray, sell: np.ndarray, has_delta: np.ndarray, session_key: np.ndarray,
-             max_per_day: int = 2, day_key: np.ndarray | None = None):
+             max_per_day: int = 2, day_key: np.ndarray | None = None, confirm: bool = False):
     """b5: 5m OHLCV (chart bars, chronological). buy/sell: per-bar buy/sell volume (intrabar or CLV).
     session_key: period id per bar (Pine timeframe.change("D")).
     Returns dict with per-bar arrays and event lists."""
@@ -181,10 +181,13 @@ def run_twin(b5: pd.DataFrame, buy: np.ndarray, sell: np.ndarray, has_delta: np.
         if lvl_dir != 0:
             signals.append(dict(bar=t, dir=lvl_dir, node=lvl_node, heavy=bool(rvol[t] >= HEAVY_RVOL), rvol=float(rvol[t]),
                                 dratio=float(dratio[t]), wick=float(up_w[t] if lvl_dir == -1 else dn_w[t])))
-        # Pine: confirmed entries block (after the absorption block)
-        if pend is not None and t == pend[1] + 1:
+        # Pine: entries block (after the absorption block). Without confirmation the absorption bar
+        # itself is the entry bar.
+        if not confirm and lvl_dir != 0:
+            pend = (lvl_dir, t, c[t], l[t] if lvl_dir == 1 else h[t], lvl_node)
+        if pend is not None and t == pend[1] + (1 if confirm else 0):
             d, _, pc, ext, nd0 = pend
-            if (c[t] - pc) * d > 0 and (max_per_day == 0 or ent_today.get(day_key[t], 0) < max_per_day):
+            if (not confirm or (c[t] - pc) * d > 0) and (max_per_day == 0 or ent_today.get(day_key[t], 0) < max_per_day):
                 ent_today[day_key[t]] = ent_today.get(day_key[t], 0) + 1
                 ent = c[t]
                 sl = ext - c[t] * STOP_BUF_PCT / 100 if d == 1 else ext + c[t] * STOP_BUF_PCT / 100
@@ -197,6 +200,6 @@ def run_twin(b5: pd.DataFrame, buy: np.ndarray, sell: np.ndarray, has_delta: np.
                 entries.append(dict(bar=t, sig_bar=pend[1], dir=d, entry=ent, stop=sl, target=tp, ext=ext, node=nd0,
                                     target_is_hvn=best is not None, atr=float(atr[t])))
             pend = None
-        if lvl_dir != 0:
+        if confirm and lvl_dir != 0:
             pend = (lvl_dir, t, c[t], l[t] if lvl_dir == 1 else h[t], lvl_node)
     return dict(atr=atr, rvol=rvol, dratio=dratio, signals=signals, entries=entries, retests=retests, day_nodes=day_nodes)

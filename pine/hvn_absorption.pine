@@ -427,6 +427,7 @@ stopMode   = input.string("S0 wick + 0.014%", "Stop type", options = ["S0 wick +
 showTrack  = input.bool(true, "Trade tracker (R after costs)", group = grpE)
 commShare  = input.float(0.005, "Commission per share per side ($)", minval = 0, step = 0.001, group = grpE)
 slipTicks  = input.int(1, "Slippage (ticks) on market fills", minval = 0, group = grpE)
+useConfirm = input.bool(false, "Require confirmation bar", group = grpE, tooltip = "Off (default since 2026-11-20): enter at the close of the absorption bar. In testing the confirmation bar did not improve outcomes (-0.4 pp, 95% [-16; +16]) and halved the number of trades.")
 maxPerDay  = input.int(2, "Max entries per day (0 = unlimited)", minval = 0, group = grpE, tooltip = "Takes the FIRST confirmed entry of the day. A 'strongest of the day' filter is not possible live and a strength score did not predict better outcomes in testing (see research/hvn_spy/99_logboek.txt).")
 var int entToday = 0
 if timeframe.change("D")
@@ -442,8 +443,17 @@ bool entryShort = false
 float entPx = na
 float slPx = na
 float tpPx = na
-if pendDir != 0 and bar_index == pendBar + 1
-    if (close - pendClose) * pendDir > 0 and (maxPerDay == 0 or entToday < maxPerDay)
+// Without confirmation the absorption bar itself is the entry bar (pending is set first, then
+// handled on the same bar). With confirmation the next bar must close in the trade direction.
+if not useConfirm and lvlDir != 0
+    pendDir := lvlDir
+    pendBar := bar_index
+    pendClose := close
+    pendExt := lvlDir == 1 ? low : high
+    pendZLo := lvlZLo
+    pendZHi := lvlZHi
+if pendDir != 0 and bar_index == pendBar + (useConfirm ? 1 : 0)
+    if (not useConfirm or (close - pendClose) * pendDir > 0) and (maxPerDay == 0 or entToday < maxPerDay)
         entToday += 1
         entPx := close
         float s0 = pendDir == 1 ? pendExt - close * stopBufPct / 100 : pendExt + close * stopBufPct / 100
@@ -463,7 +473,7 @@ if pendDir != 0 and bar_index == pendBar + 1
         entryLong := pendDir == 1
         entryShort := pendDir == -1
     pendDir := 0
-if lvlDir != 0
+if useConfirm and lvlDir != 0
     pendDir := lvlDir
     pendBar := bar_index
     pendClose := close

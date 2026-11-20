@@ -94,3 +94,12 @@ MISLUKT / NIET UITGEVOERD
        BESLISSING: preset "Signal frequency" in Pine, standaard Normal; max entries/dag standaard 2.
        Twin-defaults aangepast (LVL_RVOL 1,5, LVL_WICK 40, max_per_day 2). Geen variant bewezen winstgevend.
        Compile-check gewijzigd blok: geslaagd. (17 nov: 0 signalen; 16 nov: 0 signalen.)
+
+2026-11-20 06:00 ET  Gebruiker: "neem toch calls, doe een restrictie minder". BESLISSING: bevestigingsbar optioneel,
+       standaard UIT (stap 1c: bevestiging voegde niets toe, -0,4 pp [-16; +16]). Pine + tweeling (confirm=False).
+       59 dagen (S60, Normal, max 2/dag): bevestiging AAN: SPY 21 trades (1,8/week) +0,12R [-0,45;+0,81], andere 6:
+       132 trades +0,14R [-0,14;+0,43]. UIT: SPY 33 trades (2,8/week) +0,15R [-0,26;+0,58], andere 6: 208 trades
+       +0,05R [-0,18;+0,30]. Meer trades, op de andere tickers iets lagere R (niet significant). Niet bewezen winstgevend.
+       Week 16-19 nov (1m-logica): wo 18 nov 15:50 put -> stop 15:55 (-1,06R netto); do 19 nov 15:55 put op een
+       FOUTE PRINT (1m-high 731,89 bij koers 717) -> ongeldig. Yahoo reviseert 1m-data: tussen twee runs vandaag
+       verschoof het volume licht en veranderden grenssignalen (wo 18 nov). Compile-check gewijzigd blok: geslaagd.
