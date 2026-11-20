@@ -22,25 +22,29 @@ Alle getallen zijn terug te voeren op `data/raw_signals.csv` (bron, URL en datum
 
 ## Ranking van de shortlist (uit `products_scored.csv`)
 
+![Overzicht van alle 15 producten](images/overzicht.png)
+
+*Foto's: hoofdfoto van de beste AliExpress-leverancierslisting (bron per foto in `data/images.csv`). Handafdruk-gipsset: eBay.de-listing, want er is geen AliExpress-leverancier gevonden. Deze foto's zijn alleen voor intern onderzoek. Voor je eigen winkel en advertenties heb je toestemming van de leverancier of eigen foto's nodig.*
+
 Totaalscore 0–10, gewichten in DECISIONS.md. "Eindlijst" = voldoet aan alle harde regels.
 
-| # | Product | Score | Verkoop | Inkoop (mediaan) | Brutomarge | Break-even ROAS | Max CPA | Eindlijst? |
-|---|---|---|---|---|---|---|---|---|
-| 1 | **Zelfverwarmende dierenmand (cave/nest)** | **6,08** | €39,95 | €14,59 | €16,65 (41,7%) | **2,40** | €16,65 | ✅ |
-| 2 | Leeslampje met klem | 5,59 | €19,95 | €5,89 | €9,65 | 2,07 | €9,65 | ❌ prijs < €20; Amazon.de €10–16 met 14k–43k reviews |
-| 3 | Elektrische matcha-klopper | 5,23 | €14,95 | €5,59 | €5,94 | 2,52 | €5,94 | ❌ prijs < €20; Action-set €6,95 |
-| 4 | **Draagbare USB-warmtedeken** | **4,80** | €59,95 | €34,59 | €10,74 (17,9%) | 5,58 | €10,74 | ✅ |
-| 5 | Elektrische ijskrabber | 4,60 | €49,95 | €25,99 (1 listing) | €11,96 | 4,18 | €11,96 | ❌ < 3 bron-domeinen |
-| 6 | **Fascia-massagering (elektrisch)** | **4,60** | €44,95 | €24,59 | €9,44 (21,0%) | 4,76 | €9,44 | ✅ |
-| 7 | Wake-up light | 4,40 | €44,95 | €37,99 | −€5,03 | n.v.t. | — | ❌ negatieve marge |
-| 8 | Bluetooth-labelprinter | 4,40 | €39,95 | €33,89 | −€4,63 | n.v.t. | — | ❌ negatieve marge |
-| 9 | Mok-warmer | 4,34 | €19,95 | €9,29 | €5,99 | 3,33 | €5,99 | ❌ prijs < €20 |
-| 10 | Handafdruk-gipsset (Valentijn) | 4,30 | €29,95 | ONBEKEND | ONBEKEND | ONBEKEND | — | ❌ geen leverancier gevonden |
-| 11 | **Draadloze hogedrukreiniger (auto)** | **4,20** | €59,95 | €32,19 | €13,33 (22,2%) | 4,50 | €13,33 | ✅ |
-| 12 | Oplaadbare handwarmer | 4,15 | €24,95 | €20,39 | −€2,15 | n.v.t. | — | ❌ negatieve marge |
-| 13 | Verwarmd zitkussen 12V | 4,05 | €39,95 | €20,79 | €9,51 | 4,20 | €9,51 | ❌ < 3 bron-domeinen |
-| 14 | **Verwarmd oogmasker (USB)** | **3,75** | €29,95 | €16,89 (2 listings) | €6,00 (20,0%) | 4,99 | €6,00 | ✅ |
-| 15 | "Titanium" snijplank | 3,30 | €34,95 | €38,79 (puur titanium) | −€13,18 | n.v.t. | — | ❌ negatieve marge + misleiding |
+| # | Foto | Product | Score | Verkoop | Inkoop (mediaan) | Brutomarge | Break-even ROAS | Max CPA | Eindlijst? |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | <img src="images/self-warming-pet-bed.jpg" width="90"> | **Zelfverwarmende dierenmand (cave/nest)** | **6,08** | €39,95 | €14,59 | €16,65 (41,7%) | **2,40** | €16,65 | ✅ |
+| 2 | <img src="images/book-clamp-reading-light.jpg" width="90"> | Leeslampje met klem | 5,59 | €19,95 | €5,89 | €9,65 | 2,07 | €9,65 | ❌ prijs < €20; Amazon.de €10–16 met 14k–43k reviews |
+| 3 | <img src="images/electric-matcha-whisk.jpg" width="90"> | Elektrische matcha-klopper | 5,23 | €14,95 | €5,59 | €5,94 | 2,52 | €5,94 | ❌ prijs < €20; Action-set €6,95 |
+| 4 | <img src="images/wearable-heated-blanket.jpg" width="90"> | **Draagbare USB-warmtedeken** | **4,80** | €59,95 | €34,59 | €10,74 (17,9%) | 5,58 | €10,74 | ✅ |
+| 5 | <img src="images/electric-ice-scraper.jpg" width="90"> | Elektrische ijskrabber | 4,60 | €49,95 | €25,99 (1 listing) | €11,96 | 4,18 | €11,96 | ❌ < 3 bron-domeinen |
+| 6 | <img src="images/fascia-massage-ring.jpg" width="90"> | **Fascia-massagering (elektrisch)** | **4,60** | €44,95 | €24,59 | €9,44 (21,0%) | 4,76 | €9,44 | ✅ |
+| 7 | <img src="images/sunrise-alarm-clock.jpg" width="90"> | Wake-up light | 4,40 | €44,95 | €37,99 | −€5,03 | n.v.t. | — | ❌ negatieve marge |
+| 8 | <img src="images/bluetooth-label-printer.jpg" width="90"> | Bluetooth-labelprinter | 4,40 | €39,95 | €33,89 | −€4,63 | n.v.t. | — | ❌ negatieve marge |
+| 9 | <img src="images/mug-warmer.jpg" width="90"> | Mok-warmer | 4,34 | €19,95 | €9,29 | €5,99 | 3,33 | €5,99 | ❌ prijs < €20 |
+| 10 | <img src="images/hand-casting-kit.jpg" width="90"> | Handafdruk-gipsset (Valentijn) | 4,30 | €29,95 | ONBEKEND | ONBEKEND | ONBEKEND | — | ❌ geen leverancier gevonden |
+| 11 | <img src="images/cordless-pressure-washer.jpg" width="90"> | **Draadloze hogedrukreiniger (auto)** | **4,20** | €59,95 | €32,19 | €13,33 (22,2%) | 4,50 | €13,33 | ✅ |
+| 12 | <img src="images/rechargeable-hand-warmer.jpg" width="90"> | Oplaadbare handwarmer | 4,15 | €24,95 | €20,39 | −€2,15 | n.v.t. | — | ❌ negatieve marge |
+| 13 | <img src="images/heated-seat-cushion.jpg" width="90"> | Verwarmd zitkussen 12V | 4,05 | €39,95 | €20,79 | €9,51 | 4,20 | €9,51 | ❌ < 3 bron-domeinen |
+| 14 | <img src="images/heated-eye-mask.jpg" width="90"> | **Verwarmd oogmasker (USB)** | **3,75** | €29,95 | €16,89 (2 listings) | €6,00 (20,0%) | 4,99 | €6,00 | ✅ |
+| 15 | <img src="images/titanium-cutting-board.jpg" width="90"> | "Titanium" snijplank | 3,30 | €34,95 | €38,79 (puur titanium) | −€13,18 | n.v.t. | — | ❌ negatieve marge + misleiding |
 
 Ter vergelijking (**ONBEVESTIGD**, de bron gaf 403 bij herverificatie): in zoekresultaten noemde Triple Whale een mediaan-ROAS op Meta van ~1,88, en 2,25 voor Home & Garden. Als die cijfers ongeveer kloppen, zit zelfs #1 (break-even ROAS 2,40) boven het gemiddelde dat adverteerders halen.
 
@@ -51,6 +55,8 @@ Ter vergelijking (**ONBEVESTIGD**, de bron gaf 403 bij herverificatie): in zoekr
 ## De 5 producten van de eindlijst
 
 ### 1. Zelfverwarmende dierenmand (cave/nest, zonder stroom) — score 6,08
+
+<img src="images/self-warming-pet-bed.jpg" width="260">
 
 **Waarom nu (AFLEIDING):** de winterpiek loopt van december tot februari. Er zit geen elektronica in, dus het compliance-risico is het laagste van de hele lijst. Sell The Trend zette het product als pick voor januari 2026.
 
@@ -93,6 +99,8 @@ Ter vergelijking (**ONBEVESTIGD**, de bron gaf 403 bij herverificatie): in zoekr
 
 ### 2. Draagbare USB-warmtedeken / warmtesjaal — score 4,80
 
+<img src="images/wearable-heated-blanket.jpg" width="260">
+
 **Waarom nu (AFLEIDING):** het is volop winter. AliExpress-listings die op 3 en 15 november 2026 zijn geplaatst, staan al op 183–900+ verkocht (eigen fetch). Dat is het sterkste "nieuw en stijgend"-signaal uit dit onderzoek.
 
 **Bewijs:**
@@ -129,6 +137,8 @@ Ter vergelijking (**ONBEVESTIGD**, de bron gaf 403 bij herverificatie): in zoekr
 
 ### 3. Elektrische fascia-massagering — score 4,60
 
+<img src="images/fascia-massage-ring.jpg" width="260">
+
 **Waarom nu (AFLEIDING):** januari draait om goede voornemens, fitness en herstel. In de US was het in juli 2026 een topproduct op TikTok Shop. Ik vond nog maar weinig Benelux-aanbieders.
 
 **Bewijs:**
@@ -161,6 +171,8 @@ Ter vergelijking (**ONBEVESTIGD**, de bron gaf 403 bij herverificatie): in zoekr
 
 ### 4. Draadloze hogedrukreiniger (auto/tuin) — score 4,20
 
+<img src="images/cordless-pressure-washer.jpg" width="260">
+
 **Waarom (AFLEIDING):** in de US was het een TikTok-topper in juli 2026. Op TikTok Shop in Europa groeit de categorie Home Improvement met +202% tot +298%. Het product scoort het hoogst op wow-factor (9/10).
 
 **Bewijs:**
@@ -190,6 +202,8 @@ Ter vergelijking (**ONBEVESTIGD**, de bron gaf 403 bij herverificatie): in zoekr
 ---
 
 ### 5. Verwarmd oogmasker (USB) — score 3,75
+
+<img src="images/heated-eye-mask.jpg" width="260">
 
 **Waarom (AFLEIDING):** winter, ogen moe van schermen, positionering op slaap. Dit is het zwakst onderbouwde product van de vijf.
 
@@ -233,6 +247,7 @@ Ter vergelijking (**ONBEVESTIGD**, de bron gaf 403 bij herverificatie): in zoekr
 | `data/filter_results.csv` | oordeel per kandidaat in fase 2 met reden |
 | `data/unit_economics.csv` | marge, break-even ROAS, max CPA/CPC, CPA-scenario's per product |
 | `data/verification.csv` | herverificatie van de belangrijkste cijfers in fase 5 |
+| `images/` + `data/images.csv` | productfoto per shortlistproduct, `overzicht.png` (alle 15) en bron per foto |
 | `data/aliexpress_search*.json`, `data/amazon_lists.json` | ruwe data van de eigen fetch |
 | `scripts/` | fetch-, filter-, marge- en scoringsscripts (reproduceerbaar) |
 | `DECISIONS.md`, `LIMITATIONS.md` | keuzes, aannames, gewichten en wat ontbrak |
